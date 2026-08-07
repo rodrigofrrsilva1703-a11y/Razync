@@ -398,43 +398,64 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 def processar_razao_dominio(file_bytes, filename):
-    """Lê o arquivo do Razão exportado da Domínio com suporte robusto a XLSX, XLS (HTML disfarçado) e CSV"""
+    """Lê o arquivo do Razão exportado da Domínio com suporte robusto a XLSX, CSV e conversão interna para XLS"""
     df = None
     ext = os.path.splitext(filename)[1].lower()
     
     try:
-        if ext in ['.xlsx', '.xls']:
+        if ext == '.xlsx':
+            df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None)
+        elif ext == '.xls':
+            # Se for .xls antigo da Domínio, tenta ler com pandas ou como tabela HTML/CSV estruturada
             try:
-                df = pd.read_excel(io.BytesIO(file_bytes), dtype=str)
+                df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None)
             except Exception:
-                # Tenta ler como HTML caso o .xls seja uma tabela HTML interna da Domínio
                 try:
                     dfs = pd.read_html(io.BytesIO(file_bytes))
                     if dfs: df = dfs[0]
-                except Exception: pass
+                except Exception:
+                    # Tenta ler como texto caso seja CSV disfarçado de XLS
+                    for enc in ['utf-8', 'latin1', 'cp1252']:
+                        try:
+                            df = pd.read_csv(io.BytesIO(file_bytes), sep=None, engine='python', encoding=enc, dtype=str, header=None)
+                            break
+                        except: pass
         else:
             for enc in ['utf-8', 'latin1', 'cp1252']:
                 try:
-                    df = pd.read_csv(io.BytesIO(file_bytes), sep=None, engine='python', encoding=enc, dtype=str)
+                    df = pd.read_csv(io.BytesIO(file_bytes), sep=None, engine='python', encoding=enc, dtype=str, header=None)
                     break
                 except: pass
     except: pass
     
     if df is None or df.empty: return pd.DataFrame()
     
-    # Padroniza nomes de colunas
-    df.columns = [str(c).strip().upper() for c in df.columns]
-    
-    col_data = next((c for c in df.columns if any(p in c for p in ['DATA', 'DT'])), None)
-    col_deb = next((c for c in df.columns if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DÉB'])), None)
-    col_cred = next((c for c in df.columns if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRÉD'])), None)
-    col_val = next((c for c in df.columns if any(p in c for p in ['VALOR', 'VL'])), None)
+    # Procura a linha de cabeçalho correta nas planilhas da Domínio
+    header_row_idx = 0
+    for idx, row in df.iterrows():
+        row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).upper()
+        if ('DATA' in row_str or 'DT' in row_str) and ('VALOR' in row_str or 'DEBITO' in row_str or 'DÉBITO' in row_str or 'CREDITO' in row_str or 'CRÉDITO' in row_str):
+            header_row_idx = idx
+            break
+            
+    if header_row_idx > 0:
+        df.columns = [str(v).strip().upper() for v in df.iloc[header_row_idx].values]
+        df = df.iloc[header_row_idx+1:].copy()
+    else:
+        df.columns = [str(v).strip().upper() for v in df.iloc[0].values]
+        df = df.iloc[1:].copy()
+        
+    cols = list(df.columns)
+    col_data = next((c for c in cols if any(p in c for p in ['DATA', 'DT'])), None)
+    col_deb = next((c for c in cols if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DÉB'])), None)
+    col_cred = next((c for c in cols if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRÉD'])), None)
+    col_val = next((c for c in cols if any(p in c for p in ['VALOR', 'VL'])), None)
     
     if not col_data: return pd.DataFrame()
     
     dados = []
     for _, row in df.iterrows():
-        dt_raw = str(row[col_data]).strip()
+        dt_raw = str(row[col_data]).strip() if pd.notna(row[col_data]) else ''
         match_dt = re.search(r'(\d{2}/\d{2}/\d{4})', dt_raw)
         if not match_dt: continue
         dt_fmt = match_dt.group(1)
@@ -443,8 +464,8 @@ def processar_razao_dominio(file_bytes, filename):
         if col_deb and col_cred:
             v_deb = limpar_valor_monetario(row[col_deb]) if pd.notna(row[col_deb]) else 0.0
             v_cred = limpar_valor_monetario(row[col_cred]) if pd.notna(row[col_cred]) else 0.0
-            v = v_cred - v_deb # Créditos entram positivos, Débitos entram negativos para a conta do banco
-        elif col_val:
+            v = v_cred - v_deb # Créditos entram positivos, Débitos entram negativos
+        elif col_val and pd.notna(row[col_val]):
             v = limpar_valor_monetario(row[col_val])
             
         if v != 0:
@@ -482,7 +503,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.9 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.0 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -810,6 +831,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
             st.dataframe(df_exibicao, use_container_width=True, height=350)
             
         else:
-            st.warning("⚠️ Não foi possível processar ou alinhar os dados entre o Extrato e o Razão. Dica: Se o Razão estiver em formato .xls antigo, abra-o no Excel e salve-o como .xlsx ou .csv.")
+            st.warning("⚠️ Não foi possível processar ou alinhar os dados entre o Extrato e o Razão. Dica: Caso o arquivo .xls apresente erro de formato antigo, abra-o no Excel e salve-o como .xlsx ou .csv.")
     else:
         st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária.")
