@@ -8,7 +8,42 @@ import os
 from datetime import datetime
 from pypdf import PdfReader
 
+# Configuração da página Web
 st.set_page_config(page_title="Importador Domínio Pro", page_icon="🤖", layout="wide")
+
+# ==============================================================================
+# ESTILIZAÇÃO CSS CUSTOMIZADA PARA CARDS MENORES E MAIS LIMPOS
+# ==============================================================================
+st.markdown("""
+    <style>
+        /* Ajuste do padding principal e fundo */
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        /* Estilo moderno para os cards de métricas menores */
+        .metric-card {
+            background-color: #1e1e2f;
+            border: 1px solid #2d2d44;
+            padding: 12px 16px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .metric-title {
+            font-size: 12px;
+            color: #a0a0ab;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .metric-value {
+            font-size: 18px;
+            color: #ffffff;
+            font-weight: 700;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 def limpar_valor_monetario(v_val):
     if pd.isna(v_val) or v_val is None: return 0.0
@@ -44,11 +79,7 @@ def processar_ofx(file_bytes, filename):
             else: continue
             valor_float = limpar_valor_monetario(match_amt.group(1).replace('+', '').strip())
             historico = match_memo.group(1).strip().replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') if match_memo else "TRANSACAO OFX"
-            
-            # Filtra saldos em OFX se houver
-            if 'SALDO' in historico.upper():
-                continue
-                
+            if 'SALDO' in historico.upper(): continue
             banco = "BANCO OFX"
             fn_upper = filename.upper()
             if "ITAU" in fn_upper: banco = "BANCO ITAU"
@@ -117,10 +148,7 @@ def processar_planilha_universal(file_bytes, filename):
         hist_raw = str(row[col_hist]).strip() if col_hist and pd.notna(row[col_hist]) else 'MOVIMENTO BANCARIO'
         doc_raw = str(row[col_doc]).strip() if col_doc and pd.notna(row[col_doc]) else ''
         hist_fmt = f"{hist_raw} {doc_raw}" if doc_raw and doc_raw.lower() != 'nan' and doc_raw not in hist_raw else hist_raw
-        
-        # FILTRO DE SEGURANÇA: Remove qualquer linha que contenha termos de saldo
         if any(term in hist_fmt.upper() for term in ['SALDO', 'SUBTOTAL', 'TOTAL', 'TRANSPORTAR']): continue
-        
         valor_float = 0.0
         if col_cred or col_deb:
             v_cred = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else 0.0
@@ -255,42 +283,32 @@ def processar_pdf_generico_universal(caminho_pdf):
     try:
         reader = PdfReader(caminho_pdf, strict=False)
         data_atual = None
-        
         for pagina in reader.pages:
             texto = pagina.extract_text()
             if not texto: continue
-            
             for linha in texto.split('\n'):
                 linha = linha.strip()
-                
-                # BLOQUEIO ABSOLUTO DE SALDOS E TOTAIS NO MOTOR GENÉRICO
                 if not linha or any(s in linha.upper() for s in ['SALDO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL', 'BLOQUEADO', 'PAGINA', 'TRANSPORTE', 'DISPONIVEL']): 
                     continue
-                
                 match_data = re.search(r'(\d{2}/\d{2}(?:/\d{4})?)', linha)
                 if match_data:
                     dt_encontrada = match_data.group(1)
                     if len(dt_encontrada) == 5: 
                         dt_encontrada = f"{dt_encontrada}/{datetime.now().year}"
                     data_atual = dt_encontrada
-                
                 matches_vals = re.findall(r'(-?\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]?)', linha, re.IGNORECASE)
-                
                 if matches_vals and data_atual:
                     val_str = matches_vals[-1].strip()
                     is_debito = False
                     if val_str.upper().endswith('D') or '-' in val_str:
                         is_debito = True
-                    
                     val_limpo = val_str.upper().replace('C', '').replace('D', '').strip()
                     try:
                         v = limpar_valor_monetario(val_limpo)
                         if v != 0:
                             if is_debito: v = -abs(v)
-                            
                             hist = linha.replace(data_atual, '').replace(val_str, '').strip()
                             if len(hist) < 2 or 'SALDO' in hist.upper(): continue
-                            
                             lancamentos.append({
                                 'DESCRIÇÃO': f"EXTRATO {os.path.splitext(os.path.basename(caminho_pdf))[0].upper()}",
                                 'DATA': data_atual,
@@ -309,7 +327,6 @@ def processar_arquivo_pdf(caminho_pdf):
         reader = PdfReader(caminho_pdf, strict=False)
         texto_inicio = reader.pages[0].extract_text().upper() if reader.pages else ""
     except: texto_inicio = ""
-    
     if "CAIXA" in nome_arquivo or "CAIXA" in texto_inicio: return processar_pdf_caixa(caminho_pdf)
     elif "BRADESCO" in nome_arquivo or "BRADESCO" in texto_inicio or "NET EMPRESA" in texto_inicio: return processar_pdf_bradesco(caminho_pdf)
     elif "SANTANDER" in nome_arquivo or "SANTANDER" in texto_inicio: return processar_pdf_santander(caminho_pdf)
@@ -325,6 +342,9 @@ def gerar_txt_dominio(df):
         linhas_txt.append(f"{row['DATA']};{row['DÉBITO'] if pd.notna(row['DÉBITO']) else ''};{row['CRÉDITO'] if pd.notna(row['CRÉDITO']) else ''};{float(row['VALOR']):.2f};{str(row['HISTÓRICO']).replace(';', ' ')}\n")
     return "".join(linhas_txt)
 
+# ==============================================================================
+# INTERFACE GRÁFICA DO SISTEMA
+# ==============================================================================
 st.sidebar.title("⚡ Painel de Controle")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📤 Upload de Arquivos")
@@ -387,14 +407,51 @@ if arquivos:
                 saldo_liquido = total_creditos + total_debitos
                 
                 st.markdown("---")
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Qtd. Registros", len(df_final))
-                m2.metric("Entradas", f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-                m3.metric("Saídas", f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-                m4.metric("Saldo Líquido", f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
                 
+                # ==============================================================
+                # NOVO LAYOUT DE CARDS MENORES E COMPACTOS
+                # ==============================================================
+                c1, c2, c3, c4 = st.columns(4)
+                
+                with c1:
+                    st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-title">Qtd. Registros</div>
+                            <div class="metric-value">{len(df_final)}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
+                with c2:
+                    val_cred_fmt = f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-title">Entradas</div>
+                            <div class="metric-value" style="color: #4ade80;">{val_cred_fmt}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
+                with c3:
+                    val_deb_fmt = f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-title">Saídas</div>
+                            <div class="metric-value" style="color: #f87171;">{val_deb_fmt}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
+                with c4:
+                    val_liq_fmt = f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    color_liq = "#4ade80" if saldo_liquido >= 0 else "#f87171"
+                    st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-title">Saldo Líquido</div>
+                            <div class="metric-value" style="color: {color_liq};">{val_liq_fmt}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### 📋 Prévia dos Lançamentos")
-                st.dataframe(df_final, use_container_width=True, height=350)
+                st.dataframe(df_final, use_container_width=True, height=330)
                 
                 st.markdown("##### 📥 Exportar para a Domínio")
                 c_dl1, c_dl2 = st.columns(2)
