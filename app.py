@@ -27,7 +27,6 @@ st.markdown("""
             max-width: 100%;
         }
         
-        /* Botões Dark Minimalistas e Alinhados */
         .stButton>button {
             width: 100% !important;
             border-radius: 6px !important;
@@ -45,14 +44,6 @@ st.markdown("""
             color: #ffffff !important;
         }
 
-        /* Botões Desativados */
-        .stButton>button:disabled {
-            background-color: #161b22 !important;
-            border-color: #21262d !important;
-            color: #484f58 !important;
-        }
-
-        /* Cards de Métricas Alinhados */
         .metric-card {
             background-color: #161b22;
             border: 1px solid #30363d;
@@ -74,13 +65,11 @@ st.markdown("""
             font-weight: 700;
         }
 
-        /* Barra Lateral Dark Minimalista */
         section[data-testid="stSidebar"] {
             background-color: #0d1117;
             border-right: 1px solid #30363d;
         }
 
-        /* Cards de Ferramentas (Home) */
         .tool-card {
             background-color: #161b22;
             border: 1px solid #30363d;
@@ -399,7 +388,7 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 def processar_razao_dominio(file_bytes, filename):
-    """Leitor aprimorado e robusto para o Razão da Domínio (.xlsx, .csv ou conversão de .xls)"""
+    """Leitor aprimorado e robusto para o Razão da Domínio separando Entradas (Créditos) e Saídas (Débitos)"""
     df = None
     ext = os.path.splitext(filename)[1].lower()
     
@@ -459,20 +448,25 @@ def processar_razao_dominio(file_bytes, filename):
         if not match_dt: continue
         dt_fmt = match_dt.group(1)
         
-        v = 0.0
+        v_ent = 0.0
+        v_sai = 0.0
+        
         if col_deb and col_cred:
-            v_deb = limpar_valor_monetario(row[col_deb]) if pd.notna(row[col_deb]) else 0.0
-            v_cred = limpar_valor_monetario(row[col_cred]) if pd.notna(row[col_cred]) else 0.0
-            v = v_cred - v_deb
+            v_sai = limpar_valor_monetario(row[col_deb]) if pd.notna(row[col_deb]) else 0.0
+            v_ent = limpar_valor_monetario(row[col_cred]) if pd.notna(row[col_cred]) else 0.0
         elif col_val and pd.notna(row[col_val]):
-            v = limpar_valor_monetario(row[col_val])
-            
-        if v != 0:
-            dados.append({'DATA': dt_fmt, 'VALOR_RAZAO': v})
+            val_num = limpar_valor_monetario(row[col_val])
+            if val_num < 0:
+                v_sai = abs(val_num)
+            else:
+                v_ent = val_num
+                
+        if v_ent != 0 or v_sai != 0:
+            dados.append({'DATA': dt_fmt, 'ENTRADAS_RAZAO': v_ent, 'SAIDAS_RAZAO': v_sai})
             
     if not dados: return None
     df_res = pd.DataFrame(dados)
-    df_agregado = df_res.groupby('DATA')['VALOR_RAZAO'].sum().reset_index()
+    df_agregado = df_res.groupby('DATA')[['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].sum().reset_index()
     df_agregado['DATA_DT'] = pd.to_datetime(df_agregado['DATA'], format='%d/%m/%Y')
     return df_agregado
 
@@ -502,7 +496,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.1 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.2 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -533,7 +527,7 @@ if st.session_state['pagina_ativa'] == 'home':
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">🔍</p>
                 <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p>
-                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Analise o extrato x razão da Domínio dia a dia e confira os saldos.</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Analise o extrato x razão da Domínio dia a dia e confira as entradas e saídas.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
@@ -738,7 +732,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
             pass
 
 # ==============================================================================
-# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (DIA A DIA)
+# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (DIA A DIA - ENTRADAS E SAÍDAS)
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
     col_voltar, col_tit = st.columns([1.2, 8.8])
@@ -750,7 +744,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
     with col_tit:
         st.title("Conciliação: Extrato x Razão da Domínio")
     
-    st.caption("Compare o movimento diário do extrato bancário com o Razão contábil para conferir se os saldos batem dia a dia.")
+    st.caption("Compare separadamente as Entradas e Saídas diárias do extrato bancário com o Razão contábil.")
     st.markdown("---")
 
     col_up1, col_up2 = st.columns(2)
@@ -780,47 +774,58 @@ elif st.session_state['pagina_ativa'] == 'razao':
             df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], format='%d/%m/%Y', errors='coerce')
             df_ext = df_ext.dropna(subset=['DATA_DT'])
             
-            df_ext_agregado = df_ext.groupby('DATA')['VALOR'].sum().reset_index()
+            # Separa entradas e saídas no extrato por dia
+            df_ext['ENTRADAS_EXTRATO'] = df_ext['VALOR'].apply(lambda x: x if x > 0 else 0.0)
+            df_ext['SAIDAS_EXTRATO'] = df_ext['VALOR'].apply(lambda x: abs(x) if x < 0 else 0.0)
+            
+            df_ext_agregado = df_ext.groupby('DATA')[['ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].sum().reset_index()
             df_ext_agregado['DATA_DT'] = pd.to_datetime(df_ext_agregado['DATA'], format='%d/%m/%Y')
-            df_ext_agregado = df_ext_agregado.rename(columns={'VALOR': 'VALOR_EXTRATO'})
 
-            df_conciliacao = pd.merge(df_ext_agregado[['DATA', 'DATA_DT', 'VALOR_EXTRATO']], 
-                                     df_razao_agregado[['DATA', 'VALOR_RAZAO']], 
+            # Mescla com o Razão agrupado
+            df_conciliacao = pd.merge(df_ext_agregado, 
+                                     df_razao_agregado[['DATA', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']], 
                                      on='DATA', how='outer').fillna(0)
             
             df_conciliacao = df_conciliacao.sort_values('DATA_DT')
-            df_conciliacao['DIFERENÇA'] = df_conciliacao['VALOR_EXTRATO'] - df_conciliacao['VALOR_RAZAO']
             
-            def status_dif(d):
-                if abs(d) < 0.01: return "✅ Batendo"
-                else: return "❌ Divergente"
+            # Diferenças
+            df_conciliacao['DIF_ENTRADAS'] = df_conciliacao['ENTRADAS_EXTRATO'] - df_conciliacao['ENTRADAS_RAZAO']
+            df_conciliacao['DIF_SAIDAS'] = df_conciliacao['SAIDAS_EXTRATO'] - df_conciliacao['SAIDAS_RAZAO']
+            
+            def status_dia(row):
+                if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01:
+                    return "✅ Batendo"
+                else:
+                    return "❌ Divergente"
                 
-            df_conciliacao['STATUS'] = df_conciliacao['DIFERENÇA'].apply(status_dif)
+            df_conciliacao['STATUS'] = df_conciliacao.apply(status_dia, axis=1)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("### 📊 Resultado da Conferência Diária")
+            st.markdown("### 📊 Resultado da Conferência Diária (Entradas e Saídas)")
             
-            total_ext = df_conciliacao['VALOR_EXTRATO'].sum()
-            total_raz = df_conciliacao['VALOR_RAZAO'].sum()
-            dif_total = total_ext - total_raz
+            tot_ent_ext = df_conciliacao['ENTRADAS_EXTRATO'].sum()
+            tot_sai_ext = df_conciliacao['SAIDAS_EXTRATO'].sum()
+            tot_ent_raz = df_conciliacao['ENTRADAS_RAZAO'].sum()
+            tot_sai_raz = df_conciliacao['SAIDAS_RAZAO'].sum()
             
-            rc1, rc2, rc3 = st.columns(3)
+            rc1, rc2, rc3, rc4 = st.columns(4)
             with rc1:
-                st.markdown(f'<div class="metric-card"><div class="metric-title">Total Extrato</div><div class="metric-value">R$ {total_ext:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card"><div class="metric-title">Total Entradas (Extrato)</div><div class="metric-value" style="color: #3fb950;">R$ {tot_ent_ext:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
             with rc2:
-                st.markdown(f'<div class="metric-card"><div class="metric-title">Total Razão Domínio</div><div class="metric-value">R$ {total_raz:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card"><div class="metric-title">Total Entradas (Razão)</div><div class="metric-value" style="color: #3fb950;">R$ {tot_ent_raz:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
             with rc3:
-                cor_dif = "#3fb950" if abs(dif_total) < 0.01 else "#f85149"
-                st.markdown(f'<div class="metric-card"><div class="metric-title">Diferença Total</div><div class="metric-value" style="color: {cor_dif};">R$ {dif_total:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card"><div class="metric-title">Total Saídas (Extrato)</div><div class="metric-value" style="color: #f85149;">R$ {tot_sai_ext:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+            with rc4:
+                st.markdown(f'<div class="metric-card"><div class="metric-title">Total Saídas (Razão)</div><div class="metric-value" style="color: #f85149;">R$ {tot_sai_raz:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             
-            df_exibicao = df_conciliacao[['DATA', 'VALOR_EXTRATO', 'VALOR_RAZAO', 'DIFERENÇA', 'STATUS']].copy()
-            df_exibicao.columns = ['Data', 'Extrato (R$)', 'Razão Domínio (R$)', 'Diferença (R$)', 'Status']
+            df_exibicao = df_conciliacao[['DATA', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'STATUS']].copy()
+            df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas', 'Status']
             
-            st.dataframe(df_exibicao, use_container_width=True, height=350)
+            st.dataframe(df_exibicao, use_container_width=True, height=380)
             
         else:
-            st.warning("⚠️ Não foi possível ler o Razão enviado. Dica: Os relatórios em formato .xls antigo da Domínio possuem codificação binária restrita. Abra o arquivo no Excel e salve-o como Pasta de Trabalho do Excel (.xlsx) ou CSV para leitura instantânea.")
+            st.warning("⚠️ Não foi possível ler o Razão enviado ou mapear as colunas corretamente. Verifique se o relatório contém as colunas de Data e Valores/Débito/Crédito.")
     else:
-        st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária.")
+        st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária de entradas e saídas.")
