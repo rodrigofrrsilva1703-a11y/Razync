@@ -17,14 +17,48 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS AVANÇADA (LAYOUT MODERNO E CLEAN)
+# ESTILIZAÇÃO CSS AVANÇADA (MODERNA, RESPONSIVA E SEM BOTÕES CORTADOS)
 # ==============================================================================
 st.markdown("""
     <style>
         .block-container {
             padding-top: 2rem;
-            padding-bottom: 2rem;
+            padding-bottom: 3rem;
+            max-width: 100%;
         }
+        
+        /* Correção e Modernização Global de Botões (Evita cortes) */
+        .stButton>button {
+            width: 100% !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+            padding: 0.6rem 1rem !important;
+            border: 1px solid #3b82f6 !important;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2) !important;
+            transition: all 0.2s ease-in-out !important;
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            height: auto !important;
+            min-height: 42px !important;
+        }
+        .stButton>button:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+            border-color: #60a5fa !important;
+            box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4) !important;
+            transform: translateY(-1px);
+        }
+
+        /* Botões Secundários / Desativados */
+        .stButton>button:disabled {
+            background: #1e293b !important;
+            border-color: #334155 !important;
+            color: #64748b !important;
+            box-shadow: none !important;
+            transform: none !important;
+        }
+
         /* Cards de Métricas Premium */
         .metric-card {
             background: linear-gradient(135deg, #1e1e2f 0%, #151522 100%);
@@ -51,6 +85,7 @@ st.markdown("""
             color: #f8fafc;
             font-weight: 800;
         }
+
         /* Barra Lateral Moderna */
         section[data-testid="stSidebar"] {
             background-color: #0b0f19;
@@ -66,6 +101,7 @@ st.markdown("""
             border-left: 4px solid #3b82f6;
             border: 1px solid #1f2937;
         }
+
         /* Cards de Ferramentas (Home) */
         .tool-card {
             background: linear-gradient(145deg, #111827, #0f172a);
@@ -397,15 +433,15 @@ st.sidebar.markdown("### 🤖 Hub Contábil Pro")
 st.sidebar.markdown("<p style='font-size: 13px; color: #94a3b8;'>Automações para Domínio Systems.</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
-if st.sidebar.button("🏠 Menu Principal", use_container_width=True):
+if st.sidebar.button("🏠 Menu Principal", use_container_width=True, key="sb_home"):
     mudar_pagina('home')
 
 st.sidebar.markdown("#### 🛠️ Ferramentas")
-if st.sidebar.button("📊 Conversor de Extratos", use_container_width=True):
+if st.sidebar.button("📊 Conversor de Extratos", use_container_width=True, key="sb_extratos"):
     mudar_pagina('extratos')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 4.1 · Multi-Tools</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 4.2 · Pro Edition</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -459,7 +495,7 @@ if st.session_state['pagina_ativa'] == 'home':
 elif st.session_state['pagina_ativa'] == 'extratos':
     col_voltar, col_tit = st.columns([1, 8])
     with col_voltar:
-        if st.button("⬅️ Voltar", use_container_width=True):
+        if st.button("⬅️ Voltar", use_container_width=True, key="btn_voltar_home"):
             mudar_pagina('home')
             st.rerun()
     with col_tit:
@@ -637,5 +673,4 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     c_dl1.download_button("📊 Baixar em Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
                     c_dl2.download_button("🚀 Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
         else:
-        # Removido warning se nenhum arquivo foi processado para evitar flash na tela inicial
             pass
