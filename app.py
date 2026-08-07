@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS MINIMALISTA E PROFISSIONAL (CLEAN & MODERN)
+# ESTILIZAÇÃO CSS DARK MODE MINIMALISTA E ALINHADA
 # ==============================================================================
 st.markdown("""
     <style>
@@ -27,43 +27,42 @@ st.markdown("""
             max-width: 100%;
         }
         
-        /* Botões Minimalistas */
+        /* Botões Dark Minimalistas e Alinhados */
         .stButton>button {
             width: 100% !important;
             border-radius: 6px !important;
             font-weight: 500 !important;
             padding: 0.45rem 1rem !important;
-            border: 1px solid #e2e8f0 !important;
-            background-color: #ffffff !important;
-            color: #1e293b !important;
+            border: 1px solid #30363d !important;
+            background-color: #21262d !important;
+            color: #c9d1d9 !important;
             transition: all 0.2s ease;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            box-shadow: none !important;
         }
         .stButton>button:hover {
-            background-color: #f8fafc !important;
-            border-color: #cbd5e1 !important;
-            color: #0f172a !important;
+            background-color: #30363d !important;
+            border-color: #8b949e !important;
+            color: #ffffff !important;
         }
 
         /* Botões Desativados */
         .stButton>button:disabled {
-            background-color: #f1f5f9 !important;
-            border-color: #e2e8f0 !important;
-            color: #94a3b8 !important;
+            background-color: #161b22 !important;
+            border-color: #21262d !important;
+            color: #484f58 !important;
         }
 
-        /* Cards de Métricas Minimalistas */
+        /* Cards de Métricas Alinhados */
         .metric-card {
-            background-color: #ffffff;
-            border: 1px solid #e2e8f0;
+            background-color: #161b22;
+            border: 1px solid #30363d;
             padding: 14px;
             border-radius: 8px;
             text-align: center;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
         }
         .metric-title {
             font-size: 11px;
-            color: #64748b;
+            color: #8b949e;
             text-transform: uppercase;
             font-weight: 600;
             margin-bottom: 4px;
@@ -71,29 +70,35 @@ st.markdown("""
         }
         .metric-value {
             font-size: 18px;
-            color: #0f172a;
+            color: #f0f6fc;
             font-weight: 700;
         }
 
-        /* Barra Lateral Ultra-Minimalista (Clean Light/Dark Adaptativa) */
+        /* Barra Lateral Dark Minimalista */
         section[data-testid="stSidebar"] {
-            background-color: #f8fafc;
-            border-right: 1px solid #e2e8f0;
+            background-color: #0d1117;
+            border-right: 1px solid #30363d;
         }
 
-        /* Cards de Ferramentas (Home Minimalista) */
+        /* Cards de Ferramentas (Home) */
         .tool-card {
-            background-color: #ffffff;
-            border: 1px solid #e2e8f0;
+            background-color: #161b22;
+            border: 1px solid #30363d;
             padding: 24px;
             border-radius: 8px;
             text-align: center;
             height: 100%;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
             transition: border-color 0.2s ease;
         }
         .tool-card:hover {
-            border-color: #94a3b8;
+            border-color: #8b949e;
+        }
+
+        /* Ajuste de alinhamento vertical para títulos e botões de voltar */
+        .align-fix {
+            display: flex;
+            align-items: center;
+            height: 100%;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -405,10 +410,10 @@ def mudar_pagina(nome_pagina):
     st.session_state['pagina_ativa'] = nome_pagina
 
 # ==============================================================================
-# BARRA LATERAL ULTRA-MINIMALISTA
+# BARRA LATERAL DARK MINIMALISTA
 # ==============================================================================
-st.sidebar.markdown("<p style='font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 0px;'>Hub Contábil</p>", unsafe_allow_html=True)
-st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; margin-top: 2px;'>Domínio Systems</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 0px;'>Hub Contábil</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 11px; color: #8b949e; margin-top: 2px;'>Domínio Systems</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
 if st.sidebar.button("Início", use_container_width=True, key="sb_home"):
@@ -418,7 +423,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
     mudar_pagina('extratos')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #94a3b8; text-align: center;'>v4.4 · Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.5 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -435,8 +440,8 @@ if st.session_state['pagina_ativa'] == 'home':
         st.markdown("""
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">📊</p>
-                <p style="font-weight: 600; color: #0f172a; margin-bottom: 4px; font-size: 15px;">Conversor de Extratos</p>
-                <p style="font-size: 12px; color: #64748b; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p>
+                <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conversor de Extratos</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
@@ -448,8 +453,8 @@ if st.session_state['pagina_ativa'] == 'home':
         st.markdown("""
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">📁</p>
-                <p style="font-weight: 600; color: #0f172a; margin-bottom: 4px; font-size: 15px;">Em Breve</p>
-                <p style="font-size: 12px; color: #64748b; line-height: 1.4;">Novas ferramentas contábeis em desenvolvimento.</p>
+                <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Em Breve</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Novas ferramentas contábeis em desenvolvimento.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
@@ -459,8 +464,8 @@ if st.session_state['pagina_ativa'] == 'home':
         st.markdown("""
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">⚙️</p>
-                <p style="font-weight: 600; color: #0f172a; margin-bottom: 4px; font-size: 15px;">Em Breve</p>
-                <p style="font-size: 12px; color: #64748b; line-height: 1.4;">Utilitários adicionais para relatórios fiscais.</p>
+                <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Em Breve</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Utilitários adicionais para relatórios fiscais.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
@@ -470,8 +475,10 @@ if st.session_state['pagina_ativa'] == 'home':
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'extratos':
+    # Alinhamento perfeito do botão de voltar com o título sem cortes
     col_voltar, col_tit = st.columns([1.2, 8.8])
     with col_voltar:
+        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home"):
             mudar_pagina('home')
             st.rerun()
@@ -559,11 +566,11 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     with cg1:
                         st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_geral_final)}</div></div>', unsafe_allow_html=True)
                     with cg2:
-                        st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #16a34a;">R$ {tot_cred_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">R$ {tot_cred_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
                     with cg3:
-                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #dc2626;">R$ {abs(tot_deb_g):,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f85149;">R$ {abs(tot_deb_g):,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
                     with cg4:
-                        color_g = "#16a34a" if saldo_liq_g >= 0 else "#dc2626"
+                        color_g = "#3fb950" if saldo_liq_g >= 0 else "#f85149"
                         st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_g};">R$ {saldo_liq_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -630,13 +637,13 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                         st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_final)}</div></div>', unsafe_allow_html=True)
                     with c2:
                         val_cred_fmt = f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                        st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #16a34a;">{val_cred_fmt}</div></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{val_cred_fmt}</div></div>', unsafe_allow_html=True)
                     with c3:
                         val_deb_fmt = f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #dc2626;">{val_deb_fmt}</div></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f85149;">{val_deb_fmt}</div></div>', unsafe_allow_html=True)
                     with c4:
                         val_liq_fmt = f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                        color_liq = "#16a34a" if saldo_liquido >= 0 else "#dc2626"
+                        color_liq = "#3fb950" if saldo_liquido >= 0 else "#f85149"
                         st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{val_liq_fmt}</div></div>', unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
