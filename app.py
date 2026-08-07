@@ -495,7 +495,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.3 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.4 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -526,7 +526,7 @@ if st.session_state['pagina_ativa'] == 'home':
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">🔍</p>
                 <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p>
-                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Compare entradas e saídas do extrato x razão da Domínio dia a dia.</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Compare entradas e saídas do extrato x razão da Domínio com filtro de período.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
@@ -731,7 +731,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
             pass
 
 # ==============================================================================
-# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (DIA A DIA - ENTRADAS E SAÍDAS)
+# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (COM FILTRO DE PERÍODO)
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
     col_voltar, col_tit = st.columns([1.2, 8.8])
@@ -743,7 +743,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
     with col_tit:
         st.title("Conciliação: Extrato x Razão da Domínio")
     
-    st.caption("Compare separadamente as Entradas e Saídas diárias do extrato bancário com o Razão contábil.")
+    st.caption("Compare separadamente as Entradas e Saídas diárias do extrato bancário com o Razão contábil no período desejado.")
     st.markdown("---")
 
     col_up1, col_up2 = st.columns(2)
@@ -782,11 +782,34 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
             # Mescla com o Razão agrupado
             df_conciliacao = pd.merge(df_ext_agregado, 
-                                     df_razao_agregado[['DATA', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']], 
-                                     on='DATA', how='outer').fillna(0)
+                                     df_razao_agregado[['DATA', 'DATA_DT', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']], 
+                                     on=['DATA', 'DATA_DT'], how='outer').fillna(0)
             
             df_conciliacao = df_conciliacao.sort_values('DATA_DT')
+
+            # --- FILTRO DE PERÍODO ---
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### 📅 Filtrar Período da Conciliação")
             
+            dt_min_geral = df_conciliacao['DATA_DT'].min().date()
+            dt_max_geral = df_conciliacao['DATA_DT'].max().date()
+            
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                data_ini_filtro = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_ini")
+            with col_p2:
+                data_fim_filtro = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_fim")
+            
+            if data_ini_filtro > data_fim_filtro:
+                st.warning("⚠️ A data inicial não pode ser maior que a data final.")
+                data_ini_filtro, data_fim_filtro = dt_min_geral, dt_max_geral
+
+            # Aplica o filtro de período
+            df_conciliacao = df_conciliacao[
+                (df_conciliacao['DATA_DT'].dt.date >= data_ini_filtro) & 
+                (df_conciliacao['DATA_DT'].dt.date <= data_fim_filtro)
+            ].copy()
+
             # Diferenças
             df_conciliacao['DIF_ENTRADAS'] = df_conciliacao['ENTRADAS_EXTRATO'] - df_conciliacao['ENTRADAS_RAZAO']
             df_conciliacao['DIF_SAIDAS'] = df_conciliacao['SAIDAS_EXTRATO'] - df_conciliacao['SAIDAS_RAZAO']
@@ -823,13 +846,12 @@ elif st.session_state['pagina_ativa'] == 'razao':
             df_exibicao = df_conciliacao[['DATA', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'STATUS']].copy()
             df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas', 'Status']
             
-            # Formata colunas numéricas para string com padrão brasileiro R$ / 2 casas decimais para visualização limpa
             for col in ['Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas']:
                 df_exibicao[col] = df_exibicao[col].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
 
             st.dataframe(df_exibicao, use_container_width=True, height=380)
             
         else:
-            st.warning("⚠️ Não foi possível ler o Razão enviado ou mapear as colunas corretamente. Dica: Se o arquivo .xls da Domínio persistir com restrição binária, abra-o no Excel e salve-o como XLSX ou CSV.")
+            st.warning("⚠️ Não foi possível ler o Razão enviado ou mapear as colunas corretamente. Verifique se o relatório contém as colunas de Data e Valores.")
     else:
         st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária de entradas e saídas.")
