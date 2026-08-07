@@ -44,6 +44,11 @@ def processar_ofx(file_bytes, filename):
             else: continue
             valor_float = limpar_valor_monetario(match_amt.group(1).replace('+', '').strip())
             historico = match_memo.group(1).strip().replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') if match_memo else "TRANSACAO OFX"
+            
+            # Filtra saldos em OFX se houver
+            if 'SALDO' in historico.upper():
+                continue
+                
             banco = "BANCO OFX"
             fn_upper = filename.upper()
             if "ITAU" in fn_upper: banco = "BANCO ITAU"
@@ -112,7 +117,10 @@ def processar_planilha_universal(file_bytes, filename):
         hist_raw = str(row[col_hist]).strip() if col_hist and pd.notna(row[col_hist]) else 'MOVIMENTO BANCARIO'
         doc_raw = str(row[col_doc]).strip() if col_doc and pd.notna(row[col_doc]) else ''
         hist_fmt = f"{hist_raw} {doc_raw}" if doc_raw and doc_raw.lower() != 'nan' and doc_raw not in hist_raw else hist_raw
-        if any(term in hist_fmt.upper() for term in ['SALDO ANTERIOR', 'SALDO ATUAL', 'SALDO DIA', 'SALDO DISPONÍVEL', 'SUBTOTAL']): continue
+        
+        # FILTRO DE SEGURANÇA: Remove qualquer linha que contenha termos de saldo
+        if any(term in hist_fmt.upper() for term in ['SALDO', 'SUBTOTAL', 'TOTAL', 'TRANSPORTAR']): continue
+        
         valor_float = 0.0
         if col_cred or col_deb:
             v_cred = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else 0.0
@@ -159,7 +167,7 @@ def processar_pdf_santander(caminho_pdf):
             i = 0
             while i < len(linhas):
                 linha = linhas[i]
-                if any(t in linha.upper() for t in ['SALDO DISPONÍVEL', 'POSIÇÃO EM:', 'CENTRAL DE ATENDIMENTO']): i += 1; continue
+                if any(t in linha.upper() for t in ['SALDO', 'POSIÇÃO EM:', 'CENTRAL DE ATENDIMENTO']): i += 1; continue
                 match = date_regex.match(linha)
                 if match:
                     dt_str, rest = match.group(1), match.group(2)
@@ -174,11 +182,11 @@ def processar_pdf_santander(caminho_pdf):
                     if vals:
                         val_str = vals[-2] if len(vals) >= 2 else vals[0]
                         hist = full_text[:full_text.rfind(val_str)].strip()
-                        try:
-                            v = limpar_valor_monetario(val_str)
-                            if 'SALDO' not in hist.upper():
+                        if 'SALDO' not in hist.upper():
+                            try:
+                                v = limpar_valor_monetario(val_str)
                                 lancamentos.append({'DESCRIÇÃO': 'BANCO SANTANDER', 'DATA': dt_str, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
-                        except: pass
+                            except: pass
                 i += 1
     except: pass
     return lancamentos
@@ -197,6 +205,7 @@ def processar_pdf_caixa(caminho_pdf):
                 match = caixa_regex.search(linha)
                 if match:
                     data, doc, historico, val_str, tipo = match.groups()
+                    if 'SALDO' in historico.upper(): continue
                     try:
                         v = limpar_valor_monetario(val_str)
                         if tipo == 'D': v = -abs(v)
@@ -219,7 +228,7 @@ def processar_pdf_bradesco(caminho_pdf):
             i = 0
             while i < len(linhas):
                 linha = linhas[i]
-                if any(t in linha.upper() for t in ['EXTRATO DE:', 'TOTAL DISPONÍVEL', 'AGÊNCIA | CONTA', 'FOLHA ', 'SALDOS INVEST']): i += 1; continue
+                if any(t in linha.upper() for t in ['EXTRATO DE:', 'TOTAL', 'AGÊNCIA | CONTA', 'FOLHA ', 'SALDOS']): i += 1; continue
                 match_date = date_regex.match(linha)
                 if match_date: current_date, linha_sem_data = match_date.group(1), linha[len(match_date.group(1)):].strip()
                 else: linha_sem_data = linha
@@ -229,11 +238,11 @@ def processar_pdf_bradesco(caminho_pdf):
                     parte_desc = linha_sem_data[:linha_sem_data.rfind(val_str)].strip()
                     historico_completo = f"{pending_desc} {parte_desc}".strip() if pending_desc else parte_desc
                     pending_desc = ""
-                    try:
-                        v = limpar_valor_monetario(val_str)
-                        if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
+                    if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
+                        try:
+                            v = limpar_valor_monetario(val_str)
                             lancamentos.append({'DESCRIÇÃO': 'BANCO BRADESCO', 'DATA': current_date, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico_completo})
-                    except: pass
+                        except: pass
                 else:
                     if 'SALDO' not in linha_sem_data.upper() and 'EXTRATO' not in linha_sem_data.upper():
                         pending_desc = f"{pending_desc} {linha_sem_data}".strip() if pending_desc else linha_sem_data
@@ -242,7 +251,6 @@ def processar_pdf_bradesco(caminho_pdf):
     return lancamentos
 
 def processar_pdf_generico_universal(caminho_pdf):
-    """MOTOR GENÉRICO ULTRA-FLEXÍVEL: Lê qualquer layout desconhecido capturando datas e valores em bloco"""
     lancamentos = []
     try:
         reader = PdfReader(caminho_pdf, strict=False)
@@ -254,10 +262,11 @@ def processar_pdf_generico_universal(caminho_pdf):
             
             for linha in texto.split('\n'):
                 linha = linha.strip()
-                if not linha or any(s in linha.upper() for s in ['SALDO ANTERIOR', 'SALDO ATUAL', 'SALDO BLOQUEADO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL', 'PAGINA']): 
+                
+                # BLOQUEIO ABSOLUTO DE SALDOS E TOTAIS NO MOTOR GENÉRICO
+                if not linha or any(s in linha.upper() for s in ['SALDO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL', 'BLOQUEADO', 'PAGINA', 'TRANSPORTE', 'DISPONIVEL']): 
                     continue
                 
-                # Procura por data na linha (formato completo ou parcial tipo dd/mm)
                 match_data = re.search(r'(\d{2}/\d{2}(?:/\d{4})?)', linha)
                 if match_data:
                     dt_encontrada = match_data.group(1)
@@ -265,12 +274,10 @@ def processar_pdf_generico_universal(caminho_pdf):
                         dt_encontrada = f"{dt_encontrada}/{datetime.now().year}"
                     data_atual = dt_encontrada
                 
-                # Procura por valores monetários na linha
                 matches_vals = re.findall(r'(-?\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]?)', linha, re.IGNORECASE)
                 
                 if matches_vals and data_atual:
                     val_str = matches_vals[-1].strip()
-                    # Identifica se é Débito ou Crédito indicados por C/D
                     is_debito = False
                     if val_str.upper().endswith('D') or '-' in val_str:
                         is_debito = True
@@ -281,9 +288,8 @@ def processar_pdf_generico_universal(caminho_pdf):
                         if v != 0:
                             if is_debito: v = -abs(v)
                             
-                            # Limpa o histórico removendo a data e o valor capturados
                             hist = linha.replace(data_atual, '').replace(val_str, '').strip()
-                            if len(hist) < 2: hist = "TRANSACAO BANCARIA"
+                            if len(hist) < 2 or 'SALDO' in hist.upper(): continue
                             
                             lancamentos.append({
                                 'DESCRIÇÃO': f"EXTRATO {os.path.splitext(os.path.basename(caminho_pdf))[0].upper()}",
@@ -308,7 +314,6 @@ def processar_arquivo_pdf(caminho_pdf):
     elif "BRADESCO" in nome_arquivo or "BRADESCO" in texto_inicio or "NET EMPRESA" in texto_inicio: return processar_pdf_bradesco(caminho_pdf)
     elif "SANTANDER" in nome_arquivo or "SANTANDER" in texto_inicio: return processar_pdf_santander(caminho_pdf)
     else:
-        # Tenta os leitores específicos e se falhar, recorre ao novo motor ultra-genérico
         res = processar_pdf_santander(caminho_pdf)
         if not res: res = processar_pdf_bradesco(caminho_pdf)
         if not res: res = processar_pdf_generico_universal(caminho_pdf)
