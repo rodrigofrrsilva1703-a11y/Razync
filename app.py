@@ -398,7 +398,7 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 def processar_razao_dominio(file_bytes, filename):
-    """Lê o arquivo do Razão exportado da Domínio com suporte robusto a XLSX, CSV e conversão interna para XLS"""
+    """Leitor seguro e robusto para o Razão da Domínio (.xlsx, .csv ou conversão de .xls)"""
     df = None
     ext = os.path.splitext(filename)[1].lower()
     
@@ -406,31 +406,28 @@ def processar_razao_dominio(file_bytes, filename):
         if ext == '.xlsx':
             df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None)
         elif ext == '.xls':
-            # Se for .xls antigo da Domínio, tenta ler com pandas ou como tabela HTML/CSV estruturada
             try:
-                df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None)
+                df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None, engine='xlrd')
             except Exception:
+                # Se o .xls antigo da Domínio falhar, tenta ler como tabela HTML embutida
                 try:
                     dfs = pd.read_html(io.BytesIO(file_bytes))
                     if dfs: df = dfs[0]
                 except Exception:
-                    # Tenta ler como texto caso seja CSV disfarçado de XLS
-                    for enc in ['utf-8', 'latin1', 'cp1252']:
-                        try:
-                            df = pd.read_csv(io.BytesIO(file_bytes), sep=None, engine='python', encoding=enc, dtype=str, header=None)
-                            break
-                        except: pass
+                    return None
         else:
             for enc in ['utf-8', 'latin1', 'cp1252']:
                 try:
                     df = pd.read_csv(io.BytesIO(file_bytes), sep=None, engine='python', encoding=enc, dtype=str, header=None)
                     break
                 except: pass
-    except: pass
+    except Exception as e:
+        print("Erro ao carregar arquivo de razão:", e)
+        return None
     
-    if df is None or df.empty: return pd.DataFrame()
+    if df is None or df.empty: return None
     
-    # Procura a linha de cabeçalho correta nas planilhas da Domínio
+    # Padroniza e localiza a linha de cabeçalho correta do relatório da Domínio
     header_row_idx = 0
     for idx, row in df.iterrows():
         row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).upper()
@@ -451,7 +448,7 @@ def processar_razao_dominio(file_bytes, filename):
     col_cred = next((c for c in cols if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRÉD'])), None)
     col_val = next((c for c in cols if any(p in c for p in ['VALOR', 'VL'])), None)
     
-    if not col_data: return pd.DataFrame()
+    if not col_data: return None
     
     dados = []
     for _, row in df.iterrows():
@@ -464,14 +461,14 @@ def processar_razao_dominio(file_bytes, filename):
         if col_deb and col_cred:
             v_deb = limpar_valor_monetario(row[col_deb]) if pd.notna(row[col_deb]) else 0.0
             v_cred = limpar_valor_monetario(row[col_cred]) if pd.notna(row[col_cred]) else 0.0
-            v = v_cred - v_deb # Créditos entram positivos, Débitos entram negativos
+            v = v_cred - v_deb
         elif col_val and pd.notna(row[col_val]):
             v = limpar_valor_monetario(row[col_val])
             
         if v != 0:
             dados.append({'DATA': dt_fmt, 'VALOR_RAZAO': v})
             
-    if not dados: return pd.DataFrame()
+    if not dados: return None
     df_res = pd.DataFrame(dados)
     df_agregado = df_res.groupby('DATA')['VALOR_RAZAO'].sum().reset_index()
     df_agregado['DATA_DT'] = pd.to_datetime(df_agregado['DATA'], format='%d/%m/%Y')
@@ -503,7 +500,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.0 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.1 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -776,11 +773,11 @@ elif st.session_state['pagina_ativa'] == 'razao':
             lancamentos_ext = processar_arquivo_pdf(tmp_ext)
             if os.path.exists(tmp_ext): os.remove(tmp_ext)
             
-        # Processa Razão
+        # Processa Razão com proteção aprimorada
         raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
         df_razao_agregado = processar_razao_dominio(raz_bytes, raz_name)
 
-        if lancamentos_ext and not df_razao_agregado.empty:
+        if lancamentos_ext and df_razao_agregado is not None and not df_razao_agregado.empty:
             df_ext = pd.DataFrame(lancamentos_ext)
             df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], format='%d/%m/%Y', errors='coerce')
             df_ext = df_ext.dropna(subset=['DATA_DT'])
@@ -831,6 +828,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
             st.dataframe(df_exibicao, use_container_width=True, height=350)
             
         else:
-            st.warning("⚠️ Não foi possível processar ou alinhar os dados entre o Extrato e o Razão. Dica: Caso o arquivo .xls apresente erro de formato antigo, abra-o no Excel e salve-o como .xlsx ou .csv.")
+            st.warning("⚠️ Não foi possível ler o Razão enviado. Dica: Os relatórios em formato .xls antigo da Domínio possuem codificação binária restrita. Abra o arquivo no Excel e salve-o como Pasta de Trabalho do Excel (.xlsx) ou CSV para leitura instantânea.")
     else:
         st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária.")
