@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS DARK MODE MINIMALISTA E ALINHADA (CORREÇÃO DE ALINHAMENTO)
+# ESTILIZAÇÃO CSS DARK MODE MINIMALISTA E ALINHADA
 # ==============================================================================
 st.markdown("""
     <style>
@@ -80,12 +80,12 @@ st.markdown("""
             border-right: 1px solid #30363d;
         }
 
-        /* Cards de Ferramentas (Home) com altura fixa e alinhamento perfeito */
+        /* Cards de Ferramentas (Home) */
         .tool-card {
             background-color: #161b22;
             border: 1px solid #30363d;
             padding: 24px 20px;
-            border-radius: 8px 8px 0 0;
+            border-radius: 8px;
             text-align: center;
             height: 160px;
             display: flex;
@@ -420,7 +420,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
     mudar_pagina('extratos')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.6 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.7 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -441,6 +441,8 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p>
             </div>
         """, unsafe_allow_html=True)
+        # ESPAÇO ADICIONADO ENTRE O CARD E O BOTÃO
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         if st.button("Acessar", use_container_width=True, key="btn_abrir_extratos"):
             mudar_pagina('extratos')
             st.rerun()
@@ -453,6 +455,8 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Novas ferramentas contábeis em desenvolvimento.</p>
             </div>
         """, unsafe_allow_html=True)
+        # ESPAÇO ADICIONADO ENTRE O CARD E O BOTÃO
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_1")
         
     with col_t3:
@@ -463,6 +467,8 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Utilitários adicionais para relatórios fiscais.</p>
             </div>
         """, unsafe_allow_html=True)
+        # ESPAÇO ADICIONADO ENTRE O CARD E O BOTÃO
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_2")
 
 # ==============================================================================
@@ -598,7 +604,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     else:
                         val_ini_def = dt_min_dataset
 
-                    if data_fim_doc and data_fim_doc.date():
+1                    if data_fim_doc and data_fim_doc.date():
                         val_fim_def = max(min(data_fim_doc.date(), dt_max_dataset), dt_min_dataset)
                     else:
                         val_fim_def = dt_max_dataset
