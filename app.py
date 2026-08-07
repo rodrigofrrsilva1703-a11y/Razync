@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from pypdf import PdfReader
 
-# Configuração da página Web (Layout largo)
+# Configuração da página Web (Layout largo e limpo)
 st.set_page_config(page_title="Importador Universal - Domínio", page_icon="🤖", layout="wide")
 
 
@@ -401,21 +401,39 @@ def gerar_txt_dominio(df):
 
 
 # ==============================================================================
-# 6. INTERFACE GRÁFICA DO SISTEMA (OPÇÃO 1: BARRA LATERAL)
+# 6. INTERFACE GRÁFICA DO SISTEMA (ESTILO CLEAN & MODERN)
 # ==============================================================================
 
-st.sidebar.title("🤖 Painel de Controle")
+# Injetando estilo CSS customizado para deixar os cards e containers super modernos
+st.markdown("""
+    <style>
+        .main { background-color: #fafbfd; }
+        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+        .stTabs [data-baseweb="tab"] {
+            background-color: #f1f3f6;
+            border-radius: 8px 8px 0px 0px;
+            padding: 10px 20px;
+            font-weight: 600;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #ffffff !important;
+            border-top: 3px solid #0066cc !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+st.sidebar.title("⚡ Painel de Controle")
 st.sidebar.markdown("---")
-st.sidebar.subheader("📤 Envio de Arquivos")
+st.sidebar.markdown("### 📤 Upload de Arquivos")
 
 arquivos = st.sidebar.file_uploader(
-    "Arraste os extratos aqui (PDF, OFX, CSV, XLSX, XLS)",
+    "Arraste os extratos bancários (PDF, OFX, CSV, Excel)",
     type=["pdf", "ofx", "csv", "xlsx", "xls"],
     accept_multiple_files=True
 )
 
-st.title("🤖 Sistema de Análise e Importação Inteligente - Domínio")
-st.caption("Suporte Universal com Barra Lateral, Filtros Avançados e Status Dinâmico de Caixa")
+st.title("🤖 Importador Inteligente Domínio")
+st.caption("Ambiente de conciliação bancária de alta performance e visual limpo.")
 
 if arquivos:
     st.sidebar.success(f"{len(arquivos)} arquivo(s) carregado(s).")
@@ -436,131 +454,108 @@ if arquivos:
 
     for idx_arq, arquivo in enumerate(arquivos):
         with abas[idx_arq]:
-            st.markdown(f"### 📄 Extrato Ativo: `{arquivo.name}`")
             
-            file_bytes = arquivo.getvalue()
-            extensao = os.path.splitext(arquivo.name)[1].lower()
-            lancamentos = []
-            data_ini_doc, data_fim_doc = None, None
+            # Container limpo para o arquivo
+            with st.container():
+                st.markdown(f"### 📑 Análise do Extrato: `{arquivo.name}`")
+                
+                file_bytes = arquivo.getvalue()
+                extensao = os.path.splitext(arquivo.name)[1].lower()
+                lancamentos = []
+                data_ini_doc, data_fim_doc = None, None
 
-            if extensao == '.ofx':
-                st.info("Formato Detectado: **OFX (Open Financial Exchange)**")
-                lancamentos = processar_ofx(file_bytes, arquivo.name)
-                
-            elif extensao in ['.csv', '.xlsx', '.xls']:
-                st.info("Formato Detectado: **Planilha Estruturada (CSV / Excel / HTML-XLS)**")
-                lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
-                
-            elif extensao == '.pdf':
-                st.info("Formato Detectado: **Documento em PDF**")
-                caminho_temp = f"temp_{arquivo.name}"
-                with open(caminho_temp, "wb") as f:
-                    f.write(file_bytes)
+                if extensao == '.ofx':
+                    lancamentos = processar_ofx(file_bytes, arquivo.name)
+                elif extensao in ['.csv', '.xlsx', '.xls']:
+                    lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
+                elif extensao == '.pdf':
+                    caminho_temp = f"temp_{arquivo.name}"
+                    with open(caminho_temp, "wb") as f:
+                        f.write(file_bytes)
+                    data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
+                    lancamentos = processar_arquivo_pdf(caminho_temp)
+                    if os.path.exists(caminho_temp):
+                        os.remove(caminho_temp)
+
+                if lancamentos:
+                    df_bruto = pd.DataFrame(lancamentos)
+                    df_bruto['DATA_DT'] = pd.to_datetime(df_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
+                    df_bruto = df_bruto.dropna(subset=['DATA_DT'])
                     
-                data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
-                lancamentos = processar_arquivo_pdf(caminho_temp)
-                
-                if os.path.exists(caminho_temp):
-                    os.remove(caminho_temp)
+                    dt_min_dataset = df_bruto['DATA_DT'].min().date()
+                    dt_max_dataset = df_bruto['DATA_DT'].max().date()
 
-            if lancamentos:
-                df_bruto = pd.DataFrame(lancamentos)
-                df_bruto['DATA_DT'] = pd.to_datetime(df_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
-                df_bruto = df_bruto.dropna(subset=['DATA_DT'])
-                
-                dt_min_dataset = df_bruto['DATA_DT'].min().date()
-                dt_max_dataset = df_bruto['DATA_DT'].max().date()
+                    val_ini_def = data_ini_doc.date() if data_ini_doc else dt_min_dataset
+                    val_fim_def = data_fim_doc.date() if data_fim_doc else dt_max_dataset
 
-                val_ini_def = data_ini_doc.date() if data_ini_doc else dt_min_dataset
-                val_fim_def = data_fim_doc.date() if data_fim_doc else dt_max_dataset
+                    # Bloco de Filtros com visual moderno
+                    col_f1, col_f2 = st.columns(2)
+                    with col_f1:
+                        data_sel_ini = st.date_input("📅 Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
+                    with col_f2:
+                        data_sel_fim = st.date_input("📅 Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
 
-                # SELETOR DE PERÍODO
-                st.markdown("#### 📅 Período de Análise")
-                col_d1, col_d2 = st.columns(2)
-                
-                data_sel_ini = col_d1.date_input(
-                    f"Data Inicial",
-                    value=val_ini_def,
-                    min_value=dt_min_dataset,
-                    max_value=dt_max_dataset,
-                    format="DD/MM/YYYY",
-                    key=f"ini_{idx_arq}"
-                )
-                
-                data_sel_fim = col_d2.date_input(
-                    f"Data Final",
-                    value=val_fim_def,
-                    min_value=dt_min_dataset,
-                    max_value=dt_max_dataset,
-                    format="DD/MM/YYYY",
-                    key=f"fim_{idx_arq}"
-                )
+                    df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
 
-                df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
+                    # Filtro avançado discreto
+                    with st.expander("🔍 Busca rápida por palavra-chave no histórico"):
+                        termo_busca = st.text_input("Digite o termo (ex: PIX, TED, ENEL):", key=f"busca_{idx_arq}", label_visibility="collapsed")
+                        if termo_busca:
+                            df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
 
-                # ==============================================================================
-                # OPÇÃO 2: FILTROS AVANÇADOS DE BUSCA (PALAVRA-CHAVE NO HISTÓRICO)
-                # ==============================================================================
-                with st.expander("🔍 Filtros e Buscas Avançadas (Opcional)"):
-                    termo_busca = st.text_input(f"Filtrar por palavra-chave no histórico ({arquivo.name}):", key=f"busca_{idx_arq}")
-                    if termo_busca:
-                        df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
+                    df_final = df_final.drop(columns=['DATA_DT'])
+                    df_final = df_final[df_modelo.columns]
+                    
+                    # Métricas modernas lado a lado
+                    total_creditos = df_final[df_final['VALOR'] > 0]['VALOR'].sum()
+                    total_debitos = df_final[df_final['VALOR'] < 0]['VALOR'].sum()
+                    saldo_liquido = total_creditos + total_debitos
+                    
+                    st.markdown("---")
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Qtd. Registros", len(df_final))
+                    m2.metric("Entradas", f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                    m3.metric("Saídas", f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                    m4.metric("Saldo Líquido", f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
 
-                df_final = df_final.drop(columns=['DATA_DT'])
-                df_final = df_final[df_modelo.columns]
-                
-                st.success(f"**Lançamentos Filtrados:** {len(df_final)} registros encontrados.")
+                    # Alerta de caixa limpo
+                    if saldo_liquido > 0:
+                        st.success(f"✨ **Caixa Saudável no Período:** Superávit de **R$ {saldo_liquido:,.2f}**.".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                    elif saldo_liquido < 0:
+                        st.warning(f"⚠️ **Atenção:** Déficit no período de **R$ {abs(saldo_liquido):,.2f}**.".replace(',', 'X').replace('.', ',').replace('X', '.'))
 
-                # ==============================================================================
-                # PAINEL LADO A LADO + OPÇÃO 3: ALERTAS VISUAIS DE STATUS DE CAIXA
-                # ==============================================================================
-                st.markdown("#### 📊 Painel Comparativo e Status de Caixa")
-                
-                total_creditos = df_final[df_final['VALOR'] > 0]['VALOR'].sum()
-                total_debitos = df_final[df_final['VALOR'] < 0]['VALOR'].sum()
-                saldo_liquido = total_creditos + total_debitos
-                
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Qtd. Lançamentos", len(df_final))
-                m2.metric("🟢 Entradas (Créditos)", f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-                m3.metric("🔴 Saídas (Débitos)", f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-                m4.metric("⚖️ Variação Líquida", f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                    # Tabela limpa e moderna
+                    st.markdown("##### 📋 Prévia dos Lançamentos Formatados")
+                    st.dataframe(df_final, use_container_width=True, height=350)
 
-                # Alerta visual de status de caixa baseado no saldo líquido
-                if saldo_liquido > 0:
-                    st.success(f"🟢 **Status de Caixa Saudável:** O período encerrou com saldo positivo de **R$ {saldo_liquido:,.2f}**.".replace(',', 'X').replace('.', ',').replace('X', '.'))
-                elif saldo_liquido < 0:
-                    st.warning(f"⚠️ **Atenção ao Caixa:** O período encerrou com saldo negativo (déficit) de **R$ {abs(saldo_liquido):,.2f}**.".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                    # Botões de download organizados
+                    st.markdown("##### 📥 Exportar Arquivos para a Domínio")
+                    c_dl1, c_dl2 = st.columns(2)
+                    
+                    buffer_excel = io.BytesIO()
+                    with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
+                        df_final.to_excel(writer, index=False)
+                    
+                    c_dl1.download_button(
+                        label="📊 Baixar Planilha em Excel (.XLSX)",
+                        data=buffer_excel.getvalue(),
+                        file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"excel_{idx_arq}",
+                        use_container_width=True
+                    )
+
+                    texto_txt = gerar_txt_dominio(df_final)
+                    c_dl2.download_button(
+                        label="🚀 Baixar Arquivo TXT da Domínio",
+                        data=texto_txt,
+                        file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt",
+                        mime="text/plain",
+                        key=f"txt_{idx_arq}",
+                        use_container_width=True
+                    )
                 else:
-                    st.info("ℹ️ **Status Neutro:** As entradas e saídas estão equilibradas no período.")
-
-                # Tabela de Pré-visualização
-                st.dataframe(df_final.head(15), use_container_width=True)
-
-                # Botões de Download
-                c_dl1, c_dl2 = st.columns(2)
-                
-                buffer_excel = io.BytesIO()
-                with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
-                    df_final.to_excel(writer, index=False)
-                
-                c_dl1.download_button(
-                    label=f"📊 Baixar Excel ({data_sel_ini.strftime('%d-%m')} a {data_sel_fim.strftime('%d-%m')})",
-                    data=buffer_excel.getvalue(),
-                    file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}_a_{data_sel_fim.strftime('%d%m%Y')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key=f"excel_{idx_arq}"
-                )
-
-                texto_txt = gerar_txt_dominio(df_final)
-                c_dl2.download_button(
-                    label=f"🚀 Baixar .TXT Domínio ({data_sel_ini.strftime('%d-%m')} a {data_sel_fim.strftime('%d-%m')})",
-                    data=texto_txt,
-                    file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}_a_{data_sel_fim.strftime('%d%m%Y')}.txt",
-                    mime="text/plain",
-                    key=f"txt_{idx_arq}"
-                )
-            else:
-                st.warning("Não foi possível extrair lançamentos válidos deste arquivo.")
+                    st.warning("Não foi possível extrair lançamentos válidos deste arquivo.")
 else:
-    st.info("👈 Comece enviando um ou mais arquivos de extrato na **Barra Lateral à esquerda** para iniciar a análise.")
+    # Tela inicial limpa com instruções visuais
+    st.info("👈 Para começar, utilize a **Barra Lateral à esquerda** para arrastar e soltar os seus arquivos de extrato (PDF, OFX, Planilhas). O sistema fará a leitura automática de forma instantânea.")
