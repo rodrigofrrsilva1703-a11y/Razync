@@ -441,7 +441,6 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p>
             </div>
         """, unsafe_allow_html=True)
-        # ESPAÇO ADICIONADO ENTRE O CARD E O BOTÃO
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         if st.button("Acessar", use_container_width=True, key="btn_abrir_extratos"):
             mudar_pagina('extratos')
@@ -455,7 +454,6 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Novas ferramentas contábeis em desenvolvimento.</p>
             </div>
         """, unsafe_allow_html=True)
-        # ESPAÇO ADICIONADO ENTRE O CARD E O BOTÃO
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_1")
         
@@ -467,7 +465,6 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Utilitários adicionais para relatórios fiscais.</p>
             </div>
         """, unsafe_allow_html=True)
-        # ESPAÇO ADICIONADO ENTRE O CARD E O BOTÃO
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_2")
 
@@ -604,7 +601,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     else:
                         val_ini_def = dt_min_dataset
 
-1                    if data_fim_doc and data_fim_doc.date():
+                    if data_fim_doc and data_fim_doc.date():
                         val_fim_def = max(min(data_fim_doc.date(), dt_max_dataset), dt_min_dataset)
                     else:
                         val_fim_def = dt_max_dataset
