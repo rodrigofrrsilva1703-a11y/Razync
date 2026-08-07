@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS AVANÇADA (MODERNA, RESPONSIVA E SEM BOTÕES CORTADOS)
+# ESTILIZAÇÃO CSS SÓBRIA, PROFISSIONAL E LIMPA (SEM EXAGEROS)
 # ==============================================================================
 st.markdown("""
     <style>
@@ -27,95 +27,77 @@ st.markdown("""
             max-width: 100%;
         }
         
-        /* Correção e Modernização Global de Botões (Evita cortes) */
+        /* Botões Padrão Sóbrios e Profissionais */
         .stButton>button {
             width: 100% !important;
-            border-radius: 10px !important;
-            font-weight: 600 !important;
-            padding: 0.6rem 1rem !important;
-            border: 1px solid #3b82f6 !important;
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-            color: #ffffff !important;
-            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2) !important;
-            transition: all 0.2s ease-in-out !important;
-            white-space: normal !important;
-            word-wrap: break-word !important;
-            height: auto !important;
-            min-height: 42px !important;
+            border-radius: 6px !important;
+            font-weight: 500 !important;
+            padding: 0.5rem 1rem !important;
+            border: 1px solid #334155 !important;
+            background-color: #1e293b !important;
+            color: #f1f5f9 !important;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+            white-space: nowrap !important;
         }
         .stButton>button:hover {
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
-            border-color: #60a5fa !important;
-            box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4) !important;
-            transform: translateY(-1px);
+            background-color: #334155 !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
         }
 
-        /* Botões Secundários / Desativados */
+        /* Botões Desativados */
         .stButton>button:disabled {
-            background: #1e293b !important;
-            border-color: #334155 !important;
-            color: #64748b !important;
-            box-shadow: none !important;
-            transform: none !important;
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #475569 !important;
         }
 
-        /* Cards de Métricas Premium */
+        /* Cards de Métricas Corporativos */
         .metric-card {
-            background: linear-gradient(135deg, #1e1e2f 0%, #151522 100%);
-            border: 1px solid #2d2d44;
-            padding: 16px;
-            border-radius: 12px;
+            background-color: #111827;
+            border: 1px solid #1f2937;
+            padding: 14px;
+            border-radius: 8px;
             text-align: center;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            transition: transform 0.2s ease;
-        }
-        .metric-card:hover {
-            border-color: #3b82f6;
         }
         .metric-title {
             font-size: 11px;
-            color: #94a3b8;
+            color: #9ca3af;
             text-transform: uppercase;
-            font-weight: 700;
-            margin-bottom: 6px;
-            letter-spacing: 0.8px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
         }
         .metric-value {
-            font-size: 20px;
-            color: #f8fafc;
-            font-weight: 800;
+            font-size: 18px;
+            color: #f9fafb;
+            font-weight: 700;
         }
 
-        /* Barra Lateral Moderna */
+        /* Barra Lateral Limpa */
         section[data-testid="stSidebar"] {
             background-color: #0b0f19;
             border-right: 1px solid #1e293b;
         }
         .sidebar-box {
             background-color: #111827;
-            padding: 14px;
-            border-radius: 10px;
+            padding: 12px;
+            border-radius: 6px;
             font-size: 13px;
             color: #9ca3af;
             margin-bottom: 15px;
-            border-left: 4px solid #3b82f6;
+            border-left: 3px solid #3b82f6;
             border: 1px solid #1f2937;
         }
 
         /* Cards de Ferramentas (Home) */
         .tool-card {
-            background: linear-gradient(145deg, #111827, #0f172a);
+            background-color: #111827;
             border: 1px solid #1f2937;
-            padding: 24px;
-            border-radius: 14px;
+            padding: 20px;
+            border-radius: 8px;
             text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-            transition: all 0.3s ease;
             height: 100%;
-        }
-        .tool-card:hover {
-            border-color: #3b82f6;
-            transform: translateY(-3px);
         }
     </style>
 """, unsafe_allow_html=True)
@@ -429,25 +411,25 @@ def mudar_pagina(nome_pagina):
 # ==============================================================================
 # BARRA LATERAL (MENU DE NAVEGAÇÃO)
 # ==============================================================================
-st.sidebar.markdown("### 🤖 Hub Contábil Pro")
-st.sidebar.markdown("<p style='font-size: 13px; color: #94a3b8;'>Automações para Domínio Systems.</p>", unsafe_allow_html=True)
+st.sidebar.markdown("### Hub Contábil Pro")
+st.sidebar.markdown("<p style='font-size: 13px; color: #9ca3af;'>Automações para Domínio Systems.</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
-if st.sidebar.button("🏠 Menu Principal", use_container_width=True, key="sb_home"):
+if st.sidebar.button("Menu Principal", use_container_width=True, key="sb_home"):
     mudar_pagina('home')
 
-st.sidebar.markdown("#### 🛠️ Ferramentas")
-if st.sidebar.button("📊 Conversor de Extratos", use_container_width=True, key="sb_extratos"):
+st.sidebar.markdown("#### Ferramentas")
+if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"):
     mudar_pagina('extratos')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 4.2 · Pro Edition</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 11px; color: #6b7280; text-align: center;'>Versão 4.3 · Pro Edition</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
-    st.title("⚡ Bem-vindo ao Hub de Automação")
+    st.title("Hub de Automação")
     st.caption("Selecione abaixo a ferramenta desejada para agilizar suas rotinas contábeis.")
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -457,49 +439,50 @@ if st.session_state['pagina_ativa'] == 'home':
     with col_t1:
         st.markdown("""
             <div class="tool-card">
-                <h2 style="margin: 0 0 10px 0;">📊</h2>
-                <h4 style="color: #f8fafc; margin-bottom: 8px;">Conversor de Extratos</h4>
-                <p style="font-size: 13px; color: #94a3b8; line-height: 1.4;">Converta PDFs, OFX e Planilhas no layout exato para importação na Domínio.</p>
+                <h3 style="margin: 0 0 8px 0; color: #f9fafb;">📊</h3>
+                <h4 style="color: #f9fafb; margin-bottom: 6px; font-size: 16px;">Conversor de Extratos</h4>
+                <p style="font-size: 13px; color: #9ca3af; line-height: 1.4;">Converta PDFs, OFX e Planilhas no layout exato para importação na Domínio.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar Ferramenta", use_container_width=True, key="btn_abrir_extratos"):
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("Acessar", use_container_width=True, key="btn_abrir_extratos"):
             mudar_pagina('extratos')
             st.rerun()
             
     with col_t2:
         st.markdown("""
             <div class="tool-card">
-                <h2 style="margin: 0 0 10px 0;">📁</h2>
-                <h4 style="color: #f8fafc; margin-bottom: 8px;">Em Breve</h4>
-                <p style="font-size: 13px; color: #94a3b8; line-height: 1.4;">Novas automações fiscais e contábeis serão integradas em breve.</p>
+                <h3 style="margin: 0 0 8px 0; color: #f9fafb;">📁</h3>
+                <h4 style="color: #f9fafb; margin-bottom: 6px; font-size: 16px;">Em Breve</h4>
+                <p style="font-size: 13px; color: #9ca3af; line-height: 1.4;">Novas automações fiscais e contábeis serão integradas em breve.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        st.button("Brevemente", use_container_width=True, disabled=True, key="btn_futuro_1")
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_1")
         
     with col_t3:
         st.markdown("""
             <div class="tool-card">
-                <h2 style="margin: 0 0 10px 0;">⚙️</h2>
-                <h4 style="color: #f8fafc; margin-bottom: 8px;">Em Breve</h4>
-                <p style="font-size: 13px; color: #94a3b8; line-height: 1.4;">Utilitários adicionais para validação de dados e relatórios.</p>
+                <h3 style="margin: 0 0 8px 0; color: #f9fafb;">⚙️</h3>
+                <h4 style="color: #f9fafb; margin-bottom: 6px; font-size: 16px;">Em Breve</h4>
+                <p style="font-size: 13px; color: #9ca3af; line-height: 1.4;">Utilitários adicionais para validação de dados e relatórios.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        st.button("Brevemente", use_container_width=True, disabled=True, key="btn_futuro_2")
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_2")
 
 # ==============================================================================
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'extratos':
-    col_voltar, col_tit = st.columns([1, 8])
+    # Correção do botão de voltar para não ficar cortado (proporção ajustada)
+    col_voltar, col_tit = st.columns([1.5, 8.5])
     with col_voltar:
-        if st.button("⬅️ Voltar", use_container_width=True, key="btn_voltar_home"):
+        if st.button("Voltar", use_container_width=True, key="btn_voltar_home"):
             mudar_pagina('home')
             st.rerun()
     with col_tit:
-        st.title("📊 Conversor de Extratos Bancários")
+        st.title("Conversor de Extratos Bancários")
     
     st.caption("Faça o upload dos seus arquivos para gerar os relatórios e layouts compatíveis com a Domínio.")
     st.markdown("---")
@@ -543,7 +526,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
 
         if todos_lancamentos_brutos:
             if len(arquivos) > 1:
-                nomes_abas = ["🌐 Visão Consolidada (Geral)"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
+                nomes_abas = ["Visão Consolidada (Geral)"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
             else:
                 nomes_abas = [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
                 
@@ -552,7 +535,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
             # ABA 1: CONSOLIDADA
             if len(arquivos) > 1:
                 with abas[0]:
-                    st.markdown("### 🌐 Resumo Consolidado de Todos os Extratos")
+                    st.markdown("### Resumo Consolidado de Todos os Extratos")
                     df_geral_bruto = pd.DataFrame(todos_lancamentos_brutos)
                     df_geral_bruto['DATA_DT'] = pd.to_datetime(df_geral_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
                     df_geral_bruto = df_geral_bruto.dropna(subset=['DATA_DT'])
@@ -561,11 +544,11 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     dt_max_geral = df_geral_bruto['DATA_DT'].max().date()
                     
                     col_g1, col_g2, col_g3 = st.columns([1, 1, 1.5])
-                    with col_g1: data_geral_ini = st.date_input("📅 Data Inicial Geral", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
-                    with col_g2: data_geral_fim = st.date_input("📅 Data Final Geral", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
+                    with col_g1: data_geral_ini = st.date_input("Data Inicial Geral", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
+                    with col_g2: data_geral_fim = st.date_input("Data Final Geral", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
                     with col_g3:
                         st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
-                        termo_busca_geral = st.text_input("🔍 Busca rápida geral", placeholder="Filtrar histórico...", key="gen_busca")
+                        termo_busca_geral = st.text_input("Busca rápida geral", placeholder="Filtrar histórico...", key="gen_busca")
                     
                     df_geral_final = df_geral_bruto[(df_geral_bruto['DATA_DT'].dt.date >= data_geral_ini) & (df_geral_bruto['DATA_DT'].dt.date <= data_geral_fim)].copy()
                     if termo_busca_geral:
@@ -590,15 +573,15 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                         st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido Geral</div><div class="metric-value" style="color: {color_g};">R$ {saldo_liq_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown("##### 📋 Prévia Consolidada")
+                    st.markdown("##### Prévia Consolidada")
                     st.dataframe(df_geral_final, use_container_width=True, height=280)
                     
-                    st.markdown("##### 📥 Exportar Consolidado")
+                    st.markdown("##### Exportar Consolidado")
                     cc_dl1, cc_dl2 = st.columns(2)
                     buf_excel_g = io.BytesIO()
                     with pd.ExcelWriter(buf_excel_g, engine='openpyxl') as writer: df_geral_final.to_excel(writer, index=False)
-                    cc_dl1.download_button("📊 Baixar Excel Consolidado (.XLSX)", data=buf_excel_g.getvalue(), file_name=f"consolidado_geral_{data_geral_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_excel_geral", use_container_width=True)
-                    cc_dl2.download_button("🚀 Baixar TXT Consolidado para Domínio", data=gerar_txt_dominio(df_geral_final), file_name=f"importacao_dominio_consolidado_{data_geral_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key="dl_txt_geral", use_container_width=True)
+                    cc_dl1.download_button("Baixar Excel Consolidado (.XLSX)", data=buf_excel_g.getvalue(), file_name=f"consolidado_geral_{data_geral_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_excel_geral", use_container_width=True)
+                    cc_dl2.download_button("Baixar TXT Consolidado para Domínio", data=gerar_txt_dominio(df_geral_final), file_name=f"importacao_dominio_consolidado_{data_geral_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key="dl_txt_geral", use_container_width=True)
                     st.markdown("---")
 
             # ABAS INDIVIDUAIS
@@ -631,11 +614,11 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     
                     with st.container():
                         col_f1, col_f2, col_f3 = st.columns([1, 1, 1.5])
-                        with col_f1: data_sel_ini = st.date_input("📅 Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
-                        with col_f2: data_sel_fim = st.date_input("📅 Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
+                        with col_f1: data_sel_ini = st.date_input("Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
+                        with col_f2: data_sel_fim = st.date_input("Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
                         with col_f3:
                             st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
-                            termo_busca = st.text_input("🔍 Busca rápida no histórico", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
+                            termo_busca = st.text_input("Busca rápida no histórico", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
 
                     df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
                     if termo_busca:
@@ -663,14 +646,14 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                         st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{val_liq_fmt}</div></div>', unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown("##### 📋 Prévia dos Lançamentos")
+                    st.markdown("##### Prévia dos Lançamentos")
                     st.dataframe(df_final, use_container_width=True, height=280)
                     
-                    st.markdown("##### 📥 Exportar Arquivos")
+                    st.markdown("##### Exportar Arquivos")
                     c_dl1, c_dl2 = st.columns(2)
                     buffer_excel = io.BytesIO()
                     with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer: df_final.to_excel(writer, index=False)
-                    c_dl1.download_button("📊 Baixar em Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
-                    c_dl2.download_button("🚀 Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
+                    c_dl1.download_button("Baixar em Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
+                    c_dl2.download_button("Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
         else:
             pass
