@@ -319,8 +319,20 @@ if arquivos:
                 df_bruto['DATA_DT'] = pd.to_datetime(df_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
                 df_bruto = df_bruto.dropna(subset=['DATA_DT'])
                 dt_min_dataset, dt_max_dataset = df_bruto['DATA_DT'].min().date(), df_bruto['DATA_DT'].max().date()
-                val_ini_def = data_ini_doc.date() if data_ini_doc else dt_min_dataset
-                val_fim_def = data_fim_doc.date() if data_fim_doc else dt_max_dataset
+                
+                # Tratamento seguro dos limites de datas para o st.date_input
+                if data_ini_doc and data_ini_doc.date():
+                    val_ini_def = max(min(data_ini_doc.date(), dt_max_dataset), dt_min_dataset)
+                else:
+                    val_ini_def = dt_min_dataset
+
+                if data_fim_doc and data_fim_doc.date():
+                    val_fim_def = max(min(data_fim_doc.date(), dt_max_dataset), dt_min_dataset)
+                else:
+                    val_fim_def = dt_max_dataset
+
+                if val_ini_def > val_fim_def:
+                    val_ini_def, val_fim_def = dt_min_dataset, dt_max_dataset
                 
                 col_f1, col_f2 = st.columns(2)
                 with col_f1: data_sel_ini = st.date_input("📅 Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
