@@ -398,12 +398,20 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 def processar_razao_dominio(file_bytes, filename):
-    """Lê o arquivo do Razão exportado da Domínio (Excel ou CSV)"""
+    """Lê o arquivo do Razão exportado da Domínio com suporte robusto a XLSX, XLS (HTML disfarçado) e CSV"""
     df = None
     ext = os.path.splitext(filename)[1].lower()
+    
     try:
         if ext in ['.xlsx', '.xls']:
-            df = pd.read_excel(io.BytesIO(file_bytes), dtype=str)
+            try:
+                df = pd.read_excel(io.BytesIO(file_bytes), dtype=str)
+            except Exception:
+                # Tenta ler como HTML caso o .xls seja uma tabela HTML interna da Domínio
+                try:
+                    dfs = pd.read_html(io.BytesIO(file_bytes))
+                    if dfs: df = dfs[0]
+                except Exception: pass
         else:
             for enc in ['utf-8', 'latin1', 'cp1252']:
                 try:
@@ -418,9 +426,9 @@ def processar_razao_dominio(file_bytes, filename):
     df.columns = [str(c).strip().upper() for c in df.columns]
     
     col_data = next((c for c in df.columns if any(p in c for p in ['DATA', 'DT'])), None)
+    col_deb = next((c for c in df.columns if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DÉB'])), None)
+    col_cred = next((c for c in df.columns if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRÉD'])), None)
     col_val = next((c for c in df.columns if any(p in c for p in ['VALOR', 'VL'])), None)
-    col_deb = next((c for c in df.columns if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA'])), None)
-    col_cred = next((c for c in df.columns if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA'])), None)
     
     if not col_data: return pd.DataFrame()
     
@@ -435,7 +443,7 @@ def processar_razao_dominio(file_bytes, filename):
         if col_deb and col_cred:
             v_deb = limpar_valor_monetario(row[col_deb]) if pd.notna(row[col_deb]) else 0.0
             v_cred = limpar_valor_monetario(row[col_cred]) if pd.notna(row[col_cred]) else 0.0
-            v = v_cred - v_deb # No razão, crédito entra positivo e débito sai negativo para a conta do banco
+            v = v_cred - v_deb # Créditos entram positivos, Débitos entram negativos para a conta do banco
         elif col_val:
             v = limpar_valor_monetario(row[col_val])
             
@@ -444,8 +452,6 @@ def processar_razao_dominio(file_bytes, filename):
             
     if not dados: return pd.DataFrame()
     df_res = pd.DataFrame(dados)
-    df_res['DATA_DT'] = pd.to_datetime(df_res['DATA'], format='%d/%m/%Y')
-    # Agrupa por dia no razão
     df_agregado = df_res.groupby('DATA')['VALOR_RAZAO'].sum().reset_index()
     df_agregado['DATA_DT'] = pd.to_datetime(df_agregado['DATA'], format='%d/%m/%Y')
     return df_agregado
@@ -476,7 +482,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.8 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.9 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -735,7 +741,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
         arq_extrato = st.file_uploader("Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
     with col_up2:
         st.markdown("##### 2. Razão da Domínio")
-        arq_razao = st.file_uploader("Envie o Razão exportado (Excel ou CSV)", type=["csv", "xlsx", "xls"], key="up_razao")
+        arq_razao = st.file_uploader("Envie o Razão exportado (XLSX, XLS ou CSV)", type=["csv", "xlsx", "xls"], key="up_razao")
 
     if arq_extrato and arq_razao:
         # Processa Extrato
@@ -804,6 +810,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
             st.dataframe(df_exibicao, use_container_width=True, height=350)
             
         else:
-            st.warning("⚠️ Não foi possível processar ou alinhar os dados entre o Extrato e o Razão. Verifique se os arquivos correspondem ao mesmo período.")
+            st.warning("⚠️ Não foi possível processar ou alinhar os dados entre o Extrato e o Razão. Dica: Se o Razão estiver em formato .xls antigo, abra-o no Excel e salve-o como .xlsx ou .csv.")
     else:
         st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária.")
