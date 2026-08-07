@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS DARK MODE MINIMALISTA E ALINHADA
+# ESTILIZAÇÃO CSS DARK MODE MINIMALISTA E ALINHADA (CORREÇÃO DE ALINHAMENTO)
 # ==============================================================================
 st.markdown("""
     <style>
@@ -80,25 +80,22 @@ st.markdown("""
             border-right: 1px solid #30363d;
         }
 
-        /* Cards de Ferramentas (Home) */
+        /* Cards de Ferramentas (Home) com altura fixa e alinhamento perfeito */
         .tool-card {
             background-color: #161b22;
             border: 1px solid #30363d;
-            padding: 24px;
-            border-radius: 8px;
+            padding: 24px 20px;
+            border-radius: 8px 8px 0 0;
             text-align: center;
-            height: 100%;
+            height: 160px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             transition: border-color 0.2s ease;
         }
         .tool-card:hover {
             border-color: #8b949e;
-        }
-
-        /* Ajuste de alinhamento vertical para títulos e botões de voltar */
-        .align-fix {
-            display: flex;
-            align-items: center;
-            height: 100%;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -423,7 +420,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
     mudar_pagina('extratos')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.5 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v4.6 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -444,7 +441,6 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         if st.button("Acessar", use_container_width=True, key="btn_abrir_extratos"):
             mudar_pagina('extratos')
             st.rerun()
@@ -457,7 +453,6 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Novas ferramentas contábeis em desenvolvimento.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_1")
         
     with col_t3:
@@ -468,14 +463,12 @@ if st.session_state['pagina_ativa'] == 'home':
                 <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Utilitários adicionais para relatórios fiscais.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_2")
 
 # ==============================================================================
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'extratos':
-    # Alinhamento perfeito do botão de voltar com o título sem cortes
     col_voltar, col_tit = st.columns([1.2, 8.8])
     with col_voltar:
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
