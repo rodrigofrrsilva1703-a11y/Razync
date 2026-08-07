@@ -10,7 +10,7 @@ from pypdf import PdfReader
 
 # Configuração da página Web
 st.set_page_config(
-    page_title="Importador Domínio Pro", 
+    page_title="Plataforma de Automação Contábil", 
     page_icon="🤖", 
     layout="wide",
     initial_sidebar_state="expanded"
@@ -58,6 +58,14 @@ st.markdown("""
             color: #cbd5e1;
             margin-bottom: 15px;
             border-left: 4px solid #3b82f6;
+        }
+        .tool-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
     </style>
 """, unsafe_allow_html=True)
@@ -360,198 +368,268 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 # ==============================================================================
-# INTERFACE GRÁFICA: BARRA LATERAL REFINADA
+# CONTROLE DE ESTADO DE NAVEGAÇÃO (PÁGINAS / FERRAMENTAS)
 # ==============================================================================
-st.sidebar.markdown("### 🤖 Importador Pro")
-st.sidebar.markdown("<p style='font-size: 13px; color: #94a3b8;'>Conciliação Bancária Automatizada para Domínio Systems.</p>", unsafe_allow_html=True)
+if 'pagina_ativa' not in st.session_state:
+    st.session_state['pagina_ativa'] = 'home'
+
+def mudar_pagina(nome_pagina):
+    st.session_state['pagina_ativa'] = nome_pagina
+
+# ==============================================================================
+# BARRA LATERAL (MENU DE NAVEGAÇÃO)
+# ==============================================================================
+st.sidebar.markdown("### 🤖 Hub Contábil Pro")
+st.sidebar.markdown("<p style='font-size: 13px; color: #94a3b8;'>Automações para Domínio Systems.</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
-st.sidebar.markdown("#### 📂 Envio de Arquivos")
-st.sidebar.markdown("<div class='sidebar-box'><b>Dica:</b> Envie um ou vários arquivos bancários para gerar resumos individuais ou consolidados.</div>", unsafe_allow_html=True)
+if st.sidebar.button("🏠 Início / Menu Principal", use_container_width=True):
+    mudar_pagina('home')
 
-arquivos = st.sidebar.file_uploader(
-    "Arraste os extratos aqui", 
-    type=["pdf", "ofx", "csv", "xlsx", "xls"], 
-    accept_multiple_files=True,
-    label_visibility="collapsed"
-)
+st.sidebar.markdown("#### 🛠️ Ferramentas Disponíveis")
+if st.sidebar.button("📊 Conversor de Extratos", use_container_width=True):
+    mudar_pagina('extratos')
+
+# Futuras ferramentas podem ser adicionadas aqui facilmente:
+# if st.sidebar.button("📁 Outra Ferramenta", use_container_width=True):
+#     mudar_pagina('outra_ferramenta')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 3.5 · Advanced Engine</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 4.0 · Multi-Tools</p>", unsafe_allow_html=True)
 
 # ==============================================================================
-# TELA PRINCIPAL
+# TELA 1: MENU PRINCIPAL (HOME) COM BOTÕES DE ACESSO
 # ==============================================================================
-st.title("⚡ Painel de Conciliação")
-st.caption("Converta extratos em layouts compatíveis para importação na Domínio de forma rápida e segura.")
-
-if arquivos:
-    colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
-    df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
-    if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
+if st.session_state['pagina_ativa'] == 'home':
+    st.title("⚡ Bem-vindo ao Hub de Automação")
+    st.caption("Selecione abaixo a ferramenta que deseja utilizar para otimizar suas rotinas contábeis.")
     
-    dados_por_arquivo = {}
-    todos_lancamentos_brutos = []
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    for arquivo in arquivos:
-        file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
-        lancamentos, data_ini_doc, data_fim_doc = [], None, None
+    col_t1, col_t2, col_t3 = st.columns(3)
+    
+    with col_t1:
+        st.markdown("""
+            <div class="tool-card">
+                <h3>📊</h3>
+                <h4>Conversor de Extratos</h4>
+                <p style="font-size: 13px; color: #94a3b8;">Converta PDFs, OFX e Planilhas no layout exato para importação na Domínio.</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("Abrir Extratos", use_container_width=True, key="btn_abrir_extratos"):
+            mudar_pagina('extratos')
+            st.rerun()
+            
+    with col_t2:
+        st.markdown("""
+            <div class="tool-card">
+                <h3>📁</h3>
+                <h4>Em Breve</h4>
+                <p style="font-size: 13px; color: #94a3b8;">Novas ferramentas contábeis serão adicionadas em breve neste painel.</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_1")
         
-        if extensao == '.ofx': lancamentos = processar_ofx(file_bytes, arquivo.name)
-        elif extensao in ['.csv', '.xlsx', '.xls']: lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
-        elif extensao == '.pdf':
-            caminho_temp = f"temp_{arquivo.name}"
-            with open(caminho_temp, "wb") as f: f.write(file_bytes)
-            data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
-            lancamentos = processar_arquivo_pdf(caminho_temp)
-            if os.path.exists(caminho_temp): os.remove(caminho_temp)
-            
-        if lancamentos:
-            df_temp = pd.DataFrame(lancamentos)
-            df_temp['ARQUIVO_ORIGEM'] = arquivo.name
-            dados_por_arquivo[arquivo.name] = {
-                'lancamentos': lancamentos,
-                'data_ini': data_ini_doc,
-                'data_fim': data_fim_doc
-            }
-            todos_lancamentos_brutos.extend(lancamentos)
+    with col_t3:
+        st.markdown("""
+            <div class="tool-card">
+                <h3>⚙️</h3>
+                <h4>Em Breve</h4>
+                <p style="font-size: 13px; color: #94a3b8;">Mais utilitários para agilizar sua conciliação e conferência fiscal.</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_2")
 
-    if todos_lancamentos_brutos:
-        if len(arquivos) > 1:
-            nomes_abas = ["🌐 Visão Consolidada (Geral)"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
-        else:
-            nomes_abas = [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
-            
-        abas = st.tabs(nomes_abas)
+# ==============================================================================
+# TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
+# ==============================================================================
+elif st.session_state['pagina_ativa'] == 'extratos':
+    col_voltar, col_tit = st.columns([1, 6])
+    with col_voltar:
+        if st.button("⬅️ Voltar", use_container_width=True):
+            mudar_pagina('home')
+            st.rerun()
+    with col_tit:
+        st.title("📊 Conversor de Extratos Bancários")
+    
+    st.caption("Faça o upload dos seus arquivos para gerar os relatórios e layouts compatíveis com a Domínio.")
+    st.markdown("---")
+
+    # Upload específico para esta ferramenta na barra lateral ou na tela
+    st.markdown("#### 📂 Envio de Arquivos para Análise")
+    arquivos = st.file_uploader(
+        "Arraste ou selecione os extratos bancários (PDF, OFX, CSV, Excel)", 
+        type=["pdf", "ofx", "csv", "xlsx", "xls"], 
+        accept_multiple_files=True
+    )
+
+    if arquivos:
+        st.success(f"{len(arquivos)} arquivo(s) carregado(s) com sucesso!")
+        colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+        df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
+        if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
         
-        # ======================================================================
-        # ABA 1: VISÃO CONSOLIDADA (CASO HAJA MAIS DE UM ARQUIVO)
-        # ======================================================================
-        if len(arquivos) > 1:
-            with abas[0]:
-                st.markdown("### 🌐 Resumo Consolidado de Todos os Extratos")
-                df_geral_bruto = pd.DataFrame(todos_lancamentos_brutos)
-                df_geral_bruto['DATA_DT'] = pd.to_datetime(df_geral_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
-                df_geral_bruto = df_geral_bruto.dropna(subset=['DATA_DT'])
-                
-                dt_min_geral = df_geral_bruto['DATA_DT'].min().date()
-                dt_max_geral = df_geral_bruto['DATA_DT'].max().date()
-                
-                col_g1, col_g2, col_g3 = st.columns([1, 1, 1.5])
-                with col_g1: data_geral_ini = st.date_input("📅 Data Inicial Geral", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
-                with col_g2: data_geral_fim = st.date_input("📅 Data Final Geral", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
-                with col_g3:
-                    st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
-                    termo_busca_geral = st.text_input("🔍 Busca rápida geral", placeholder="Filtrar histórico...", key="gen_busca")
-                
-                df_geral_final = df_geral_bruto[(df_geral_bruto['DATA_DT'].dt.date >= data_geral_ini) & (df_geral_bruto['DATA_DT'].dt.date <= data_geral_fim)].copy()
-                if termo_busca_geral:
-                    df_geral_final = df_geral_final[df_geral_final['HISTÓRICO'].str.contains(termo_busca_geral, case=False, na=False)]
-                
-                df_geral_final = df_geral_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
-                
-                tot_cred_g = df_geral_final[df_geral_final['VALOR'] > 0]['VALOR'].sum()
-                tot_deb_g = df_geral_final[df_geral_final['VALOR'] < 0]['VALOR'].sum()
-                saldo_liq_g = tot_cred_g + tot_deb_g
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                cg1, cg2, cg3, cg4 = st.columns(4)
-                with cg1:
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Total Registros</div><div class="metric-value">{len(df_geral_final)}</div></div>', unsafe_allow_html=True)
-                with cg2:
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas Totais</div><div class="metric-value" style="color: #4ade80;">R$ {tot_cred_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
-                with cg3:
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas Totais</div><div class="metric-value" style="color: #f87171;">R$ {abs(tot_deb_g):,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
-                with cg4:
-                    color_g = "#4ade80" if saldo_liq_g >= 0 else "#f87171"
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido Geral</div><div class="metric-value" style="color: {color_g};">R$ {saldo_liq_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
-
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("##### 📋 Prévia Consolidada")
-                st.dataframe(df_geral_final, use_container_width=True, height=280)
-                
-                st.markdown("##### 📥 Exportar Consolidado")
-                cc_dl1, cc_dl2 = st.columns(2)
-                buf_excel_g = io.BytesIO()
-                with pd.ExcelWriter(buf_excel_g, engine='openpyxl') as writer: df_geral_final.to_excel(writer, index=False)
-                cc_dl1.download_button("📊 Baixar Excel Consolidado (.XLSX)", data=buf_excel_g.getvalue(), file_name=f"consolidado_geral_{data_geral_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_excel_geral", use_container_width=True)
-                cc_dl2.download_button("🚀 Baixar TXT Consolidado para Domínio", data=gerar_txt_dominio(df_geral_final), file_name=f"importacao_dominio_consolidado_{data_geral_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key="dl_txt_geral", use_container_width=True)
-                st.markdown("---")
-
-        # ======================================================================
-        # ABAS INDIVIDUAIS POR ARQUIVO
-        # ======================================================================
-        offset_abas = 1 if len(arquivos) > 1 else 0
-        for idx_arq, arquivo in enumerate(arquivos):
-            if arquivo.name not in dados_por_arquivo: continue
+        dados_por_arquivo = {}
+        todos_lancamentos_brutos = []
+        
+        for arquivo in arquivos:
+            file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
+            lancamentos, data_ini_doc, data_fim_doc = [], None, None
             
-            with abas[idx_arq + offset_abas]:
-                info_arq = dados_por_arquivo[arquivo.name]
-                df_bruto = pd.DataFrame(info_arq['lancamentos'])
-                df_bruto['DATA_DT'] = pd.to_datetime(df_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
-                df_bruto = df_bruto.dropna(subset=['DATA_DT'])
-                dt_min_dataset, dt_max_dataset = df_bruto['DATA_DT'].min().date(), df_bruto['DATA_DT'].max().date()
+            if extensao == '.ofx': lancamentos = processar_ofx(file_bytes, arquivo.name)
+            elif extensao in ['.csv', '.xlsx', '.xls']: lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
+            elif extensao == '.pdf':
+                caminho_temp = f"temp_{arquivo.name}"
+                with open(caminho_temp, "wb") as f: f.write(file_bytes)
+                data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
+                lancamentos = processar_arquivo_pdf(caminho_temp)
+                if os.path.exists(caminho_temp): os.remove(caminho_temp)
                 
-                data_ini_doc = info_arq['data_ini']
-                data_fim_doc = info_arq['data_fim']
-                
-                if data_ini_doc and data_ini_doc.date():
-                    val_ini_def = max(min(data_ini_doc.date(), dt_max_dataset), dt_min_dataset)
-                else:
-                    val_ini_def = dt_min_dataset
+            if lancamentos:
+                df_temp = pd.DataFrame(lancamentos)
+                df_temp['ARQUIVO_ORIGEM'] = arquivo.name
+                dados_por_arquivo[arquivo.name] = {
+                    'lancamentos': lancamentos,
+                    'data_ini': data_ini_doc,
+                    'data_fim': data_fim_doc
+                }
+                todos_lancamentos_brutos.extend(lancamentos)
 
-                if data_fim_doc and data_fim_doc.date():
-                    val_fim_def = max(min(data_fim_doc.date(), dt_max_dataset), dt_min_dataset)
-                else:
-                    val_fim_def = dt_max_dataset
-
-                if val_ini_def > val_fim_def:
-                    val_ini_def, val_fim_def = dt_min_dataset, dt_max_dataset
+        if todos_lancamentos_brutos:
+            if len(arquivos) > 1:
+                nomes_abas = ["🌐 Visão Consolidada (Geral)"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
+            else:
+                nomes_abas = [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
                 
-                with st.container():
-                    col_f1, col_f2, col_f3 = st.columns([1, 1, 1.5])
-                    with col_f1: data_sel_ini = st.date_input("📅 Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
-                    with col_f2: data_sel_fim = st.date_input("📅 Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
-                    with col_f3:
+            abas = st.tabs(nomes_abas)
+            
+            # ABA 1: CONSOLIDADA
+            if len(arquivos) > 1:
+                with abas[0]:
+                    st.markdown("### 🌐 Resumo Consolidado de Todos os Extratos")
+                    df_geral_bruto = pd.DataFrame(todos_lancamentos_brutos)
+                    df_geral_bruto['DATA_DT'] = pd.to_datetime(df_geral_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
+                    df_geral_bruto = df_geral_bruto.dropna(subset=['DATA_DT'])
+                    
+                    dt_min_geral = df_geral_bruto['DATA_DT'].min().date()
+                    dt_max_geral = df_geral_bruto['DATA_DT'].max().date()
+                    
+                    col_g1, col_g2, col_g3 = st.columns([1, 1, 1.5])
+                    with col_g1: data_geral_ini = st.date_input("📅 Data Inicial Geral", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
+                    with col_g2: data_geral_fim = st.date_input("📅 Data Final Geral", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
+                    with col_g3:
                         st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
-                        termo_busca = st.text_input("🔍 Busca rápida no histórico", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
+                        termo_busca_geral = st.text_input("🔍 Busca rápida geral", placeholder="Filtrar histórico...", key="gen_busca")
+                    
+                    df_geral_final = df_geral_bruto[(df_geral_bruto['DATA_DT'].dt.date >= data_geral_ini) & (df_geral_bruto['DATA_DT'].dt.date <= data_geral_fim)].copy()
+                    if termo_busca_geral:
+                        df_geral_final = df_geral_final[df_geral_final['HISTÓRICO'].str.contains(termo_busca_geral, case=False, na=False)]
+                    
+                    df_geral_final = df_geral_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
+                    
+                    tot_cred_g = df_geral_final[df_geral_final['VALOR'] > 0]['VALOR'].sum()
+                    tot_deb_g = df_geral_final[df_geral_final['VALOR'] < 0]['VALOR'].sum()
+                    saldo_liq_g = tot_cred_g + tot_deb_g
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    cg1, cg2, cg3, cg4 = st.columns(4)
+                    with cg1:
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Total Registros</div><div class="metric-value">{len(df_geral_final)}</div></div>', unsafe_allow_html=True)
+                    with cg2:
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas Totais</div><div class="metric-value" style="color: #4ade80;">R$ {tot_cred_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+                    with cg3:
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas Totais</div><div class="metric-value" style="color: #f87171;">R$ {abs(tot_deb_g):,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
+                    with cg4:
+                        color_g = "#4ade80" if saldo_liq_g >= 0 else "#f87171"
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido Geral</div><div class="metric-value" style="color: {color_g};">R$ {saldo_liq_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
 
-                df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
-                if termo_busca:
-                    df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
-                
-                df_final = df_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
-                total_creditos = df_final[df_final['VALOR'] > 0]['VALOR'].sum()
-                total_debitos = df_final[df_final['VALOR'] < 0]['VALOR'].sum()
-                saldo_liquido = total_creditos + total_debitos
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_final)}</div></div>', unsafe_allow_html=True)
-                with c2:
-                    val_cred_fmt = f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #4ade80;">{val_cred_fmt}</div></div>', unsafe_allow_html=True)
-                with c3:
-                    val_deb_fmt = f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f87171;">{val_deb_fmt}</div></div>', unsafe_allow_html=True)
-                with c4:
-                    val_liq_fmt = f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                    color_liq = "#4ade80" if saldo_liquido >= 0 else "#f87171"
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{val_liq_fmt}</div></div>', unsafe_allow_html=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("##### 📋 Prévia Consolidada")
+                    st.dataframe(df_geral_final, use_container_width=True, height=280)
+                    
+                    st.markdown("##### 📥 Exportar Consolidado")
+                    cc_dl1, cc_dl2 = st.columns(2)
+                    buf_excel_g = io.BytesIO()
+                    with pd.ExcelWriter(buf_excel_g, engine='openpyxl') as writer: df_geral_final.to_excel(writer, index=False)
+                    cc_dl1.download_button("📊 Baixar Excel Consolidado (.XLSX)", data=buf_excel_g.getvalue(), file_name=f"consolidado_geral_{data_geral_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_excel_geral", use_container_width=True)
+                    cc_dl2.download_button("🚀 Baixar TXT Consolidado para Domínio", data=gerar_txt_dominio(df_geral_final), file_name=f"importacao_dominio_consolidado_{data_geral_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key="dl_txt_geral", use_container_width=True)
+                    st.markdown("---")
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("##### 📋 Prévia dos Lançamentos")
-                st.dataframe(df_final, use_container_width=True, height=280)
+            # ABAS INDIVIDUAIS
+            offset_abas = 1 if len(arquivos) > 1 else 0
+            for idx_arq, arquivo in enumerate(arquivos):
+                if arquivo.name not in dados_por_arquivo: continue
                 
-                st.markdown("##### 📥 Exportar Arquivos")
-                c_dl1, c_dl2 = st.columns(2)
-                buffer_excel = io.BytesIO()
-                with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer: df_final.to_excel(writer, index=False)
-                c_dl1.download_button("📊 Baixar em Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
-                c_dl2.download_button("🚀 Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
+                with abas[idx_arq + offset_abas]:
+                    info_arq = dados_por_arquivo[arquivo.name]
+                    df_bruto = pd.DataFrame(info_arq['lancamentos'])
+                    df_bruto['DATA_DT'] = pd.to_datetime(df_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
+                    df_bruto = df_bruto.dropna(subset=['DATA_DT'])
+                    dt_min_dataset, dt_max_dataset = df_bruto['DATA_DT'].min().date(), df_bruto['DATA_DT'].max().date()
+                    
+                    data_ini_doc = info_arq['data_ini']
+                    data_fim_doc = info_arq['data_fim']
+                    
+                    if data_ini_doc and data_ini_doc.date():
+                        val_ini_def = max(min(data_ini_doc.date(), dt_max_dataset), dt_min_dataset)
+                    else:
+                        val_ini_def = dt_min_dataset
+
+                    if data_fim_doc and data_fim_doc.date():
+                        val_fim_def = max(min(data_fim_doc.date(), dt_max_dataset), dt_min_dataset)
+                    else:
+                        val_fim_def = dt_max_dataset
+
+                    if val_ini_def > val_fim_def:
+                        val_ini_def, val_fim_def = dt_min_dataset, dt_max_dataset
+                    
+                    with st.container():
+                        col_f1, col_f2, col_f3 = st.columns([1, 1, 1.5])
+                        with col_f1: data_sel_ini = st.date_input("📅 Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
+                        with col_f2: data_sel_fim = st.date_input("📅 Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
+                        with col_f3:
+                            st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
+                            termo_busca = st.text_input("🔍 Busca rápida no histórico", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
+
+                    df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
+                    if termo_busca:
+                        df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
+                    
+                    df_final = df_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
+                    total_creditos = df_final[df_final['VALOR'] > 0]['VALOR'].sum()
+                    total_debitos = df_final[df_final['VALOR'] < 0]['VALOR'].sum()
+                    saldo_liquido = total_creditos + total_debitos
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1:
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_final)}</div></div>', unsafe_allow_html=True)
+                    with c2:
+                        val_cred_fmt = f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #4ade80;">{val_cred_fmt}</div></div>', unsafe_allow_html=True)
+                    with c3:
+                        val_deb_fmt = f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f87171;">{val_deb_fmt}</div></div>', unsafe_allow_html=True)
+                    with c4:
+                        val_liq_fmt = f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                        color_liq = "#4ade80" if saldo_liquido >= 0 else "#f87171"
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{val_liq_fmt}</div></div>', unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("##### 📋 Prévia dos Lançamentos")
+                    st.dataframe(df_final, use_container_width=True, height=280)
+                    
+                    st.markdown("##### 📥 Exportar Arquivos")
+                    c_dl1, c_dl2 = st.columns(2)
+                    buffer_excel = io.BytesIO()
+                    with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer: df_final.to_excel(writer, index=False)
+                    c_dl1.download_button("📊 Baixar em Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
+                    c_dl2.download_button("🚀 Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
+        else:
+            st.warning("⚠️ Não foi possível extrair lançamentos válidos de nenhum dos arquivos enviados.")
     else:
-        st.warning("⚠️ Não foi possível extrair lançamentos válidos de nenhum dos arquivos enviados.")
-else:
-    st.info("👈 Comece enviando um ou mais arquivos de extrato bancário na **Barra Lateral** à esquerda para visualizar a conciliação.")
+        st.info("👈 Envie seus arquivos de extrato acima para iniciar a análise e conversão.")
