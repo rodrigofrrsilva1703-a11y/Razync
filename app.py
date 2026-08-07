@@ -92,9 +92,14 @@ st.markdown("""
 def limpar_caracteres_ilegais(val):
     """Remove caracteres de controle ilegais para o Excel/openpyxl"""
     if isinstance(val, str):
-        # Remove caracteres de controle ASCII que causam o IllegalCharacterError
         return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', val)
     return val
+
+def sanitizar_dataframe(df):
+    """Aplica a limpeza de caracteres ilegais com segurança em colunas de texto"""
+    for col in df.select_dtypes(include=['object', 'string']).columns:
+        df[col] = df[col].apply(limpar_caracteres_ilegais)
+    return df
 
 def limpar_valor_monetario(v_val):
     if pd.isna(v_val) or v_val == '': return 0.0
@@ -636,8 +641,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                         df_geral_final = df_geral_final[df_geral_final['HISTÓRICO'].str.contains(termo_busca_geral, case=False, na=False)]
                     
                     df_geral_final = df_geral_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
-                    # Sanitiza caracteres especiais antes de exibir/exportar
-                    df_geral_final = df_geral_final.applymap(limpar_caracteres_ilegais)
+                    df_geral_final = sanitizar_dataframe(df_geral_final)
                     
                     tot_cred_g = df_geral_final[df_geral_final['VALOR'] > 0]['VALOR'].sum()
                     tot_deb_g = df_geral_final[df_geral_final['VALOR'] < 0]['VALOR'].sum()
@@ -707,8 +711,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                         df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
                     
                     df_final = df_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
-                    # Sanitiza caracteres especiais antes de exibir/exportar
-                    df_final = df_final.applymap(limpar_caracteres_ilegais)
+                    df_final = sanitizar_dataframe(df_final)
 
                     total_creditos = df_final[df_final['VALOR'] > 0]['VALOR'].sum()
                     total_debitos = df_final[df_final['VALOR'] < 0]['VALOR'].sum()
