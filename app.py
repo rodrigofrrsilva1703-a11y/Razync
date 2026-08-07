@@ -101,11 +101,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def limpar_valor_monetario(v_val):
-    if pd.isna(v_val) or v_val is None: return 0.0
+    if pd.isna(v_val) or v_val == '': return 0.0
     if isinstance(v_val, (int, float)): return float(v_val)
-    s = str(v_val).strip().replace('R$', '').replace('$', '').replace(' ', '')
+    s = str(v_val).strip()
+    s = re.sub(r'[^\d,\.-]', '', s)
     if not s or s.lower() == 'nan': return 0.0
-    if '.' in s and ',' in s:
+    if ',' in s and '.' in s:
         last_dot, last_comma = s.rfind('.'), s.rfind(',')
         s = s.replace('.', '').replace(',', '.') if last_comma > last_dot else s.replace(',', '')
     elif ',' in s:
@@ -398,7 +399,7 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 def processar_razao_dominio(file_bytes, filename):
-    """Leitor seguro e robusto para o Razão da Domínio (.xlsx, .csv ou conversão de .xls)"""
+    """Leitor aprimorado e robusto para o Razão da Domínio (.xlsx, .csv ou conversão de .xls)"""
     df = None
     ext = os.path.splitext(filename)[1].lower()
     
@@ -409,7 +410,6 @@ def processar_razao_dominio(file_bytes, filename):
             try:
                 df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None, engine='xlrd')
             except Exception:
-                # Se o .xls antigo da Domínio falhar, tenta ler como tabela HTML embutida
                 try:
                     dfs = pd.read_html(io.BytesIO(file_bytes))
                     if dfs: df = dfs[0]
@@ -417,17 +417,17 @@ def processar_razao_dominio(file_bytes, filename):
                     return None
         else:
             for enc in ['utf-8', 'latin1', 'cp1252']:
-                try:
-                    df = pd.read_csv(io.BytesIO(file_bytes), sep=None, engine='python', encoding=enc, dtype=str, header=None)
-                    break
-                except: pass
+                for sep in [';', '\t', '|', ',']:
+                    try:
+                        df = pd.read_csv(io.BytesIO(file_bytes), sep=sep, encoding=enc, dtype=str, header=None, on_bad_lines='skip')
+                        if df.shape[1] > 1: break
+                    except: continue
+                if df is not None and df.shape[1] > 1: break
     except Exception as e:
-        print("Erro ao carregar arquivo de razão:", e)
         return None
     
     if df is None or df.empty: return None
     
-    # Padroniza e localiza a linha de cabeçalho correta do relatório da Domínio
     header_row_idx = 0
     for idx, row in df.iterrows():
         row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).upper()
@@ -442,10 +442,12 @@ def processar_razao_dominio(file_bytes, filename):
         df.columns = [str(v).strip().upper() for v in df.iloc[0].values]
         df = df.iloc[1:].copy()
         
+    df.columns = [re.sub(r'[^\w\s]', '', c) for c in df.columns]
     cols = list(df.columns)
+    
     col_data = next((c for c in cols if any(p in c for p in ['DATA', 'DT'])), None)
-    col_deb = next((c for c in cols if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DÉB'])), None)
-    col_cred = next((c for c in cols if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRÉD'])), None)
+    col_deb = next((c for c in cols if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DEB'])), None)
+    col_cred = next((c for c in cols if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRE'])), None)
     col_val = next((c for c in cols if any(p in c for p in ['VALOR', 'VL'])), None)
     
     if not col_data: return None
@@ -611,7 +613,6 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                 
             abas = st.tabs(nomes_abas)
             
-            # ABA 1: CONSOLIDADA
             if len(arquivos) > 1:
                 with abas[0]:
                     st.markdown("### Resumo Consolidado")
@@ -663,7 +664,6 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     cc_dl2.download_button("Baixar TXT para Domínio", data=gerar_txt_dominio(df_geral_final), file_name=f"importacao_dominio_consolidado_{data_geral_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key="dl_txt_geral", use_container_width=True)
                     st.markdown("---")
 
-            # ABAS INDIVIDUAIS
             offset_abas = 1 if len(arquivos) > 1 else 0
             for idx_arq, arquivo in enumerate(arquivos):
                 if arquivo.name not in dados_por_arquivo: continue
@@ -762,7 +762,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
         arq_razao = st.file_uploader("Envie o Razão exportado (XLSX, XLS ou CSV)", type=["csv", "xlsx", "xls"], key="up_razao")
 
     if arq_extrato and arq_razao:
-        # Processa Extrato
         ext_bytes, ext_ext = arq_extrato.getvalue(), os.path.splitext(arq_extrato.name)[1].lower()
         lancamentos_ext = []
         if ext_ext == '.ofx': lancamentos_ext = processar_ofx(ext_bytes, arq_extrato.name)
@@ -773,7 +772,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
             lancamentos_ext = processar_arquivo_pdf(tmp_ext)
             if os.path.exists(tmp_ext): os.remove(tmp_ext)
             
-        # Processa Razão com proteção aprimorada
         raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
         df_razao_agregado = processar_razao_dominio(raz_bytes, raz_name)
 
@@ -782,20 +780,17 @@ elif st.session_state['pagina_ativa'] == 'razao':
             df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], format='%d/%m/%Y', errors='coerce')
             df_ext = df_ext.dropna(subset=['DATA_DT'])
             
-            # Agrupa extrato por dia
             df_ext_agregado = df_ext.groupby('DATA')['VALOR'].sum().reset_index()
             df_ext_agregado['DATA_DT'] = pd.to_datetime(df_ext_agregado['DATA'], format='%d/%m/%Y')
             df_ext_agregado = df_ext_agregado.rename(columns={'VALOR': 'VALOR_EXTRATO'})
 
-            # Mescla os dois DataFrames por data
             df_conciliacao = pd.merge(df_ext_agregado[['DATA', 'DATA_DT', 'VALOR_EXTRATO']], 
-                                      df_razao_agregado[['DATA', 'VALOR_RAZAO']], 
-                                      on='DATA', how='outer').fillna(0)
+                                     df_razao_agregado[['DATA', 'VALOR_RAZAO']], 
+                                     on='DATA', how='outer').fillna(0)
             
             df_conciliacao = df_conciliacao.sort_values('DATA_DT')
             df_conciliacao['DIFERENÇA'] = df_conciliacao['VALOR_EXTRATO'] - df_conciliacao['VALOR_RAZAO']
             
-            # Formatação visual do status
             def status_dif(d):
                 if abs(d) < 0.01: return "✅ Batendo"
                 else: return "❌ Divergente"
@@ -805,7 +800,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("### 📊 Resultado da Conferência Diária")
             
-            # Resumo Geral
             total_ext = df_conciliacao['VALOR_EXTRATO'].sum()
             total_raz = df_conciliacao['VALOR_RAZAO'].sum()
             dif_total = total_ext - total_raz
@@ -821,7 +815,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # Tabela Detalhada Dia a Dia
             df_exibicao = df_conciliacao[['DATA', 'VALOR_EXTRATO', 'VALOR_RAZAO', 'DIFERENÇA', 'STATUS']].copy()
             df_exibicao.columns = ['Data', 'Extrato (R$)', 'Razão Domínio (R$)', 'Diferença (R$)', 'Status']
             
