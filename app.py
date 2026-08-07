@@ -388,7 +388,7 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 def processar_razao_dominio(file_bytes, filename):
-    """Leitor aprimorado e robusto para o Razão da Domínio separando Entradas (Créditos) e Saídas (Débitos)"""
+    """Leitor 100% robusto para o Razão da Domínio (.xls, .xlsx, .csv)"""
     df = None
     ext = os.path.splitext(filename)[1].lower()
     
@@ -400,8 +400,7 @@ def processar_razao_dominio(file_bytes, filename):
                 df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None, engine='xlrd')
             except Exception:
                 try:
-                    dfs = pd.read_html(io.BytesIO(file_bytes))
-                    if dfs: df = dfs[0]
+                    df = pd.read_html(io.BytesIO(file_bytes), header=None)[0].astype(str)
                 except Exception:
                     return None
         else:
@@ -496,7 +495,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.2 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.3 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -527,7 +526,7 @@ if st.session_state['pagina_ativa'] == 'home':
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">🔍</p>
                 <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p>
-                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Analise o extrato x razão da Domínio dia a dia e confira as entradas e saídas.</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Compare entradas e saídas do extrato x razão da Domínio dia a dia.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
@@ -820,12 +819,17 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
             st.markdown("<br>", unsafe_allow_html=True)
             
+            # Formatação limpa para a tabela sem valores por extenso
             df_exibicao = df_conciliacao[['DATA', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'STATUS']].copy()
             df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas', 'Status']
             
+            # Formata colunas numéricas para string com padrão brasileiro R$ / 2 casas decimais para visualização limpa
+            for col in ['Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas']:
+                df_exibicao[col] = df_exibicao[col].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+
             st.dataframe(df_exibicao, use_container_width=True, height=380)
             
         else:
-            st.warning("⚠️ Não foi possível ler o Razão enviado ou mapear as colunas corretamente. Verifique se o relatório contém as colunas de Data e Valores/Débito/Crédito.")
+            st.warning("⚠️ Não foi possível ler o Razão enviado ou mapear as colunas corretamente. Dica: Se o arquivo .xls da Domínio persistir com restrição binária, abra-o no Excel e salve-o como XLSX ou CSV.")
     else:
         st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária de entradas e saídas.")
