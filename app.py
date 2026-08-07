@@ -171,23 +171,30 @@ def processar_planilha_universal(file_bytes, filename):
                 except Exception: pass
             if df is not None: break
     if df is None or df.empty: return []
+    
     header_idx = None
     for idx, row in df.iterrows():
         row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).lower()
-        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'crédito' in row_str or 'débito' in row_str or 'lançamento' in row_str):
+        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'crédito' in row_str or 'credit' in row_str or 'débito' in row_str or 'debit' in row_str or 'lançamento' in row_str):
             header_idx = idx; break
+            
     if header_idx is not None and header_idx > 0:
         df.columns = [str(v).strip() for v in df.iloc[header_idx].values]
         df = df.iloc[header_idx+1:].copy()
+        
     cols = list(df.columns)
     col_data = next((c for c in cols if any(p in str(c).lower() for p in ['data', 'dt', 'date', 'dia'])), None)
     col_hist = next((c for c in cols if any(p in str(c).lower() for p in ['lançamento', 'lancamento', 'históric', 'historic', 'descriç', 'descric', 'detalhe', 'memo'])), None)
     col_doc = next((c for c in cols if any(p in str(c).lower() for p in ['dcto', 'doc', 'documento', 'num', 'nr'])), None)
     col_val = next((c for c in cols if any(p in str(c).lower() for p in ['valor', 'val', 'monto', 'amount'])), None)
-    col_cred = next((c for c in cols if any(p in str(c).lower() for p in ['crédit', 'credit', 'entrada'])), None)
-    col_deb = next((c for c in cols if any(p in str(c).lower() for p in ['débit', 'debit', 'saída', 'saida'])), None)
-    col_tipo = next((c for c in cols if any(p in str(c).lower() for p in ['tipo', 'natureza', 'operacao', 'operaç'])), None)
+    
+    # Detecção inteligente de colunas de Crédito e Débito separadas
+    col_cred = next((c for c in cols if any(p in str(c).lower() for p in ['crédit', 'credit', 'entrada', 'vlr_cred'])), None)
+    col_deb = next((c for c in cols if any(p in str(c).lower() for p in ['débit', 'debit', 'saída', 'saida', 'vlr_deb'])), None)
+    col_tipo = next((c for c in cols if any(p in str(c).lower() for p in ['tipo', 'natureza', 'operacao', 'operaç', 'c/d'])), None)
+
     if not col_data: return []
+    
     for _, row in df.iterrows():
         dt_raw = str(row[col_data]).strip() if pd.notna(row[col_data]) else ''
         if dt_raw.upper() in ['TOTAL', 'ÚLTIMOS LANÇAMENTOS', 'ULTIMOS LANCAMENTOS', 'SALDOS INVEST FÁCIL / PLUS', 'NAN']:
@@ -202,21 +209,37 @@ def processar_planilha_universal(file_bytes, filename):
             parts = raw_dt.split('/')
             dt_fmt = f"{parts[0]}/{parts[1]}/20{parts[2]}"
         else: dt_fmt = raw_dt
+        
         hist_raw = limpar_caracteres_ilegais(str(row[col_hist]).strip()) if col_hist and pd.notna(row[col_hist]) else 'MOVIMENTO BANCARIO'
         doc_raw = limpar_caracteres_ilegais(str(row[col_doc]).strip()) if col_doc and pd.notna(row[col_doc]) else ''
         hist_fmt = f"{hist_raw} {doc_raw}" if doc_raw and doc_raw.lower() != 'nan' and doc_raw not in hist_raw else hist_raw
         if any(term in hist_fmt.upper() for term in ['SALDO', 'SUBTOTAL', 'TOTAL', 'TRANSPORTAR']): continue
+        
         valor_float = 0.0
+        
+        # Inteligência de Tratamento de Débito e Crédito
         if col_cred or col_deb:
             v_cred = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else 0.0
             v_deb = limpar_valor_monetario(row[col_deb]) if col_deb and pd.notna(row[col_deb]) else 0.0
-            if v_cred != 0: valor_float = abs(v_cred)
-            elif v_deb != 0: valor_float = -abs(v_deb)
+            
+            if v_cred != 0:
+                valor_float = abs(v_cred)  # Crédito / Entrada = Positivo
+            elif v_deb != 0:
+                valor_float = -abs(v_deb) # Débito / Saída = Negativo
+                
         elif col_val and pd.notna(row[col_val]):
-            valor_float = limpar_valor_monetario(row[col_val])
-            if col_tipo and pd.notna(row[col_tipo]):
-                if 'D' in str(row[col_tipo]).upper() or 'SAÍDA' in str(row[col_tipo]).upper() or 'SAIDA' in str(row[col_tipo]).upper():
-                    valor_float = -abs(valor_float)
+            val_base = limpar_valor_monetario(row[col_val])
+            if val_base != 0:
+                is_negativo = False
+                tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
+                
+                if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEBITO' in tipo_str:
+                    is_negativo = True
+                elif val_base < 0:
+                    is_negativo = True
+                    
+                valor_float = -abs(val_base) if is_negativo else abs(val_base)
+
         if valor_float != 0:
             banco_desc = f"EXTRATO {os.path.splitext(filename)[0].upper()}"
             if "BRADESCO" in filename.upper() or "BRADESCO" in hist_fmt.upper(): banco_desc = "BANCO BRADESCO"
@@ -224,6 +247,7 @@ def processar_planilha_universal(file_bytes, filename):
             elif "SANTANDER" in filename.upper(): banco_desc = "BANCO SANTANDER"
             elif "CAIXA" in filename.upper(): banco_desc = "CAIXA ECONOMICA"
             lancamentos.append({'DESCRIÇÃO': banco_desc, 'DATA': dt_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_fmt})
+            
     return lancamentos
 
 def extrair_periodo_extrato(caminho_pdf):
@@ -508,7 +532,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.5 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.6 · Dark Minimal</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
