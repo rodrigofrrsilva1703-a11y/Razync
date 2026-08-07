@@ -115,6 +115,20 @@ def limpar_valor_monetario(v_val):
     try: return float(s)
     except: return 0.0
 
+def deduzir_debito_pela_palavra(hist, is_negativo_atual):
+    """Analisa o texto do histórico para forçar débito caso o banco não exporte os sinais"""
+    if is_negativo_atual:
+        return True
+    
+    hist_upper = str(hist).upper()
+    palavras_debito = ['TARIFA', 'EMITIDO', 'PGTO', 'DEBITO', 'CHEQUE', 'SAQUE', 'RESGATE', 'PAGAMENTO', 'IMPOSTO', 'IOF', 'IRRF', 'PIX ENVIADO', 'TED ENVIADA', 'DOC ENVIADO']
+    palavras_credito = ['RECEBIDO', 'ESTORNO', 'DEVOLUCAO', 'DEVOLUÇÃO', 'CREDITO']
+    
+    if any(w in hist_upper for w in palavras_debito):
+        if not any(w in hist_upper for w in palavras_credito):
+            return True
+    return False
+
 def processar_ofx(file_bytes, filename):
     lancamentos = []
     texto = ""
@@ -148,6 +162,8 @@ def processar_ofx(file_bytes, filename):
             elif "SICREDI" in fn_upper: banco = "SICREDI"
             elif "NUBANK" in fn_upper or "NU " in fn_upper: banco = "NUBANK"
             elif "INTER" in fn_upper: banco = "BANCO INTER"
+            elif "FIBRA" in fn_upper: banco = "BANCO FIBRA"
+            
             if valor_float != 0:
                 lancamentos.append({'DESCRIÇÃO': banco, 'DATA': data_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico})
     return lancamentos
@@ -187,8 +203,6 @@ def processar_planilha_universal(file_bytes, filename):
     col_hist = next((c for c in cols if any(p in str(c).lower() for p in ['lançamento', 'lancamento', 'históric', 'historic', 'descriç', 'descric', 'detalhe', 'memo'])), None)
     col_doc = next((c for c in cols if any(p in str(c).lower() for p in ['dcto', 'doc', 'documento', 'num', 'nr'])), None)
     col_val = next((c for c in cols if any(p in str(c).lower() for p in ['valor', 'val', 'monto', 'amount'])), None)
-    
-    # Detecção inteligente de colunas de Crédito e Débito separadas
     col_cred = next((c for c in cols if any(p in str(c).lower() for p in ['crédit', 'credit', 'entrada', 'vlr_cred'])), None)
     col_deb = next((c for c in cols if any(p in str(c).lower() for p in ['débit', 'debit', 'saída', 'saida', 'vlr_deb'])), None)
     col_tipo = next((c for c in cols if any(p in str(c).lower() for p in ['tipo', 'natureza', 'operacao', 'operaç', 'c/d'])), None)
@@ -217,15 +231,14 @@ def processar_planilha_universal(file_bytes, filename):
         
         valor_float = 0.0
         
-        # Inteligência de Tratamento de Débito e Crédito
         if col_cred or col_deb:
             v_cred = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else 0.0
             v_deb = limpar_valor_monetario(row[col_deb]) if col_deb and pd.notna(row[col_deb]) else 0.0
             
             if v_cred != 0:
-                valor_float = abs(v_cred)  # Crédito / Entrada = Positivo
+                valor_float = abs(v_cred)  
             elif v_deb != 0:
-                valor_float = -abs(v_deb) # Débito / Saída = Negativo
+                valor_float = -abs(v_deb) 
                 
         elif col_val and pd.notna(row[col_val]):
             val_base = limpar_valor_monetario(row[col_val])
@@ -237,6 +250,9 @@ def processar_planilha_universal(file_bytes, filename):
                     is_negativo = True
                 elif val_base < 0:
                     is_negativo = True
+                
+                # Inteligência Semântica
+                is_negativo = deduzir_debito_pela_palavra(hist_fmt, is_negativo)
                     
                 valor_float = -abs(val_base) if is_negativo else abs(val_base)
 
@@ -246,6 +262,7 @@ def processar_planilha_universal(file_bytes, filename):
             elif "ITAÚ" in filename.upper() or "ITAU" in filename.upper(): banco_desc = "BANCO ITAU"
             elif "SANTANDER" in filename.upper(): banco_desc = "BANCO SANTANDER"
             elif "CAIXA" in filename.upper(): banco_desc = "CAIXA ECONOMICA"
+            elif "FIBRA" in filename.upper(): banco_desc = "BANCO FIBRA"
             lancamentos.append({'DESCRIÇÃO': banco_desc, 'DATA': dt_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_fmt})
             
     return lancamentos
@@ -263,6 +280,41 @@ def extrair_periodo_extrato(caminho_pdf):
             return datetime(ano, m_num, 1), datetime(ano, m_num, calendar.monthrange(ano, m_num)[1])
     except: pass
     return None, None
+
+def processar_pdf_fibra(caminho_pdf):
+    lancamentos = []
+    try:
+        reader = PdfReader(caminho_pdf, strict=False)
+        texto = ""
+        for page in reader.pages:
+            texto += page.extract_text() + "\n"
+        
+        texto = texto.replace('\x00', 'ti')
+        blocks = re.split(r'\n(?=\d{2}/\d{2}/\d{4}\s+\d{5,})', texto)
+        
+        for block in blocks[1:]:
+            block = re.split(r'\nSALDO', block)[0]
+            match_date = re.match(r'^(\d{2}/\d{2}/\d{4})', block)
+            if not match_date: continue
+            data = match_date.group(1)
+            
+            vals = re.findall(r'R\$\s*([\d\.]+,\d{2})', block)
+            if not vals: continue
+            val_str = vals[-1] 
+            
+            hist = block[10:].replace(f'R$ {val_str}', '').strip()
+            hist = re.sub(r'\s+', ' ', hist)
+            
+            v = limpar_valor_monetario(val_str)
+            
+            is_debito = deduzir_debito_pela_palavra(hist, False)
+            if is_debito:
+                v = -abs(v)
+                
+            hist = limpar_caracteres_ilegais(hist)
+            lancamentos.append({'DESCRIÇÃO': 'BANCO FIBRA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
+    except: pass
+    return lancamentos
 
 def processar_pdf_santander(caminho_pdf):
     lancamentos = []
@@ -294,7 +346,15 @@ def processar_pdf_santander(caminho_pdf):
                         if 'SALDO' not in hist.upper():
                             try:
                                 v = limpar_valor_monetario(val_str)
-                                lancamentos.append({'DESCRIÇÃO': 'BANCO SANTANDER', 'DATA': dt_str, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
+                                
+                                is_negativo = '-' in val_str
+                                is_negativo = deduzir_debito_pela_palavra(hist, is_negativo)
+                                v = -abs(v) if is_negativo else abs(v)
+                                
+                                b_nome = "BANCO SANTANDER"
+                                if "FIBRA" in hist.upper(): b_nome = "BANCO FIBRA"
+                                    
+                                lancamentos.append({'DESCRIÇÃO': b_nome, 'DATA': dt_str, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
                             except: pass
                 i += 1
     except: pass
@@ -350,6 +410,10 @@ def processar_pdf_bradesco(caminho_pdf):
                     if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
                         try:
                             v = limpar_valor_monetario(val_str)
+                            is_negativo = '-' in val_str
+                            is_negativo = deduzir_debito_pela_palavra(historico_completo, is_negativo)
+                            v = -abs(v) if is_negativo else abs(v)
+                            
                             lancamentos.append({'DESCRIÇÃO': 'BANCO BRADESCO', 'DATA': current_date, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico_completo})
                         except: pass
                 else:
@@ -386,9 +450,12 @@ def processar_pdf_generico_universal(caminho_pdf):
                     val_limpo = val_str.upper().replace('C', '').replace('D', '').strip()
                     try:
                         v = limpar_valor_monetario(val_limpo)
+                        hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
+                        
+                        is_debito = deduzir_debito_pela_palavra(hist, is_debito)
+                        
                         if v != 0:
                             if is_debito: v = -abs(v)
-                            hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
                             if len(hist) < 2 or 'SALDO' in hist.upper(): continue
                             lancamentos.append({
                                 'DESCRIÇÃO': f"EXTRATO {os.path.splitext(os.path.basename(caminho_pdf))[0].upper()}",
@@ -406,15 +473,23 @@ def processar_arquivo_pdf(caminho_pdf):
     nome_arquivo = os.path.basename(caminho_pdf).upper()
     try:
         reader = PdfReader(caminho_pdf, strict=False)
-        texto_inicio = reader.pages[0].extract_text().upper() if reader.pages else ""
+        texto_inicio = "\n".join([p.extract_text() for p in reader.pages[:2]]).upper()
     except: texto_inicio = ""
-    if "CAIXA" in nome_arquivo or "CAIXA" in texto_inicio: return processar_pdf_caixa(caminho_pdf)
+    
+    if "CAIXA" in nome_arquivo or "CAIXA ECONOMICA" in texto_inicio: return processar_pdf_caixa(caminho_pdf)
     elif "BRADESCO" in nome_arquivo or "BRADESCO" in texto_inicio or "NET EMPRESA" in texto_inicio: return processar_pdf_bradesco(caminho_pdf)
+    elif "58.616.418" in texto_inicio or "FIBRA" in nome_arquivo: return processar_pdf_fibra(caminho_pdf)
     elif "SANTANDER" in nome_arquivo or "SANTANDER" in texto_inicio: return processar_pdf_santander(caminho_pdf)
     else:
-        res = processar_pdf_santander(caminho_pdf)
+        res = processar_pdf_fibra(caminho_pdf)
+        if not res: res = processar_pdf_santander(caminho_pdf)
         if not res: res = processar_pdf_bradesco(caminho_pdf)
         if not res: res = processar_pdf_generico_universal(caminho_pdf)
+        
+        if res:
+            for l in res:
+                if l['DESCRIÇÃO'] in ['BANCO SANTANDER', 'BANCO FIBRA', 'BANCO BRADESCO']:
+                    l['DESCRIÇÃO'] = f"EXTRATO {os.path.splitext(os.path.basename(caminho_pdf))[0].upper()}"
         return res
 
 def gerar_txt_dominio(df):
@@ -532,7 +607,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.6 · Dark Minimal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.7 · AI Powered</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -563,7 +638,7 @@ if st.session_state['pagina_ativa'] == 'home':
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">🔍</p>
                 <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p>
-                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Compare entradas e saídas do extrato x razão da Domínio com filtro de período.</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Compare entradas e saídas do extrato x razão com filtro de período e IA semântica.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
@@ -771,7 +846,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
             pass
 
 # ==============================================================================
-# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (COM FILTRO DE PERÍODO)
+# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (COM FILTRO DE PERÍODO E IA SEMÂNTICA)
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
     col_voltar, col_tit = st.columns([1.2, 8.8])
