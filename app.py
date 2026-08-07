@@ -242,26 +242,57 @@ def processar_pdf_bradesco(caminho_pdf):
     return lancamentos
 
 def processar_pdf_generico_universal(caminho_pdf):
+    """MOTOR GENÉRICO ULTRA-FLEXÍVEL: Lê qualquer layout desconhecido capturando datas e valores em bloco"""
     lancamentos = []
     try:
         reader = PdfReader(caminho_pdf, strict=False)
+        data_atual = None
+        
         for pagina in reader.pages:
             texto = pagina.extract_text()
             if not texto: continue
+            
             for linha in texto.split('\n'):
                 linha = linha.strip()
-                if not linha or any(s in linha.upper() for s in ['SALDO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL']): continue
+                if not linha or any(s in linha.upper() for s in ['SALDO ANTERIOR', 'SALDO ATUAL', 'SALDO BLOQUEADO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL', 'PAGINA']): 
+                    continue
+                
+                # Procura por data na linha (formato completo ou parcial tipo dd/mm)
                 match_data = re.search(r'(\d{2}/\d{2}(?:/\d{4})?)', linha)
-                matches_vals = re.findall(r'(-?\d{1,3}(?:\.\d{3})*,\d{2})', linha)
-                if match_data and matches_vals:
-                    dt = match_data.group(1)
-                    if len(dt) == 5: dt = f"{dt}/{datetime.now().year}"
-                    val_str = matches_vals[-1]
-                    hist = linha.replace(dt, '').replace(val_str, '').strip()
+                if match_data:
+                    dt_encontrada = match_data.group(1)
+                    if len(dt_encontrada) == 5: 
+                        dt_encontrada = f"{dt_encontrada}/{datetime.now().year}"
+                    data_atual = dt_encontrada
+                
+                # Procura por valores monetários na linha
+                matches_vals = re.findall(r'(-?\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]?)', linha, re.IGNORECASE)
+                
+                if matches_vals and data_atual:
+                    val_str = matches_vals[-1].strip()
+                    # Identifica se é Débito ou Crédito indicados por C/D
+                    is_debito = False
+                    if val_str.upper().endswith('D') or '-' in val_str:
+                        is_debito = True
+                    
+                    val_limpo = val_str.upper().replace('C', '').replace('D', '').strip()
                     try:
-                        v = limpar_valor_monetario(val_str)
-                        if v != 0 and len(hist) > 2:
-                            lancamentos.append({'DESCRIÇÃO': 'BANCO EXTRATO', 'DATA': dt, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
+                        v = limpar_valor_monetario(val_limpo)
+                        if v != 0:
+                            if is_debito: v = -abs(v)
+                            
+                            # Limpa o histórico removendo a data e o valor capturados
+                            hist = linha.replace(data_atual, '').replace(val_str, '').strip()
+                            if len(hist) < 2: hist = "TRANSACAO BANCARIA"
+                            
+                            lancamentos.append({
+                                'DESCRIÇÃO': f"EXTRATO {os.path.splitext(os.path.basename(caminho_pdf))[0].upper()}",
+                                'DATA': data_atual,
+                                'VALOR': v,
+                                'DÉBITO': '',
+                                'CRÉDITO': '',
+                                'HISTÓRICO': hist
+                            })
                     except: pass
     except: pass
     return lancamentos
@@ -272,12 +303,16 @@ def processar_arquivo_pdf(caminho_pdf):
         reader = PdfReader(caminho_pdf, strict=False)
         texto_inicio = reader.pages[0].extract_text().upper() if reader.pages else ""
     except: texto_inicio = ""
+    
     if "CAIXA" in nome_arquivo or "CAIXA" in texto_inicio: return processar_pdf_caixa(caminho_pdf)
     elif "BRADESCO" in nome_arquivo or "BRADESCO" in texto_inicio or "NET EMPRESA" in texto_inicio: return processar_pdf_bradesco(caminho_pdf)
     elif "SANTANDER" in nome_arquivo or "SANTANDER" in texto_inicio: return processar_pdf_santander(caminho_pdf)
     else:
+        # Tenta os leitores específicos e se falhar, recorre ao novo motor ultra-genérico
         res = processar_pdf_santander(caminho_pdf)
-        return res if res else processar_pdf_generico_universal(caminho_pdf)
+        if not res: res = processar_pdf_bradesco(caminho_pdf)
+        if not res: res = processar_pdf_generico_universal(caminho_pdf)
+        return res
 
 def gerar_txt_dominio(df):
     linhas_txt = []
@@ -320,7 +355,6 @@ if arquivos:
                 df_bruto = df_bruto.dropna(subset=['DATA_DT'])
                 dt_min_dataset, dt_max_dataset = df_bruto['DATA_DT'].min().date(), df_bruto['DATA_DT'].max().date()
                 
-                # Tratamento seguro dos limites de datas para o st.date_input
                 if data_ini_doc and data_ini_doc.date():
                     val_ini_def = max(min(data_ini_doc.date(), dt_max_dataset), dt_min_dataset)
                 else:
