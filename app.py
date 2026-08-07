@@ -9,38 +9,57 @@ from datetime import datetime
 from pypdf import PdfReader
 
 # Configuração da página Web
-st.set_page_config(page_title="Importador Domínio Pro", page_icon="🤖", layout="wide")
+st.set_page_config(
+    page_title="Importador Domínio Pro", 
+    page_icon="🤖", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS CUSTOMIZADA PARA CARDS MENORES E MAIS LIMPOS
+# ESTILIZAÇÃO CSS CUSTOMIZADA (MODERNA E MINIMALISTA)
 # ==============================================================================
 st.markdown("""
     <style>
-        /* Ajuste do padding principal e fundo */
         .block-container {
             padding-top: 2rem;
             padding-bottom: 2rem;
         }
-        /* Estilo moderno para os cards de métricas menores */
+        /* Estilo dos Cards de Métricas */
         .metric-card {
-            background-color: #1e1e2f;
-            border: 1px solid #2d2d44;
-            padding: 12px 16px;
-            border-radius: 8px;
+            background-color: #1a1a2e;
+            border: 1px solid #2e2e48;
+            padding: 14px;
+            border-radius: 10px;
             text-align: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
         }
         .metric-title {
-            font-size: 12px;
-            color: #a0a0ab;
+            font-size: 11px;
+            color: #94a3b8;
             text-transform: uppercase;
-            font-weight: 600;
-            margin-bottom: 4px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
         }
         .metric-value {
             font-size: 18px;
-            color: #ffffff;
-            font-weight: 700;
+            color: #f8fafc;
+            font-weight: 800;
+        }
+        /* Estilização da Sidebar */
+        section[data-testid="stSidebar"] {
+            background-color: #0f172a;
+            border-right: 1px solid #1e293b;
+        }
+        .sidebar-box {
+            background-color: #1e293b;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 15px;
+            border-left: 4px solid #3b82f6;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -343,28 +362,44 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 # ==============================================================================
-# INTERFACE GRÁFICA DO SISTEMA
+# INTERFACE GRÁFICA: BARRA LATERAL REFINADA
 # ==============================================================================
-st.sidebar.title("⚡ Painel de Controle")
+st.sidebar.markdown("### 🤖 Importador Pro")
+st.sidebar.markdown("<p style='font-size: 13px; color: #94a3b8;'>Conciliação Bancária Automatizada para Domínio Systems.</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📤 Upload de Arquivos")
-arquivos = st.sidebar.file_uploader("Arraste os extratos bancários (PDF, OFX, CSV, Excel)", type=["pdf", "ofx", "csv", "xlsx", "xls"], accept_multiple_files=True)
 
-st.title("🤖 Importador Inteligente Domínio")
-st.caption("Ambiente de conciliação bancária universal")
+st.sidebar.markdown("#### 📂 Envio de Arquivos")
+st.sidebar.markdown("<div class='sidebar-box'><b>Dica:</b> Você pode selecionar e enviar vários arquivos bancários de uma só vez.</div>", unsafe_allow_html=True)
+
+arquivos = st.sidebar.file_uploader(
+    "Arraste os extratos aqui", 
+    type=["pdf", "ofx", "csv", "xlsx", "xls"], 
+    accept_multiple_files=True,
+    label_visibility="collapsed"
+)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 3.2 · Universal Engine</p>", unsafe_allow_html=True)
+
+# ==============================================================================
+# TELA PRINCIPAL
+# ==============================================================================
+st.title("⚡ Painel de Conciliação")
+st.caption("Converta extratos em layouts compatíveis para importação na Domínio de forma rápida e segura.")
 
 if arquivos:
-    st.sidebar.success(f"{len(arquivos)} arquivo(s) carregado(s).")
     colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
     df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
     if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
     
-    abas = st.tabs([arq.name for arq in arquivos])
+    nomes_abas = [arq.name for arq in arquivos]
+    abas = st.tabs(nomes_abas)
+    
     for idx_arq, arquivo in enumerate(arquivos):
         with abas[idx_arq]:
-            st.markdown(f"### 📑 Extrato: `{arquivo.name}`")
             file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
             lancamentos, data_ini_doc, data_fim_doc = [], None, None
+            
             if extensao == '.ofx': lancamentos = processar_ofx(file_bytes, arquivo.name)
             elif extensao in ['.csv', '.xlsx', '.xls']: lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
             elif extensao == '.pdf':
@@ -393,34 +428,34 @@ if arquivos:
                 if val_ini_def > val_fim_def:
                     val_ini_def, val_fim_def = dt_min_dataset, dt_max_dataset
                 
-                col_f1, col_f2 = st.columns(2)
-                with col_f1: data_sel_ini = st.date_input("📅 Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
-                with col_f2: data_sel_fim = st.date_input("📅 Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
-                
+                # Container elegante para filtros e buscas
+                with st.container():
+                    col_f1, col_f2, col_f3 = st.columns([1, 1, 1.5])
+                    with col_f1: data_sel_ini = st.date_input("📅 Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
+                    with col_f2: data_sel_fim = st.date_input("📅 Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
+                    with col_f3:
+                        st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
+                        termo_busca = st.text_input("🔍 Busca rápida no histórico", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
+
                 df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
-                with st.expander("🔍 Busca rápida por palavra-chave no histórico"):
-                    termo_busca = st.text_input("Filtrar termo:", key=f"busca_{idx_arq}", label_visibility="collapsed")
-                    if termo_busca: df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
+                if termo_busca:
+                    df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
                 
                 df_final = df_final.drop(columns=['DATA_DT'])[df_modelo.columns]
                 total_creditos, total_debitos = df_final[df_final['VALOR'] > 0]['VALOR'].sum(), df_final[df_final['VALOR'] < 0]['VALOR'].sum()
                 saldo_liquido = total_creditos + total_debitos
                 
-                st.markdown("---")
+                st.markdown("<br>", unsafe_allow_html=True)
                 
-                # ==============================================================
-                # NOVO LAYOUT DE CARDS MENORES E COMPACTOS
-                # ==============================================================
+                # Cards de Métricas Compactos e Modernos
                 c1, c2, c3, c4 = st.columns(4)
-                
                 with c1:
                     st.markdown(f"""
                         <div class="metric-card">
-                            <div class="metric-title">Qtd. Registros</div>
+                            <div class="metric-title">Registros</div>
                             <div class="metric-value">{len(df_final)}</div>
                         </div>
                     """, unsafe_allow_html=True)
-                
                 with c2:
                     val_cred_fmt = f"R$ {total_creditos:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
                     st.markdown(f"""
@@ -429,7 +464,6 @@ if arquivos:
                             <div class="metric-value" style="color: #4ade80;">{val_cred_fmt}</div>
                         </div>
                     """, unsafe_allow_html=True)
-                
                 with c3:
                     val_deb_fmt = f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
                     st.markdown(f"""
@@ -438,7 +472,6 @@ if arquivos:
                             <div class="metric-value" style="color: #f87171;">{val_deb_fmt}</div>
                         </div>
                     """, unsafe_allow_html=True)
-                
                 with c4:
                     val_liq_fmt = f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
                     color_liq = "#4ade80" if saldo_liquido >= 0 else "#f87171"
@@ -451,15 +484,16 @@ if arquivos:
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("##### 📋 Prévia dos Lançamentos")
-                st.dataframe(df_final, use_container_width=True, height=330)
+                st.dataframe(df_final, use_container_width=True, height=310)
                 
-                st.markdown("##### 📥 Exportar para a Domínio")
+                st.markdown("##### 📥 Exportar Arquivos")
                 c_dl1, c_dl2 = st.columns(2)
                 buffer_excel = io.BytesIO()
                 with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer: df_final.to_excel(writer, index=False)
-                c_dl1.download_button("📊 Baixar Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
-                c_dl2.download_button("🚀 Baixar TXT da Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
+                c_dl1.download_button("📊 Baixar em Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
+                c_dl2.download_button("🚀 Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
             else:
-                st.warning("Não foi possível extrair lançamentos válidos deste arquivo.")
+                st.warning("⚠️ Não foi possível extrair lançamentos válidos deste arquivo. Verifique se o formato é suportado.")
 else:
-    st.info("👈 Utilize a **Barra Lateral à esquerda** para enviar os seus arquivos de extrato.")
+    # Tela de Boas-vindas Limpa
+    st.info("👈 Comece enviando um ou mais arquivos de extrato bancário na **Barra Lateral** à esquerda para visualizar a conciliação.")
