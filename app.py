@@ -390,7 +390,6 @@ if arquivos:
     df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
     if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
     
-    # Processa todos os arquivos primeiro para alimentar o sistema
     dados_por_arquivo = {}
     todos_lancamentos_brutos = []
     
@@ -418,7 +417,6 @@ if arquivos:
             todos_lancamentos_brutos.extend(lancamentos)
 
     if todos_lancamentos_brutos:
-        # Monta as abas (se houver mais de 1 arquivo, cria a aba Consolidada primeiro)
         if len(arquivos) > 1:
             nomes_abas = ["🌐 Visão Consolidada (Geral)"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
         else:
@@ -469,15 +467,6 @@ if arquivos:
                     st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido Geral</div><div class="metric-value" style="color: {color_g};">R$ {saldo_liq_g:,.2f}</div></div>'.replace(',', 'X').replace('.', ',').replace('X', '.'), unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Gráfico Visual de Movimentação por Data (Opção 4)
-                if not df_geral_final.empty:
-                    st.markdown("##### 📈 Fluxo de Caixa Consolidado (Entradas vs Saídas por Data)")
-                    df_grafico = df_geral_final.copy()
-                    df_grafico['DATA'] = pd.to_datetime(df_grafico['DATA'], format='%d/%m/%Y')
-                    df_grafico_grouped = df_grafico.groupby('DATA')['VALOR'].sum()
-                    st.bar_chart(df_grafico_grouped)
-
                 st.markdown("##### 📋 Prévia Consolidada")
                 st.dataframe(df_geral_final, use_container_width=True, height=280)
                 
@@ -553,14 +542,6 @@ if arquivos:
                     st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{val_liq_fmt}</div></div>', unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Gráfico Individual por Arquivo (Opção 4)
-                if not df_final.empty:
-                    st.markdown("##### 📈 Gráfico de Movimentações Diárias")
-                    df_graf_ind = df_final.copy()
-                    df_graf_ind['DATA'] = pd.to_datetime(df_graf_ind['DATA'], format='%d/%m/%Y')
-                    st.bar_chart(df_graf_ind.groupby('DATA')['VALOR'].sum())
-
                 st.markdown("##### 📋 Prévia dos Lançamentos")
                 st.dataframe(df_final, use_container_width=True, height=280)
                 
@@ -573,4 +554,4 @@ if arquivos:
     else:
         st.warning("⚠️ Não foi possível extrair lançamentos válidos de nenhum dos arquivos enviados.")
 else:
-    st.info("👈 Comece enviando um ou mais arquivos de extrato bancário na **Barra Lateral** à esquerda para visualizar a conciliação e os gráficos.")
+    st.info("👈 Comece enviando um ou mais arquivos de extrato bancário na **Barra Lateral** à esquerda para visualizar a conciliação.")
