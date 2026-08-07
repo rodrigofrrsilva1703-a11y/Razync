@@ -401,20 +401,24 @@ def gerar_txt_dominio(df):
 
 
 # ==============================================================================
-# 6. INTERFACE GRÁFICA DO SISTEMA (STREAMLIT) - LAYOUT EM ABAS
+# 6. INTERFACE GRÁFICA DO SISTEMA (OPÇÃO 1: BARRA LATERAL)
 # ==============================================================================
 
-st.title("🤖 Sistema de Análise e Importação Inteligente - Domínio")
-st.caption("Suporte Universal: PDF, OFX, CSV e Excel com visualização em Abas Paralelas")
+st.sidebar.title("🤖 Painel de Controle")
+st.sidebar.markdown("---")
+st.sidebar.subheader("📤 Envio de Arquivos")
 
-arquivos = st.file_uploader(
-    "Arraste seus extratos bancários aqui (PDF, OFX, CSV, XLSX, XLS)",
+arquivos = st.sidebar.file_uploader(
+    "Arraste os extratos aqui (PDF, OFX, CSV, XLSX, XLS)",
     type=["pdf", "ofx", "csv", "xlsx", "xls"],
     accept_multiple_files=True
 )
 
+st.title("🤖 Sistema de Análise e Importação Inteligente - Domínio")
+st.caption("Suporte Universal com Barra Lateral, Filtros Avançados e Status Dinâmico de Caixa")
+
 if arquivos:
-    st.success(f"{len(arquivos)} arquivo(s) anexado(s) com sucesso.")
+    st.sidebar.success(f"{len(arquivos)} arquivo(s) carregado(s).")
     
     colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
     if os.path.exists("Modelo dominio.xlsx"):
@@ -427,13 +431,12 @@ if arquivos:
     else:
         df_modelo = pd.DataFrame(columns=colunas_dominio)
 
-    # Cria uma aba (tab) para cada arquivo enviado
     nomes_abas = [arq.name for arq in arquivos]
     abas = st.tabs(nomes_abas)
 
     for idx_arq, arquivo in enumerate(arquivos):
         with abas[idx_arq]:
-            st.markdown(f"### 📄 Extrato: `{arquivo.name}`")
+            st.markdown(f"### 📄 Extrato Ativo: `{arquivo.name}`")
             
             file_bytes = arquivo.getvalue()
             extensao = os.path.splitext(arquivo.name)[1].lower()
@@ -471,7 +474,7 @@ if arquivos:
                 val_ini_def = data_ini_doc.date() if data_ini_doc else dt_min_dataset
                 val_fim_def = data_fim_doc.date() if data_fim_doc else dt_max_dataset
 
-                # SELETOR INTERATIVO DE PERÍODO DENTRO DA ABA
+                # SELETOR DE PERÍODO
                 st.markdown("#### 📅 Período de Análise")
                 col_d1, col_d2 = st.columns(2)
                 
@@ -494,15 +497,24 @@ if arquivos:
                 )
 
                 df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
+
+                # ==============================================================================
+                # OPÇÃO 2: FILTROS AVANÇADOS DE BUSCA (PALAVRA-CHAVE NO HISTÓRICO)
+                # ==============================================================================
+                with st.expander("🔍 Filtros e Buscas Avançadas (Opcional)"):
+                    termo_busca = st.text_input(f"Filtrar por palavra-chave no histórico ({arquivo.name}):", key=f"busca_{idx_arq}")
+                    if termo_busca:
+                        df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
+
                 df_final = df_final.drop(columns=['DATA_DT'])
                 df_final = df_final[df_modelo.columns]
                 
-                st.success(f"**Lançamentos no Período:** {len(df_final)} registros encontrados.")
+                st.success(f"**Lançamentos Filtrados:** {len(df_final)} registros encontrados.")
 
                 # ==============================================================================
-                # PAINEL COMPARATIVO LADO A LADO
+                # PAINEL LADO A LADO + OPÇÃO 3: ALERTAS VISUAIS DE STATUS DE CAIXA
                 # ==============================================================================
-                st.markdown("#### 📊 Painel Comparativo de Movimentação")
+                st.markdown("#### 📊 Painel Comparativo e Status de Caixa")
                 
                 total_creditos = df_final[df_final['VALOR'] > 0]['VALOR'].sum()
                 total_debitos = df_final[df_final['VALOR'] < 0]['VALOR'].sum()
@@ -514,7 +526,15 @@ if arquivos:
                 m3.metric("🔴 Saídas (Débitos)", f"R$ {abs(total_debitos):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
                 m4.metric("⚖️ Variação Líquida", f"R$ {saldo_liquido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
 
-                # Pré-visualização da tabela
+                # Alerta visual de status de caixa baseado no saldo líquido
+                if saldo_liquido > 0:
+                    st.success(f"🟢 **Status de Caixa Saudável:** O período encerrou com saldo positivo de **R$ {saldo_liquido:,.2f}**.".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                elif saldo_liquido < 0:
+                    st.warning(f"⚠️ **Atenção ao Caixa:** O período encerrou com saldo negativo (déficit) de **R$ {abs(saldo_liquido):,.2f}**.".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                else:
+                    st.info("ℹ️ **Status Neutro:** As entradas e saídas estão equilibradas no período.")
+
+                # Tabela de Pré-visualização
                 st.dataframe(df_final.head(15), use_container_width=True)
 
                 # Botões de Download
@@ -542,3 +562,5 @@ if arquivos:
                 )
             else:
                 st.warning("Não foi possível extrair lançamentos válidos deste arquivo.")
+else:
+    st.info("👈 Comece enviando um ou mais arquivos de extrato na **Barra Lateral à esquerda** para iniciar a análise.")
