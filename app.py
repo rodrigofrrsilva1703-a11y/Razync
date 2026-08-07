@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS CUSTOMIZADA
+# ESTILIZAÇÃO CSS AVANÇADA (LAYOUT MODERNO E CLEAN)
 # ==============================================================================
 st.markdown("""
     <style>
@@ -25,13 +25,18 @@ st.markdown("""
             padding-top: 2rem;
             padding-bottom: 2rem;
         }
+        /* Cards de Métricas Premium */
         .metric-card {
-            background-color: #1a1a2e;
-            border: 1px solid #2e2e48;
-            padding: 14px;
-            border-radius: 10px;
+            background: linear-gradient(135deg, #1e1e2f 0%, #151522 100%);
+            border: 1px solid #2d2d44;
+            padding: 16px;
+            border-radius: 12px;
             text-align: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s ease;
+        }
+        .metric-card:hover {
+            border-color: #3b82f6;
         }
         .metric-title {
             font-size: 11px;
@@ -39,33 +44,42 @@ st.markdown("""
             text-transform: uppercase;
             font-weight: 700;
             margin-bottom: 6px;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
         }
         .metric-value {
-            font-size: 18px;
+            font-size: 20px;
             color: #f8fafc;
             font-weight: 800;
         }
+        /* Barra Lateral Moderna */
         section[data-testid="stSidebar"] {
-            background-color: #0f172a;
+            background-color: #0b0f19;
             border-right: 1px solid #1e293b;
         }
         .sidebar-box {
-            background-color: #1e293b;
-            padding: 12px;
-            border-radius: 8px;
+            background-color: #111827;
+            padding: 14px;
+            border-radius: 10px;
             font-size: 13px;
-            color: #cbd5e1;
+            color: #9ca3af;
             margin-bottom: 15px;
             border-left: 4px solid #3b82f6;
+            border: 1px solid #1f2937;
         }
+        /* Cards de Ferramentas (Home) */
         .tool-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            padding: 20px;
-            border-radius: 12px;
+            background: linear-gradient(145deg, #111827, #0f172a);
+            border: 1px solid #1f2937;
+            padding: 24px;
+            border-radius: 14px;
             text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+            height: 100%;
+        }
+        .tool-card:hover {
+            border-color: #3b82f6;
+            transform: translateY(-3px);
         }
     </style>
 """, unsafe_allow_html=True)
@@ -368,7 +382,7 @@ def gerar_txt_dominio(df):
     return "".join(linhas_txt)
 
 # ==============================================================================
-# CONTROLE DE ESTADO DE NAVEGAÇÃO (PÁGINAS / FERRAMENTAS)
+# CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
 if 'pagina_ativa' not in st.session_state:
     st.session_state['pagina_ativa'] = 'home'
@@ -383,26 +397,22 @@ st.sidebar.markdown("### 🤖 Hub Contábil Pro")
 st.sidebar.markdown("<p style='font-size: 13px; color: #94a3b8;'>Automações para Domínio Systems.</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
-if st.sidebar.button("🏠 Início / Menu Principal", use_container_width=True):
+if st.sidebar.button("🏠 Menu Principal", use_container_width=True):
     mudar_pagina('home')
 
-st.sidebar.markdown("#### 🛠️ Ferramentas Disponíveis")
+st.sidebar.markdown("#### 🛠️ Ferramentas")
 if st.sidebar.button("📊 Conversor de Extratos", use_container_width=True):
     mudar_pagina('extratos')
 
-# Futuras ferramentas podem ser adicionadas aqui facilmente:
-# if st.sidebar.button("📁 Outra Ferramenta", use_container_width=True):
-#     mudar_pagina('outra_ferramenta')
-
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 4.0 · Multi-Tools</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 11px; color: #64748b; text-align: center;'>Versão 4.1 · Multi-Tools</p>", unsafe_allow_html=True)
 
 # ==============================================================================
-# TELA 1: MENU PRINCIPAL (HOME) COM BOTÕES DE ACESSO
+# TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
     st.title("⚡ Bem-vindo ao Hub de Automação")
-    st.caption("Selecione abaixo a ferramenta que deseja utilizar para otimizar suas rotinas contábeis.")
+    st.caption("Selecione abaixo a ferramenta desejada para agilizar suas rotinas contábeis.")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -411,43 +421,43 @@ if st.session_state['pagina_ativa'] == 'home':
     with col_t1:
         st.markdown("""
             <div class="tool-card">
-                <h3>📊</h3>
-                <h4>Conversor de Extratos</h4>
-                <p style="font-size: 13px; color: #94a3b8;">Converta PDFs, OFX e Planilhas no layout exato para importação na Domínio.</p>
+                <h2 style="margin: 0 0 10px 0;">📊</h2>
+                <h4 style="color: #f8fafc; margin-bottom: 8px;">Conversor de Extratos</h4>
+                <p style="font-size: 13px; color: #94a3b8; line-height: 1.4;">Converta PDFs, OFX e Planilhas no layout exato para importação na Domínio.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        if st.button("Abrir Extratos", use_container_width=True, key="btn_abrir_extratos"):
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        if st.button("Acessar Ferramenta", use_container_width=True, key="btn_abrir_extratos"):
             mudar_pagina('extratos')
             st.rerun()
             
     with col_t2:
         st.markdown("""
             <div class="tool-card">
-                <h3>📁</h3>
-                <h4>Em Breve</h4>
-                <p style="font-size: 13px; color: #94a3b8;">Novas ferramentas contábeis serão adicionadas em breve neste painel.</p>
+                <h2 style="margin: 0 0 10px 0;">📁</h2>
+                <h4 style="color: #f8fafc; margin-bottom: 8px;">Em Breve</h4>
+                <p style="font-size: 13px; color: #94a3b8; line-height: 1.4;">Novas automações fiscais e contábeis serão integradas em breve.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_1")
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        st.button("Brevemente", use_container_width=True, disabled=True, key="btn_futuro_1")
         
     with col_t3:
         st.markdown("""
             <div class="tool-card">
-                <h3>⚙️</h3>
-                <h4>Em Breve</h4>
-                <p style="font-size: 13px; color: #94a3b8;">Mais utilitários para agilizar sua conciliação e conferência fiscal.</p>
+                <h2 style="margin: 0 0 10px 0;">⚙️</h2>
+                <h4 style="color: #f8fafc; margin-bottom: 8px;">Em Breve</h4>
+                <p style="font-size: 13px; color: #94a3b8; line-height: 1.4;">Utilitários adicionais para validação de dados e relatórios.</p>
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_2")
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        st.button("Brevemente", use_container_width=True, disabled=True, key="btn_futuro_2")
 
 # ==============================================================================
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'extratos':
-    col_voltar, col_tit = st.columns([1, 6])
+    col_voltar, col_tit = st.columns([1, 8])
     with col_voltar:
         if st.button("⬅️ Voltar", use_container_width=True):
             mudar_pagina('home')
@@ -458,8 +468,6 @@ elif st.session_state['pagina_ativa'] == 'extratos':
     st.caption("Faça o upload dos seus arquivos para gerar os relatórios e layouts compatíveis com a Domínio.")
     st.markdown("---")
 
-    # Upload específico para esta ferramenta na barra lateral ou na tela
-    st.markdown("#### 📂 Envio de Arquivos para Análise")
     arquivos = st.file_uploader(
         "Arraste ou selecione os extratos bancários (PDF, OFX, CSV, Excel)", 
         type=["pdf", "ofx", "csv", "xlsx", "xls"], 
@@ -467,7 +475,6 @@ elif st.session_state['pagina_ativa'] == 'extratos':
     )
 
     if arquivos:
-        st.success(f"{len(arquivos)} arquivo(s) carregado(s) com sucesso!")
         colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
         df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
         if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
@@ -630,6 +637,5 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                     c_dl1.download_button("📊 Baixar em Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
                     c_dl2.download_button("🚀 Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
         else:
-            st.warning("⚠️ Não foi possível extrair lançamentos válidos de nenhum dos arquivos enviados.")
-    else:
-        st.info("👈 Envie seus arquivos de extrato acima para iniciar a análise e conversão.")
+        # Removido warning se nenhum arquivo foi processado para evitar flash na tela inicial
+            pass
