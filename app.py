@@ -192,6 +192,7 @@ def processar_planilha_universal(file_bytes, filename):
         
         valor_float = 0.0
         
+        # Leitura Extrato (Banco: Crédito é Entrada +, Débito é Saída -)
         if col_cred or col_deb:
             v_cred = abs(limpar_valor_monetario(row[col_cred])) if col_cred and pd.notna(row[col_cred]) else 0.0
             v_deb = abs(limpar_valor_monetario(row[col_deb])) if col_deb and pd.notna(row[col_deb]) else 0.0
@@ -199,13 +200,11 @@ def processar_planilha_universal(file_bytes, filename):
             elif v_deb != 0: valor_float = -v_deb 
         elif col_val and pd.notna(row[col_val]):
             valor_float = limpar_valor_monetario(row[col_val])
-            # Força o tipo se houver coluna, ignorando a IA semântica
             tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
             if tipo_str:
                 if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEB' in tipo_str: valor_float = -abs(valor_float)
                 elif 'C' in tipo_str or 'ENTRADA' in tipo_str or 'CRED' in tipo_str: valor_float = abs(valor_float)
             else:
-                # Aplica IA apenas se o valor veio sem sinal na coluna Valor e sem coluna Tipo
                 if valor_float > 0 and deduzir_debito_pela_palavra(hist_fmt, False):
                     valor_float = -abs(valor_float)
 
@@ -236,7 +235,6 @@ def processar_pdf_fibra(caminho_pdf):
             if not match_date: continue
             data = match_date.group(1)
             
-            # Ajuste Fino: Captura valores monetários com possível sinal ao redor
             vals = re.findall(r'(?:R\$)?\s*(-?\s*[\d\.]+\,\d{2}\s*[-DC]?)', block, re.IGNORECASE)
             if not vals: continue
             val_str = vals[-1] 
@@ -245,7 +243,6 @@ def processar_pdf_fibra(caminho_pdf):
             hist = re.sub(r'\s+', ' ', hist)
             
             v = limpar_valor_monetario(val_str)
-            # IA Semântica atua APENAS se o valor veio positivo e sem letra indicadora de sinal original
             if v > 0 and '-' not in val_str and 'D' not in val_str.upper():
                 if deduzir_debito_pela_palavra(hist, False): v = -abs(v)
                 
@@ -476,9 +473,12 @@ def processar_razao_dominio(file_bytes, filename):
         
         v_ent, v_sai = 0.0, 0.0
         
+        # LÓGICA "AO CONTRÁRIO" PARA A CONTABILIDADE (RAZÃO)
+        # Na Contabilidade, a conta Banco é Ativo. 
+        # Débito = Dinheiro Entrando. Crédito = Dinheiro Saindo.
         if col_deb and col_cred:
-            v_sai = abs(limpar_valor_monetario(row[col_deb])) if pd.notna(row[col_deb]) else 0.0
-            v_ent = abs(limpar_valor_monetario(row[col_cred])) if pd.notna(row[col_cred]) else 0.0
+            v_ent = abs(limpar_valor_monetario(row[col_deb])) if pd.notna(row[col_deb]) else 0.0
+            v_sai = abs(limpar_valor_monetario(row[col_cred])) if pd.notna(row[col_cred]) else 0.0
         elif col_val and pd.notna(row[col_val]):
             val_num = limpar_valor_monetario(row[col_val])
             if val_num < 0: v_sai = abs(val_num)
@@ -511,7 +511,7 @@ if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_
 if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v7.6 · Sign Fix</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v8.0 · Smart Audit Fix</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -688,7 +688,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
             st.error(f"🛑 Ocorreu um erro na aba extratos. Detalhes: {e}")
 
 # ==============================================================================
-# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (MÓDULO BLINDADO)
+# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
     col_voltar, col_tit = st.columns([1.2, 8.8])
@@ -805,10 +805,19 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO', 'SALDO_EXTRATO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO', 'SALDO_RAZAO', 'STATUS']].copy()
                 df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)', 'Status']
                 
-                for col in ['Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)']:
-                    df_exibicao[col] = df_exibicao[col].apply(formatar_moeda)
-
-                st.dataframe(df_exibicao, use_container_width=True, height=380)
+                st.dataframe(
+                    df_exibicao, 
+                    use_container_width=True, 
+                    height=380,
+                    column_config={
+                        "Entradas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saldo Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Entradas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saídas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saldo Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f")
+                    }
+                )
 
                 # ---------------- AUDITORIA FINA (RAIO-X) ----------------
                 df_divergencias = df_conciliacao[df_conciliacao['STATUS'] == '❌ Divergente'].copy()
@@ -828,16 +837,14 @@ elif st.session_state['pagina_ativa'] == 'razao':
                         with col_aud1:
                             st.markdown("##### 🏦 Lançamentos do Extrato")
                             df_ext_dia = df_ext[df_ext['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].copy()
-                            df_ext_dia.columns = ['Histórico Bancário', 'Entrada (R$)', 'Saída (R$)']
-                            for c in ['Entrada (R$)', 'Saída (R$)']: df_ext_dia[c] = df_ext_dia[c].apply(formatar_moeda)
-                            st.dataframe(df_ext_dia, use_container_width=True, hide_index=True)
+                            df_ext_dia.columns = ['Histórico Bancário', 'Entrada', 'Saída']
+                            st.dataframe(df_ext_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
                             
                         with col_aud2:
                             st.markdown("##### 🏢 Lançamentos da Domínio")
                             df_raz_dia = df_razao_bruto[df_razao_bruto['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].copy()
-                            df_raz_dia.columns = ['Histórico Contábil', 'Entrada (R$)', 'Saída (R$)']
-                            for c in ['Entrada (R$)', 'Saída (R$)']: df_raz_dia[c] = df_raz_dia[c].apply(formatar_moeda)
-                            st.dataframe(df_raz_dia, use_container_width=True, hide_index=True)
+                            df_raz_dia.columns = ['Histórico Contábil', 'Entrada', 'Saída']
+                            st.dataframe(df_raz_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
                 else:
                     st.success("✨ Conciliação perfeita! Nenhuma divergência encontrada no período selecionado.")
 
