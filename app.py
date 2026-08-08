@@ -59,22 +59,35 @@ def sanitizar_dataframe(df):
     for col in df.select_dtypes(include=['object', 'string']).columns: df[col] = df[col].apply(limpar_caracteres_ilegais)
     return df
 
-def identificar_saida_inteligente(historico_str, valor_atual):
-    """Analisa inteligentemente se a linha representa uma saída/débito com base no histórico."""
-    if valor_atual < 0: return valor_atual
+def aplicar_regra_debito_credito(historico_str, valor_bruto, indicador_natureza=""):
+    """
+    Regra Inteligente de Débito e Crédito:
+    - Se houver indicação explícita de Débito/Saída/D/C/Crédito/Entrada, aplica.
+    - Se não houver, analisa o histórico para definir se é saída (-) ou entrada (+).
+    """
+    val = abs(float(valor_bruto))
+    ind = normalizar_texto(str(indicador_natureza))
     h_norm = normalizar_texto(historico_str)
     
-    # Termos comuns que indicam saída de recursos em extratos bancários
+    # 1. Checagem por indicador explícito (ex: coluna Tipo, C/D, etc.)
+    if any(k in ind for k in ['d', 'deb', 'saida', 'pagamento', 'debito']):
+        return -val
+    if any(k in ind for k in ['c', 'cred', 'entrada', 'credito']):
+        return val
+        
+    # 2. Checagem por palavras-chave de saída no histórico
     termos_saida = [
         'pix env', 'pix enviado', 'ted env', 'doc env', 'pagto', 'pagamento', 
         'tarifa', 'manut', 'cobranca', 'debito', 'saque', 'compra', 'cartao', 
         'transferencia env', 'transf env', 'cpfl', 'darf', 'gps', 'iss', 'imposto',
-        'aplicacao', 'aplic', 'investimento', 'estorno deb'
+        'aplicacao', 'aplic', 'investimento', 'estorno deb', 'saida', 'db'
     ]
     
     if any(termo in h_norm for termo in termos_saida):
-        return -abs(valor_atual)
-    return abs(valor_atual)
+        return -val
+        
+    # Padrão por segurança: se não for explicitamente saída, assume entrada positiva
+    return val
 
 def limpar_valor_monetario(v_val):
     if pd.isna(v_val) or v_val == '': return 0.0
@@ -209,14 +222,9 @@ def processar_planilha_universal(file_bytes, filename):
             elif v_deb != 0: 
                 valor_float = -abs(v_deb)  
         elif col_val and pd.notna(row[col_val]):
-            valor_float = limpar_valor_monetario(row[col_val])
-            tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
-            if tipo_str:
-                if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEB' in tipo_str: valor_float = -abs(valor_float)
-                elif 'C' in tipo_str or 'ENTRADA' in tipo_str or 'CRED' in tipo_str: valor_float = abs(valor_float)
-            else:
-                # Análise inteligente se não houver sinal explícito
-                valor_float = identificar_saida_inteligente(hist_fmt, valor_float)
+            val_cru = limpar_valor_monetario(row[col_val])
+            tipo_str = str(row[col_tipo]).strip() if col_tipo and pd.notna(row[col_tipo]) else ""
+            valor_float = aplicar_regra_debito_credito(hist_fmt, val_cru, tipo_str)
 
         if valor_float != 0:
             lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': dt_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_fmt})
@@ -253,7 +261,7 @@ def processar_pdf_fibra(caminho_pdf):
             hist = re.sub(r'\s+', ' ', hist)
             
             v = limpar_valor_monetario(val_str)
-            v = identificar_saida_inteligente(hist, v) # Análise inteligente por contexto
+            v = aplicar_regra_debito_credito(hist, v) # Aplicação da regra de débito e crédito
             hist = limpar_caracteres_ilegais(hist)
             lancamentos.append({'DESCRIÇÃO': 'BANCO FIBRA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
     except: pass
@@ -290,7 +298,7 @@ def processar_pdf_santander(caminho_pdf):
                         if 'SALDO' not in hist.upper():
                             try:
                                 v = limpar_valor_monetario(val_str)
-                                v = identificar_saida_inteligente(hist, v) # Análise inteligente por contexto
+                                v = aplicar_regra_debito_credito(hist, v)
                                 lancamentos.append({'DESCRIÇÃO': 'BANCO SANTANDER', 'DATA': dt_str, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
                             except: pass
                 i += 1
@@ -315,7 +323,7 @@ def processar_pdf_caixa(caminho_pdf):
                     try:
                         v = limpar_valor_monetario(val_str)
                         if tipo == 'D': v = -abs(v)
-                        else: v = identificar_saida_inteligente(historico, v)
+                        else: v = aplicar_regra_debito_credito(historico, v, tipo)
                         hist_completo = limpar_caracteres_ilegais(f"{historico.strip()} {doc.strip()}" if doc else historico.strip())
                         lancamentos.append({'DESCRIÇÃO': 'CAIXA ECONOMICA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_completo})
                     except: pass
@@ -349,7 +357,7 @@ def processar_pdf_bradesco(caminho_pdf):
                     if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
                         try:
                             v = limpar_valor_monetario(val_str)
-                            v = identificar_saida_inteligente(historico_completo, v) # Análise inteligente por contexto
+                            v = aplicar_regra_debito_credito(historico_completo, v)
                             lancamentos.append({'DESCRIÇÃO': 'BANCO BRADESCO', 'DATA': current_date, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico_completo})
                         except: pass
                 else:
@@ -383,7 +391,7 @@ def processar_pdf_generico_universal(caminho_pdf):
                     try:
                         v = limpar_valor_monetario(val_str)
                         hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
-                        v = identificar_saida_inteligente(hist, v) # Análise inteligente por contexto
+                        v = aplicar_regra_debito_credito(hist, v)
                         if v != 0:
                             if len(hist) < 2 or 'SALDO' in hist.upper(): continue
                             lancamentos.append({'DESCRIÇÃO': 'EXTRATO BANCARIO', 'DATA': data_atual, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
