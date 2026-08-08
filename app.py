@@ -37,8 +37,13 @@ st.markdown("""
         .aviso-banner { background-color: #161b22; border: 1px solid #30363d; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; }
         .aviso-banner p { margin: 0; color: #c9d1d9; font-size: 14px; }
         
-        /* Alinhamento perfeito entre date_input e text_input */
-        .stTextInput { margin-top: -2px; }
+        /* Alinhamento exato do campo de busca rápida com os inputs de data */
+        div[data-baseweb="input"] {
+            margin-top: 0px;
+        }
+        .stTextInput {
+            margin-top: -6px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -744,7 +749,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 df_razao_bruto = df_razao_bruto.dropna(subset=['DATA_DT'])
                 df_razao_agregado = df_razao_bruto.groupby('DATA_DT')[['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].sum().reset_index()
 
-                # Garante que ambas as tabelas tenham as colunas necessárias para o merge
                 for col in ['ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']:
                     if col not in df_ext_agregado.columns: df_ext_agregado[col] = 0.0
                 for col in ['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']:
