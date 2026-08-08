@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS DARK MODE MINIMALISTA E ALINHADA
+# ESTILIZAÇÃO CSS DARK MODE
 # ==============================================================================
 st.markdown("""
     <style>
@@ -40,7 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# FUNÇÕES DE LIMPEZA E LEITURA DE SINAIS (BLINDADAS)
+# FUNÇÕES DE LIMPEZA E FORMATAÇÃO (SEM IA SEMÂNTICA)
 # ==============================================================================
 def limpar_caracteres_ilegais(val):
     if isinstance(val, str): return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', val)
@@ -55,12 +55,11 @@ def sanitizar_dataframe(df):
     return df
 
 def limpar_valor_monetario(v_val):
-    """Extrai o valor numérico preservando 100% dos sinais negativos originais do arquivo"""
+    """Lê o número mecanicamente. Preserva o sinal negativo se houver '-' ou 'D'."""
     if pd.isna(v_val) or v_val == '': return 0.0
     if isinstance(v_val, (int, float)): return float(v_val)
     
     s = str(v_val).strip().upper()
-    
     is_negative = False
     if '-' in s or s.endswith('D') or s.endswith('SAÍDA') or s.endswith('SAIDA') or re.search(r'\(\s*[\d\.,]+\s*\)', s):
         is_negative = True
@@ -79,16 +78,6 @@ def limpar_valor_monetario(v_val):
         return -abs(val) if is_negative else abs(val)
     except: 
         return 0.0
-
-def deduzir_debito_pela_palavra(hist, is_negativo_atual):
-    if is_negativo_atual: return True
-    hist_upper = str(hist).upper()
-    palavras_debito = ['TARIFA', 'EMITIDO', 'PGTO', 'DEBITO', 'CHEQUE', 'SAQUE', 'PAGAMENTO', 'IMPOSTO', 'IOF', 'IRRF', 'ENVIADO', 'APLICACAO', 'APLICAÇÃO']
-    palavras_credito = ['RECEBIDO', 'ESTORNO', 'DEVOLUCAO', 'DEVOLUÇÃO', 'CREDITO', 'RESGATE', 'RENDIMENTO']
-    if any(w in hist_upper for w in palavras_debito):
-        if not any(w in hist_upper for w in palavras_credito):
-            return True
-    return False
 
 def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     combo = (str(texto_conteudo) + " " + str(filename_str)).upper()
@@ -190,7 +179,7 @@ def processar_planilha_universal(file_bytes, filename):
         
         valor_float = 0.0
         
-        # Leitura de Planilha Bancária
+        # Leitura puramente baseada nas colunas e sinais do arquivo
         if col_cred or col_deb:
             v_cred = abs(limpar_valor_monetario(row[col_cred])) if col_cred and pd.notna(row[col_cred]) else 0.0
             v_deb = abs(limpar_valor_monetario(row[col_deb])) if col_deb and pd.notna(row[col_deb]) else 0.0
@@ -202,9 +191,6 @@ def processar_planilha_universal(file_bytes, filename):
             if tipo_str:
                 if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEB' in tipo_str: valor_float = -abs(valor_float)
                 elif 'C' in tipo_str or 'ENTRADA' in tipo_str or 'CRED' in tipo_str: valor_float = abs(valor_float)
-            else:
-                if valor_float > 0 and deduzir_debito_pela_palavra(hist_fmt, False):
-                    valor_float = -abs(valor_float)
 
         if valor_float != 0:
             lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': dt_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_fmt})
@@ -233,7 +219,6 @@ def processar_pdf_fibra(caminho_pdf):
             if not match_date: continue
             data = match_date.group(1)
             
-            # REGEX CORRIGIDO: Agora captura qualquer tamanho numérico
             vals = re.findall(r'(?:R\$)?\s*(-?\s*[\d\.]+\,\d{2}\s*[-DC]?)', block, re.IGNORECASE)
             if not vals: continue
             val_str = vals[-1] 
@@ -242,9 +227,6 @@ def processar_pdf_fibra(caminho_pdf):
             hist = re.sub(r'\s+', ' ', hist)
             
             v = limpar_valor_monetario(val_str)
-            if v > 0 and '-' not in val_str and 'D' not in val_str.upper():
-                if deduzir_debito_pela_palavra(hist, False): v = -abs(v)
-                
             hist = limpar_caracteres_ilegais(hist)
             lancamentos.append({'DESCRIÇÃO': 'BANCO FIBRA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
     except: pass
@@ -267,8 +249,6 @@ def processar_pdf_santander(caminho_pdf):
                 if match:
                     dt_str, rest = match.group(1), match.group(2)
                     full_text = rest
-                    
-                    # REGEX CORRIGIDO PARA NÚMEROS MAIORES
                     vals = re.findall(r'(-?\s*[\d\.]+\,\d{2}\s*[-DC]?)', full_text, re.IGNORECASE)
                     while not vals and i + 1 < len(linhas):
                         nl = linhas[i+1]
@@ -278,15 +258,11 @@ def processar_pdf_santander(caminho_pdf):
                         if vals: break
                         
                     if vals:
-                        # TRAVA DE SALDO: Pega o penúltimo número se houver mais de um na linha
                         val_str = vals[-2] if len(vals) >= 2 else vals[0]
                         hist = limpar_caracteres_ilegais(full_text[:full_text.rfind(val_str)].strip())
-                        
                         if 'SALDO' not in hist.upper():
                             try:
                                 v = limpar_valor_monetario(val_str)
-                                if v > 0 and '-' not in val_str and 'D' not in val_str.upper():
-                                    if deduzir_debito_pela_palavra(hist, False): v = -abs(v)
                                 lancamentos.append({'DESCRIÇÃO': 'BANCO SANTANDER', 'DATA': dt_str, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
                             except: pass
                 i += 1
@@ -335,10 +311,8 @@ def processar_pdf_bradesco(caminho_pdf):
                 if match_date: current_date, linha_sem_data = match_date.group(1), linha[len(match_date.group(1)):].strip()
                 else: linha_sem_data = linha
                 
-                # REGEX CORRIGIDO
                 matches_valores = re.findall(r'(-?\s*[\d\.]+\,\d{2}\s*[-DC]?)', linha_sem_data, re.IGNORECASE)
                 if matches_valores and current_date:
-                    # TRAVA DE SALDO
                     val_str = matches_valores[-2] if len(matches_valores) >= 2 else matches_valores[0]
                     parte_desc = linha_sem_data[:linha_sem_data.rfind(val_str)].strip()
                     historico_completo = limpar_caracteres_ilegais(f"{pending_desc} {parte_desc}".strip() if pending_desc else parte_desc)
@@ -346,8 +320,6 @@ def processar_pdf_bradesco(caminho_pdf):
                     if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
                         try:
                             v = limpar_valor_monetario(val_str)
-                            if v > 0 and '-' not in val_str and 'D' not in val_str.upper():
-                                if deduzir_debito_pela_palavra(historico_completo, False): v = -abs(v)
                             lancamentos.append({'DESCRIÇÃO': 'BANCO BRADESCO', 'DATA': current_date, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico_completo})
                         except: pass
                 else:
@@ -375,16 +347,12 @@ def processar_pdf_generico_universal(caminho_pdf):
                     if len(dt_encontrada) == 5: dt_encontrada = f"{dt_encontrada}/{datetime.now().year}"
                     data_atual = dt_encontrada
                 
-                # REGEX CORRIGIDO E TRAVA DE SALDO
                 matches_vals = re.findall(r'(?:R\$)?\s*(-?\s*[\d\.]+\,\d{2}\s*[-DC]?)', linha, re.IGNORECASE)
                 if matches_vals and data_atual:
                     val_str = matches_vals[-2] if len(matches_vals) >= 2 else matches_vals[0]
-                    
                     try:
                         v = limpar_valor_monetario(val_str)
                         hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
-                        if v > 0 and '-' not in val_str and 'D' not in val_str.upper():
-                            if deduzir_debito_pela_palavra(hist, False): v = -abs(v)
                         if v != 0:
                             if len(hist) < 2 or 'SALDO' in hist.upper(): continue
                             lancamentos.append({'DESCRIÇÃO': 'EXTRATO BANCARIO', 'DATA': data_atual, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
@@ -483,7 +451,7 @@ def processar_razao_dominio(file_bytes, filename):
         
         v_ent, v_sai = 0.0, 0.0
         
-        # INVERSÃO PARA A CONCILIAÇÃO DA DOMÍNIO
+        # REMOVIDA A INVERSÃO: Débito volta a ser Saída e Crédito Entrada
         if col_deb and col_cred:
             v_sai = abs(limpar_valor_monetario(row[col_deb])) if pd.notna(row[col_deb]) else 0.0
             v_ent = abs(limpar_valor_monetario(row[col_cred])) if pd.notna(row[col_cred]) else 0.0
@@ -519,7 +487,7 @@ if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_
 if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v8.2 · Ultimate PDF Fix</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v9.0 · No-AI Fix</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -696,7 +664,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
             st.error(f"🛑 Ocorreu um erro na aba extratos. Detalhes: {e}")
 
 # ==============================================================================
-# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (MÓDULO BLINDADO)
+# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
     col_voltar, col_tit = st.columns([1.2, 8.8])
@@ -742,7 +710,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 st.stop()
 
             if lancamentos_ext and df_razao_bruto is not None and not df_razao_bruto.empty:
-                # ---------------- CONVERSÃO ABSOLUTA DE DATAS E SINAIS ----------------
                 df_ext = pd.DataFrame(lancamentos_ext)
                 df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], dayfirst=True, errors='coerce')
                 df_ext = df_ext.dropna(subset=['DATA_DT'])
@@ -813,19 +780,10 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO', 'SALDO_EXTRATO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO', 'SALDO_RAZAO', 'STATUS']].copy()
                 df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)', 'Status']
                 
-                st.dataframe(
-                    df_exibicao, 
-                    use_container_width=True, 
-                    height=380,
-                    column_config={
-                        "Entradas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saldo Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Entradas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saídas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saldo Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f")
-                    }
-                )
+                for col in ['Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)']:
+                    df_exibicao[col] = df_exibicao[col].apply(formatar_moeda)
+
+                st.dataframe(df_exibicao, use_container_width=True, height=380)
 
                 # ---------------- AUDITORIA FINA (RAIO-X) ----------------
                 df_divergencias = df_conciliacao[df_conciliacao['STATUS'] == '❌ Divergente'].copy()
