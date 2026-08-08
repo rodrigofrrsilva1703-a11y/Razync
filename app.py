@@ -5,7 +5,6 @@ import re
 import calendar
 import io
 import os
-import unicodedata
 from datetime import datetime
 from pypdf import PdfReader
 import traceback
@@ -47,10 +46,6 @@ def limpar_caracteres_ilegais(val):
     if isinstance(val, str): return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', val)
     return val
 
-def normalizar_texto(texto):
-    if not isinstance(texto, str): return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower()
-
 def formatar_moeda(valor):
     try: return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     except: return "R$ 0,00"
@@ -58,36 +53,6 @@ def formatar_moeda(valor):
 def sanitizar_dataframe(df):
     for col in df.select_dtypes(include=['object', 'string']).columns: df[col] = df[col].apply(limpar_caracteres_ilegais)
     return df
-
-def aplicar_regra_debito_credito(historico_str, valor_bruto, indicador_natureza=""):
-    """
-    Regra Inteligente de Débito e Crédito:
-    - Se houver indicação explícita de Débito/Saída/D/C/Crédito/Entrada, aplica.
-    - Se não houver, analisa o histórico para definir se é saída (-) ou entrada (+).
-    """
-    val = abs(float(valor_bruto))
-    ind = normalizar_texto(str(indicador_natureza))
-    h_norm = normalizar_texto(historico_str)
-    
-    # 1. Checagem por indicador explícito (ex: coluna Tipo, C/D, etc.)
-    if any(k in ind for k in ['d', 'deb', 'saida', 'pagamento', 'debito']):
-        return -val
-    if any(k in ind for k in ['c', 'cred', 'entrada', 'credito']):
-        return val
-        
-    # 2. Checagem por palavras-chave de saída no histórico
-    termos_saida = [
-        'pix env', 'pix enviado', 'ted env', 'doc env', 'pagto', 'pagamento', 
-        'tarifa', 'manut', 'cobranca', 'debito', 'saque', 'compra', 'cartao', 
-        'transferencia env', 'transf env', 'cpfl', 'darf', 'gps', 'iss', 'imposto',
-        'aplicacao', 'aplic', 'investimento', 'estorno deb', 'saida', 'db'
-    ]
-    
-    if any(termo in h_norm for termo in termos_saida):
-        return -val
-        
-    # Padrão por segurança: se não for explicitamente saída, assume entrada positiva
-    return val
 
 def limpar_valor_monetario(v_val):
     if pd.isna(v_val) or v_val == '': return 0.0
@@ -181,21 +146,21 @@ def processar_planilha_universal(file_bytes, filename):
     
     header_idx = None
     for idx, row in df.iterrows():
-        row_str = normalizar_texto(" ".join([str(v) for v in row.values if pd.notna(v)]))
-        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'credito' in row_str or 'debito' in row_str or 'lancamento' in row_str):
+        row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).lower()
+        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'crédito' in row_str or 'credit' in row_str or 'débito' in row_str or 'debit' in row_str or 'lançamento' in row_str):
             header_idx = idx; break
             
     if header_idx is not None and header_idx > 0:
         df.columns = [str(v).strip() for v in df.iloc[header_idx].values]
         df = df.iloc[header_idx+1:].copy()
         
-    cols_map = {c: normalizar_texto(c) for c in df.columns}
-    col_data = next((c for c, nc in cols_map.items() if any(p in nc for p in ['data', 'dt', 'date', 'dia'])), None)
-    col_hist = next((c for c, nc in cols_map.items() if any(p in nc for p in ['lancamento', 'historico', 'hist', 'descric', 'detalhe', 'memo'])), None)
-    col_val = next((c for c, nc in cols_map.items() if any(p in nc for p in ['valor', 'val', 'monto', 'amount'])), None)
-    col_cred = next((c for c, nc in cols_map.items() if any(p in nc for p in ['credito', 'credit', 'entrada', 'vlr_cred', 'crd'])), None)
-    col_deb = next((c for c, nc in cols_map.items() if any(p in nc for p in ['debito', 'debit', 'saida', 'vlr_deb', 'deb'])), None)
-    col_tipo = next((c for c, nc in cols_map.items() if any(p in nc for p in ['tipo', 'natureza', 'operacao', 'c/d'])), None)
+    cols = list(df.columns)
+    col_data = next((c for c in cols if any(p in str(c).lower() for p in ['data', 'dt', 'date', 'dia'])), None)
+    col_hist = next((c for c in cols if any(p in str(c).lower() for p in ['lançamento', 'lancamento', 'históric', 'historic', 'descriç', 'descric', 'detalhe', 'memo'])), None)
+    col_val = next((c for c in cols if any(p in str(c).lower() for p in ['valor', 'val', 'monto', 'amount'])), None)
+    col_cred = next((c for c in cols if any(p in str(c).lower() for p in ['crédit', 'credit', 'entrada', 'vlr_cred'])), None)
+    col_deb = next((c for c in cols if any(p in str(c).lower() for p in ['débit', 'debit', 'saída', 'saida', 'vlr_deb'])), None)
+    col_tipo = next((c for c in cols if any(p in str(c).lower() for p in ['tipo', 'natureza', 'operacao', 'operaç', 'c/d'])), None)
 
     if not col_data: return []
     
@@ -214,17 +179,16 @@ def processar_planilha_universal(file_bytes, filename):
         valor_float = 0.0
         
         if col_cred or col_deb:
-            v_cred = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else 0.0
-            v_deb = limpar_valor_monetario(row[col_deb]) if col_deb and pd.notna(row[col_deb]) else 0.0
-            
-            if v_cred != 0: 
-                valor_float = abs(v_cred)  
-            elif v_deb != 0: 
-                valor_float = -abs(v_deb)  
+            v_cred = abs(limpar_valor_monetario(row[col_cred])) if col_cred and pd.notna(row[col_cred]) else 0.0
+            v_deb = abs(limpar_valor_monetario(row[col_deb])) if col_deb and pd.notna(row[col_deb]) else 0.0
+            if v_cred != 0: valor_float = v_cred  
+            elif v_deb != 0: valor_float = -v_deb 
         elif col_val and pd.notna(row[col_val]):
-            val_cru = limpar_valor_monetario(row[col_val])
-            tipo_str = str(row[col_tipo]).strip() if col_tipo and pd.notna(row[col_tipo]) else ""
-            valor_float = aplicar_regra_debito_credito(hist_fmt, val_cru, tipo_str)
+            valor_float = limpar_valor_monetario(row[col_val])
+            tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
+            if tipo_str:
+                if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEB' in tipo_str: valor_float = -abs(valor_float)
+                elif 'C' in tipo_str or 'ENTRADA' in tipo_str or 'CRED' in tipo_str: valor_float = abs(valor_float)
 
         if valor_float != 0:
             lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': dt_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_fmt})
@@ -240,31 +204,61 @@ def extrair_periodo_extrato(caminho_pdf):
     return None, None
 
 def processar_pdf_fibra(caminho_pdf):
+    """Motor dedicado e específico para o extrato do Banco Fibra com separação exata de Débito e Crédito[cite: 1]."""
     lancamentos = []
     try:
         reader = PdfReader(caminho_pdf, strict=False)
         texto = ""
         for page in reader.pages: texto += page.extract_text() + "\n"
         texto = texto.replace('\x00', 'ti')
-        blocks = re.split(r'\n(?=\d{2}/\d{2}/\d{4}\s+\d{5,})', texto)
-        for block in blocks[1:]:
-            block = re.split(r'\nSALDO', block)[0]
-            match_date = re.match(r'^(\d{2}/\d{2}/\d{4})', block)
-            if not match_date: continue
-            data = match_date.group(1)
-            
-            vals = re.findall(r'(?:R\$)?\s*(-?\s*[\d\.]+\,\d{2}\s*[-DC]?)', block, re.IGNORECASE)
-            if not vals: continue
-            val_str = vals[-1] 
-            
-            hist = block[10:].replace(f'R$ {val_str}', '').strip()
-            hist = re.sub(r'\s+', ' ', hist)
-            
-            v = limpar_valor_monetario(val_str)
-            v = aplicar_regra_debito_credito(hist, v) # Aplicação da regra de débito e crédito
-            hist = limpar_caracteres_ilegais(hist)
-            lancamentos.append({'DESCRIÇÃO': 'BANCO FIBRA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
-    except: pass
+        
+        # Cada linha de lançamento começa com uma data DD/MM/YYYY
+        linhas = [l.strip() for l in texto.split('\n') if l.strip()]
+        date_regex = re.compile(r'^(\d{2}/\d{2}/\d{4})')
+        
+        i = 0
+        while i < len(linhas):
+            linha = linhas[i]
+            match_date = date_regex.match(linha)
+            if match_date:
+                data_str = match_date.group(1)
+                bloco_linhas = [linha]
+                # Coleta as linhas subsequentes até a próxima data ou cabeçalho/saldo
+                j = i + 1
+                while j < len(linhas):
+                    next_linha = linhas[j]
+                    if date_regex.match(next_linha) or 'SALDO' in next_linha.upper() or 'Página' in next_linha:
+                        break
+                    bloco_linhas.append(next_linha)
+                    j += 1
+                
+                texto_bloco = " ".join(bloco_linhas)
+                # Procura por valores monetários no bloco (formato R$ X.XXX,XX ou X.XXX,XX)
+                vals = re.findall(r'(?:R\$)?\s*([\d\.]+,\d{2})', texto_bloco)
+                
+                if vals:
+                    # Identifica se é débito ou crédito checando palavras-chave no bloco
+                    val_str = vals[-1]
+                    v_num = limpar_valor_monetario(val_str)
+                    
+                    # Se houver menção de 'Emitido' ou 'Tarifa Emissão De TED' ou 'Débito' óbvio, inverte para negativo
+                    if any(termo in texto_bloco.upper() for termo in ['TED EMITIDO', 'TARIFA', 'DEBITO', 'DÉBITO']):
+                        v_num = -abs(v_num)
+                    else:
+                        v_num = abs(v_num) # Crédito / Entrada por padrão no Fibra
+                        
+                    # Remove a data e os valores do texto para isolar o histórico
+                    hist = texto_bloco.replace(data_str, '')
+                    for v in vals:
+                        hist = hist.replace(v, '').replace('R$', '')
+                    hist = re.sub(r'\s+', ' ', hist).strip()
+                    
+                    if 'SALDO' not in hist.upper() and v_num != 0:
+                        lancamentos.append({'DESCRIÇÃO': 'BANCO FIBRA', 'DATA': data_str, 'VALOR': v_num, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': limpar_caracteres_ilegais(hist)})
+                i = j - 1
+            i += 1
+    except Exception as e:
+        print(f"Erro no processamento específico Fibra: {e}")
     return lancamentos
 
 def processar_pdf_santander(caminho_pdf):
@@ -298,7 +292,6 @@ def processar_pdf_santander(caminho_pdf):
                         if 'SALDO' not in hist.upper():
                             try:
                                 v = limpar_valor_monetario(val_str)
-                                v = aplicar_regra_debito_credito(hist, v)
                                 lancamentos.append({'DESCRIÇÃO': 'BANCO SANTANDER', 'DATA': dt_str, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
                             except: pass
                 i += 1
@@ -323,7 +316,6 @@ def processar_pdf_caixa(caminho_pdf):
                     try:
                         v = limpar_valor_monetario(val_str)
                         if tipo == 'D': v = -abs(v)
-                        else: v = aplicar_regra_debito_credito(historico, v, tipo)
                         hist_completo = limpar_caracteres_ilegais(f"{historico.strip()} {doc.strip()}" if doc else historico.strip())
                         lancamentos.append({'DESCRIÇÃO': 'CAIXA ECONOMICA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_completo})
                     except: pass
@@ -357,7 +349,6 @@ def processar_pdf_bradesco(caminho_pdf):
                     if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
                         try:
                             v = limpar_valor_monetario(val_str)
-                            v = aplicar_regra_debito_credito(historico_completo, v)
                             lancamentos.append({'DESCRIÇÃO': 'BANCO BRADESCO', 'DATA': current_date, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico_completo})
                         except: pass
                 else:
@@ -391,7 +382,6 @@ def processar_pdf_generico_universal(caminho_pdf):
                     try:
                         v = limpar_valor_monetario(val_str)
                         hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
-                        v = aplicar_regra_debito_credito(hist, v)
                         if v != 0:
                             if len(hist) < 2 or 'SALDO' in hist.upper(): continue
                             lancamentos.append({'DESCRIÇÃO': 'EXTRATO BANCARIO', 'DATA': data_atual, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
@@ -458,8 +448,8 @@ def processar_razao_dominio(file_bytes, filename):
     
     header_row_idx = 0
     for idx, row in df.iterrows():
-        row_str = normalizar_texto(" ".join([str(v) for v in row.values if pd.notna(v)]))
-        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'debito' in row_str or 'credito' in row_str):
+        row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).upper()
+        if ('DATA' in row_str or 'DT' in row_str) and ('VALOR' in row_str or 'DEBITO' in row_str or 'DÉBITO' in row_str or 'CREDITO' in row_str or 'CRÉDITO' in row_str):
             header_row_idx = idx
             break
             
@@ -470,13 +460,14 @@ def processar_razao_dominio(file_bytes, filename):
         df.columns = [str(v).strip().upper() for v in df.iloc[0].values]
         df = df.iloc[1:].copy()
         
-    cols_map_raz = {c: normalizar_texto(c) for c in df.columns}
+    df.columns = [re.sub(r'[^\w\s]', '', c) for c in df.columns]
+    cols = list(df.columns)
     
-    col_data = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['data', 'dt'])), None)
-    col_deb = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['debito', 'saida', 'deb'])), None)
-    col_cred = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['credito', 'entrada', 'cre'])), None)
-    col_val = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['valor', 'vl'])), None)
-    col_hist = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['historico', 'hist', 'complemento', 'lancamento', 'descri'])), None)
+    col_data = next((c for c in cols if any(p in c for p in ['DATA', 'DT'])), None)
+    col_deb = next((c for c in cols if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DEB'])), None)
+    col_cred = next((c for c in cols if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRE'])), None)
+    col_val = next((c for c in cols if any(p in c for p in ['VALOR', 'VL'])), None)
+    col_hist = next((c for c in cols if any(p in c for p in ['HISTORICO', 'HISTÓRICO', 'HIST', 'COMPLEMENTO', 'LANCAMENTO', 'DESCRI'])), None)
     
     if not col_data: return None
     
@@ -710,7 +701,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_razao"): mudar_pagina('home'); st.rerun()
     with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
     
-    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas do Extrato com o Razão da Domínio.")
+    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas duplas com o Razão da Domínio.")
     st.markdown("""<div class="aviso-banner"><p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p></div>""", unsafe_allow_html=True)
 
     st.markdown("##### 📁 Arquivos de Importação")
@@ -848,7 +839,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 st.download_button(
                     label="Baixar Relatório em Excel (.XLSX)", 
                     data=buf_audit.getvalue(), 
-                    file_name=f"Analise_Conciliacao_{data_ini_filtro.strftime('%d%m%Y')}_a_{data_fim_filtro.strftime('%d%m%Y')}.xlsx", 
+                    file_name=f"Analise_Conciliação_{data_ini_filtro.strftime('%d%m%Y')}_a_{data_fim_filtro.strftime('%d%m%Y')}.xlsx", 
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                     use_container_width=False
                 )
