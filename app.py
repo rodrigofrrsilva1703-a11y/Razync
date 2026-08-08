@@ -331,6 +331,8 @@ def processar_pdf_layout_universal(reader, banco_identificado):
 
     def linha_auxiliar_valida(linha):
         norm = normalizar_texto(linha)
+        if re.match(r'^\s*\d+\s*/\s*\d+\s*$', linha):
+            return False
         bloqueios = [
             'extrato mensal', 'nome do usuario', 'data da operacao', 'folha ',
             'pagina ', 'sujeito a alteracoes', 'fim de relatorio', 'cnpj:',
@@ -354,7 +356,9 @@ def processar_pdf_layout_universal(reader, banco_identificado):
             # tabela de lançamentos futuros existente no mesmo PDF.
             if lancamentos and (
                 'lancamentos futuros do periodo' in norm or
-                norm.startswith('aviso: os saldos acima')
+                norm.startswith('aviso: os saldos acima') or
+                (norm.startswith('saldo de ') and not date_regex.search(linha)) or
+                norm.startswith('posicao em:')
             ):
                 parar_processamento = True
                 break
