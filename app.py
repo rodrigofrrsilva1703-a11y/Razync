@@ -744,7 +744,13 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 df_razao_bruto = df_razao_bruto.dropna(subset=['DATA_DT'])
                 df_razao_agregado = df_razao_bruto.groupby('DATA_DT')[['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].sum().reset_index()
 
-                df_conciliacao = pd.merge(df_ext_agregado, df_razao_agregado, on='DATA_DT', how='outer').fillna(0)
+                # Garante que ambas as tabelas tenham as colunas necessárias para o merge
+                for col in ['ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']:
+                    if col not in df_ext_agregado.columns: df_ext_agregado[col] = 0.0
+                for col in ['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']:
+                    if col not in df_razao_agregado.columns: df_razao_agregado[col] = 0.0
+
+                df_conciliacao = pd.merge(df_ext_agregado, df_razao_agregado, on='DATA_DT', how='outer').fillna(0.0)
                 df_conciliacao = df_conciliacao.sort_values('DATA_DT')
                 df_conciliacao['DATA_EXIBICAO'] = df_conciliacao['DATA_DT'].dt.strftime('%d/%m/%Y')
 
