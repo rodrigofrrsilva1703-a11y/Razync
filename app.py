@@ -86,6 +86,17 @@ st.markdown("""
         .tool-card:hover {
             border-color: #8b949e;
         }
+        
+        /* Estilização para o Alerta de Arquivo da Domínio */
+        .alerta-dominio {
+            background-color: #3d1c1c;
+            border-left: 5px solid #f85149;
+            padding: 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
+        .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -114,9 +125,7 @@ def limpar_valor_monetario(v_val):
     except: return 0.0
 
 def identificar_banco_inteligente(texto_conteudo, filename_str=""):
-    """Identifica o banco de forma inteligente analisando o conteúdo e o nome do arquivo"""
     combo = (str(texto_conteudo) + " " + str(filename_str)).upper()
-    
     if "FIBRA" in combo or "58.616.418" in combo: return "BANCO FIBRA"
     elif "BRADESCO" in combo: return "BANCO BRADESCO"
     elif "ITAÚ" in combo or "ITAU" in combo: return "BANCO ITAU"
@@ -132,7 +141,7 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
 def deduzir_debito_pela_palavra(hist, is_negativo_atual):
     if is_negativo_atual: return True
     hist_upper = str(hist).upper()
-    palavras_debito = ['TARIFA', 'EMITIDO', 'PGTO', 'DEBITO', 'CHEQUE', 'SAQUE', 'RESGATE', 'PAGamento', 'IMPOSTO', 'IOF', 'IRRF', 'PIX ENVIADO', 'TED ENVIADA', 'DOC ENVIADO']
+    palavras_debito = ['TARIFA', 'EMITIDO', 'PGTO', 'DEBITO', 'CHEQUE', 'SAQUE', 'RESGATE', 'PAGAMENTO', 'IMPOSTO', 'IOF', 'IRRF', 'PIX ENVIADO', 'TED ENVIADA', 'DOC ENVIADO']
     palavras_credito = ['RECEBIDO', 'ESTORNO', 'DEVOLUCAO', 'DEVOLUÇÃO', 'CREDITO']
     if any(w in hist_upper for w in palavras_debito):
         if not any(w in hist_upper for w in palavras_credito):
@@ -150,17 +159,19 @@ def processar_ofx(file_bytes, filename):
     if not texto: texto = file_bytes.decode('latin1', errors='ignore')
     
     banco_detectado = identificar_banco_inteligente(texto, filename)
-    
     raw_blocks = re.split(r'<STMTTRN>', texto, flags=re.IGNORECASE)
+    
     for block in raw_blocks[1:]:
         block_clean = re.split(r'</STMTTRN>|</BANKTRANLIST>', block, flags=re.IGNORECASE)[0]
         match_date = re.search(r'<DTPOSTED>\s*(\d{4}[-/\.]?\d{2}[-/\.]?\d{2}|\d{8})', block_clean, re.IGNORECASE)
         match_amt = re.search(r'<TRNAMT>\s*([\+\-]?[\d\.\,]+)', block_clean, re.IGNORECASE)
         match_memo = re.search(r'<(?:MEMO|NAME|PAYEE)>\s*(.*?)(?:\r|\n|<|$)', block_clean, re.IGNORECASE)
+        
         if match_date and match_amt:
             dt_s = match_date.group(1).replace('-', '').replace('/', '').replace('.', '')
             if len(dt_s) >= 8: data_fmt = f"{dt_s[6:8]}/{dt_s[4:6]}/{dt_s[:4]}"
             else: continue
+            
             valor_float = limpar_valor_monetario(match_amt.group(1).replace('+', '').strip())
             historico = limpar_caracteres_ilegais(match_memo.group(1).strip().replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')) if match_memo else "TRANSACAO OFX"
             if 'SALDO' in historico.upper(): continue
@@ -172,6 +183,7 @@ def processar_ofx(file_bytes, filename):
 def processar_planilha_universal(file_bytes, filename):
     lancamentos, df = [], None
     ext = os.path.splitext(filename)[1].lower()
+    
     if ext in ['.xlsx', '.xls']:
         try: df = pd.read_excel(io.BytesIO(file_bytes), dtype=str)
         except Exception:
@@ -179,6 +191,7 @@ def processar_planilha_universal(file_bytes, filename):
                 dfs = pd.read_html(io.BytesIO(file_bytes))
                 if dfs: df = dfs[0]
             except Exception: pass
+            
     if df is None:
         for enc in ['utf-8', 'latin1', 'cp1252', 'iso-8859-1', 'utf-16']:
             for sep in [';', ',', '\t', '|']:
@@ -187,6 +200,7 @@ def processar_planilha_universal(file_bytes, filename):
                     if df_temp.shape[1] > 1: df = df_temp; break
                 except Exception: pass
             if df is not None: break
+            
     if df is None or df.empty: return []
     
     texto_amostra = " ".join([str(v) for row in df.head(5).values for v in row if pd.notna(v)])
@@ -282,8 +296,7 @@ def processar_pdf_fibra(caminho_pdf):
     try:
         reader = PdfReader(caminho_pdf, strict=False)
         texto = ""
-        for page in reader.pages:
-            texto += page.extract_text() + "\n"
+        for page in reader.pages: texto += page.extract_text() + "\n"
         
         texto = texto.replace('\x00', 'ti')
         blocks = re.split(r'\n(?=\d{2}/\d{2}/\d{4}\s+\d{5,})', texto)
@@ -458,7 +471,7 @@ def processar_pdf_generico_universal(caminho_pdf):
 def processar_arquivo_pdf(caminho_pdf):
     try:
         reader = PdfReader(caminho_pdf, strict=False)
-        texto_completo = "\n".join([p.extract_text() for p in reader.pages[:3]])
+        texto_completo = "\n".join([p.extract_text() for p in reader.pages[:2]]).upper()
     except: 
         texto_completo = ""
         
@@ -501,10 +514,15 @@ def processar_razao_dominio(file_bytes, filename):
         elif ext == '.xls':
             try:
                 df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None, engine='xlrd')
-            except Exception:
+            except Exception as e:
+                # DETECÇÃO DA TRAVA BINÁRIA DA DOMÍNIO
+                if "Expected BOF record" in str(e) or "corrupt" in str(e).lower():
+                    st.session_state['erro_bof_xls'] = True
+                    return None
                 try:
                     df = pd.read_html(io.BytesIO(file_bytes), header=None)[0].astype(str)
                 except Exception:
+                    st.session_state['erro_bof_xls'] = True
                     return None
         else:
             for enc in ['utf-8', 'latin1', 'cp1252']:
@@ -598,7 +616,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v5.8 · Smart Bank AI</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v6.0 · AI Powered</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -629,7 +647,7 @@ if st.session_state['pagina_ativa'] == 'home':
             <div class="tool-card">
                 <p style="font-size: 20px; margin-bottom: 8px;">🔍</p>
                 <p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p>
-                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Compare entradas e saídas do extrato x razão com reconhecimento de banco por IA.</p>
+                <p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Análise automatizada para auditar saldos no sistema Domínio.</p>
             </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
@@ -858,6 +876,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
         arq_extrato = st.file_uploader("Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
     with col_up2:
         st.markdown("##### 2. Razão da Domínio")
+        st.caption("⚠️ **Dica:** Para evitar erros de leitura, abra o relatório `.xls` da Domínio no Excel e salve-o como **CSV (separado por vírgulas)** antes de importar.")
         arq_razao = st.file_uploader("Envie o Razão exportado (XLSX, XLS ou CSV)", type=["csv", "xlsx", "xls"], key="up_razao")
 
     if arq_extrato and arq_razao:
@@ -872,7 +891,23 @@ elif st.session_state['pagina_ativa'] == 'razao':
             if os.path.exists(tmp_ext): os.remove(tmp_ext)
             
         raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
+        
+        if 'erro_bof_xls' in st.session_state:
+            del st.session_state['erro_bof_xls']
+            
         df_razao_agregado = processar_razao_dominio(raz_bytes, raz_name)
+
+        if st.session_state.get('erro_bof_xls', False):
+            st.markdown("""
+            <div class="alerta-dominio">
+                <h4>🚨 Formato .XLS da Domínio Detectado!</h4>
+                <p>O sistema Domínio exporta relatórios em <code>.xls</code> usando um formato binário antigo da Microsoft que oculta os valores originais, impossibilitando a leitura perfeita pelo robô.</p>
+                <p style="margin-top: 10px;"><strong>💡 Como resolver agora:</strong><br>
+                1. Abra esse arquivo <code>.xls</code> no seu Excel e clique em <b>Salvar Como -> Pasta de Trabalho do Excel (.xlsx)</b> ou <b>CSV (separado por vírgulas)</b>.<br>
+                2. Ou exporte o Razão diretamente da Domínio escolhendo a opção <b>Salvar como CSV</b>.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            st.stop()
 
         if lancamentos_ext and df_razao_agregado is not None and not df_razao_agregado.empty:
             df_ext = pd.DataFrame(lancamentos_ext)
@@ -952,6 +987,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
             st.dataframe(df_exibicao, use_container_width=True, height=380)
             
         else:
-            st.warning("⚠️ Não foi possível ler o Razão enviado ou mapear as colunas corretamente.")
+            st.warning("⚠️ Ocorreu um problema ao mapear os dados. Certifique-se de que os arquivos possuem as colunas corretas (Data, Valores/Débito/Crédito).")
     else:
         st.info("💡 Envie ambos os arquivos (Extrato Bancário e Razão da Domínio) acima para iniciar a análise diária de entradas e saídas.")
