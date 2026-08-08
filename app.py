@@ -804,9 +804,8 @@ def processar_nova_geracao_itau(file_bytes):
     )
 
 def gerar_excel_nova_geracao_itau(df_principal, df_retirados, modelo_bytes=None):
-    """Gera o Modelo Domínio com uma aba separada para os itens retirados."""
+    """Gera o Modelo Domínio sem alterar o layout simples exigido na importação."""
     from openpyxl import Workbook, load_workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
 
     if modelo_bytes:
         wb = load_workbook(io.BytesIO(modelo_bytes))
@@ -823,8 +822,20 @@ def gerar_excel_nova_geracao_itau(df_principal, df_retirados, modelo_bytes=None)
     for col, cabecalho in enumerate(cabecalhos, 1):
         ws.cell(1, col, cabecalho)
 
+    def preparar_linha_modelo(registro, colunas):
+        linha = []
+        for coluna in colunas:
+            valor = registro.get(coluna, '')
+            if coluna == 'DATA':
+                data = pd.to_datetime(valor, errors='coerce')
+                valor = data.strftime('%d/%m/%Y') if not pd.isna(data) else ''
+            elif pd.isna(valor):
+                valor = ''
+            linha.append(valor)
+        return linha
+
     for registro in df_principal.to_dict('records'):
-        ws.append([registro[c] for c in cabecalhos])
+        ws.append(preparar_linha_modelo(registro, cabecalhos))
 
     if 'Lançamentos retirados' in wb.sheetnames:
         del wb['Lançamentos retirados']
@@ -832,25 +843,7 @@ def gerar_excel_nova_geracao_itau(df_principal, df_retirados, modelo_bytes=None)
     cabecalhos_ret = cabecalhos + ['MOTIVO']
     ws_ret.append(cabecalhos_ret)
     for registro in df_retirados.to_dict('records'):
-        ws_ret.append([registro.get(c, '') for c in cabecalhos_ret])
-
-    for planilha in [ws, ws_ret]:
-        for cell in planilha[1]:
-            cell.font = Font(bold=True, color='FFFFFF')
-            cell.fill = PatternFill('solid', fgColor='1F4E78')
-            cell.alignment = Alignment(horizontal='center')
-        planilha.freeze_panes = 'A2'
-        planilha.auto_filter.ref = planilha.dimensions
-        planilha.column_dimensions['A'].width = 20
-        planilha.column_dimensions['B'].width = 13
-        planilha.column_dimensions['C'].width = 16
-        planilha.column_dimensions['D'].width = 12
-        planilha.column_dimensions['E'].width = 12
-        planilha.column_dimensions['F'].width = 80
-        if planilha == ws_ret: planilha.column_dimensions['G'].width = 32
-        for row in range(2, planilha.max_row + 1):
-            planilha.cell(row, 2).number_format = 'dd/mm/yyyy'
-            planilha.cell(row, 3).number_format = '#,##0.00;[Red]-#,##0.00'
+        ws_ret.append(preparar_linha_modelo(registro, cabecalhos_ret))
 
     saida = io.BytesIO()
     wb.save(saida)
@@ -874,7 +867,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.0 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.1 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1104,7 +1097,15 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         if arquivo_empresa:
             try:
                 df_org, df_retirados = processar_nova_geracao_itau(arquivo_empresa.getvalue())
-                arquivo_final = gerar_excel_nova_geracao_itau(df_org, df_retirados)
+                modelo_org_bytes = None
+                for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
+                    if os.path.exists(caminho_modelo):
+                        with open(caminho_modelo, 'rb') as arquivo_modelo:
+                            modelo_org_bytes = arquivo_modelo.read()
+                        break
+                arquivo_final = gerar_excel_nova_geracao_itau(
+                    df_org, df_retirados, modelo_org_bytes
+                )
 
                 total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
                 total_saidas = df_org.loc[df_org['VALOR'] < 0, 'VALOR'].sum()
