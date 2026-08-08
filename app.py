@@ -37,8 +37,8 @@ st.markdown("""
         .aviso-banner { background-color: #161b22; border: 1px solid #30363d; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; }
         .aviso-banner p { margin: 0; color: #c9d1d9; font-size: 14px; }
         
-        /* Ajuste fino para alinhar o input de texto com o date_input */
-        div[data-testid="column"] div.stTextInput { margin-top: 0px; }
+        /* Alinhamento perfeito entre date_input e text_input */
+        .stTextInput { margin-top: -2px; }
     </style>
 """, unsafe_allow_html=True)
 
