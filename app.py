@@ -273,115 +273,210 @@ def extrair_periodo_extrato(caminho_pdf):
     except: pass
     return None, None
 
-def processar_pdf_banco_fibra(reader, banco_identificado):
+def processar_pdf_layout_universal(reader, banco_identificado):
     """
-    Processa o modelo de extrato do Banco Fibra preservando as colunas.
+    Analisa tabelas bancárias pela estrutura do próprio PDF, sem regras por banco.
 
-    Nesse PDF os valores não possuem sinal. A natureza do lançamento é dada
-    pela posição visual: coluna Débito = negativo e coluna Crédito = positivo.
-    O modo ``layout`` do pypdf mantém essa posição sem adicionar dependências.
+    O motor combina: cabeçalhos detectados, posição das colunas, última data
+    válida, sinais C/D, semântica do histórico e variação matemática do saldo.
     """
     lancamentos = []
-    linhas_layout = []
-    pos_debito = None
+    tabela_ativa = False
+    encontrou_cabecalho = False
+    data_atual = None
+    saldo_anterior = None
     pos_credito = None
+    pos_debito = None
+    pos_valor = None
+    pos_saldo = None
+    historico_pendente = ""
 
+    date_regex = re.compile(r'(?<!\d)(\d{2}/\d{2}/\d{4})(?!\d)')
+    valor_regex = re.compile(
+        r'(?<!\d)(?:R\$\s*)?(\(?\s*[+-]?\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*\)?\s*[CD]?)(?!\d)',
+        re.IGNORECASE
+    )
+
+    def limpar_historico_linha(linha, data_linha=None):
+        hist = linha
+        if data_linha:
+            hist = hist.replace(data_linha, ' ', 1)
+        hist = valor_regex.sub(' ', hist).replace('R$', ' ')
+        hist = hist.replace('Emi\x00do', 'Emitido').replace('\x00', '')
+        return re.sub(r'\s+', ' ', hist).strip(' -|')
+
+    def linha_auxiliar_valida(linha):
+        norm = normalizar_texto(linha)
+        bloqueios = [
+            'extrato mensal', 'nome do usuario', 'data da operacao', 'folha ',
+            'pagina ', 'sujeito a alteracoes', 'fim de relatorio', 'cnpj:',
+            'agencia | conta', 'total disponivel', 'extrato de:', 'lancamento dcto',
+            'lembramos que', 'movimentacao de saldo', 'sua validade restrita'
+        ]
+        return bool(linha.strip()) and not any(item in norm for item in bloqueios)
+
+    parar_processamento = False
     for pagina in reader.pages:
         try:
             texto_layout = pagina.extract_text(extraction_mode="layout") or ""
         except (TypeError, ValueError):
-            # Compatibilidade com versões antigas do pypdf.
             texto_layout = pagina.extract_text() or ""
 
-        linhas_pagina = texto_layout.splitlines()
-        linhas_layout.extend(linhas_pagina)
+        linhas = texto_layout.splitlines()
+        for indice_linha, linha in enumerate(linhas):
+            norm = normalizar_texto(linha)
 
-        for linha in linhas_pagina:
-            if 'Débito' in linha and 'Crédito' in linha:
-                pos_debito = linha.find('Débito')
-                pos_credito = linha.find('Crédito')
+            # Detecta dinamicamente as colunas da tabela.
+            tem_data = re.search(r'\bdata\b', norm) is not None
+            tem_coluna_monetaria = any(k in norm for k in ['credito', 'debito', 'valor', 'saldo'])
+            if tem_data and tem_coluna_monetaria:
+                tabela_ativa = True
+                encontrou_cabecalho = True
+                if 'credito' in norm:
+                    pos_credito = normalizar_texto(linha).find('credito')
+                if 'debito' in norm:
+                    pos_debito = normalizar_texto(linha).find('debito')
+                if 'valor' in norm:
+                    pos_valor = normalizar_texto(linha).find('valor')
+                if 'saldo' in norm:
+                    pos_saldo = normalizar_texto(linha).find('saldo')
+                continue
+
+            # Finaliza a primeira tabela principal antes de resumos ou outras seções.
+            if tabela_ativa and lancamentos and re.match(r'^\s*total\b', norm):
+                parar_processamento = True
                 break
 
-    # Se o cabeçalho não foi preservado, deixa o processador universal assumir.
-    if pos_debito is None or pos_credito is None:
-        return []
+            ocorrencias = list(valor_regex.finditer(linha))
+            match_data = date_regex.search(linha)
+            datas_na_linha = date_regex.findall(linha)
 
-    limite_debito_credito = (pos_debito + pos_credito) / 2
-    date_regex = re.compile(r'^\s*(\d{2}/\d{2}/\d{4})(?:\s|$)')
-    valor_regex = re.compile(r'(?:R\$\s*)?([\d\.]+,\d{2})')
+            # PDFs sem cabeçalho ainda podem iniciar por uma linha transacional.
+            if not tabela_ativa and not encontrou_cabecalho:
+                if (match_data and len(datas_na_linha) == 1 and ocorrencias and
+                        not any(k in norm for k in ['periodo', 'saldo', 'disponivel', 'limite'])):
+                    tabela_ativa = True
+                else:
+                    continue
 
-    i = 0
-    while i < len(linhas_layout):
-        linha = linhas_layout[i]
-        match_date = date_regex.match(linha)
-        if not match_date:
-            i += 1
-            continue
+            if not tabela_ativa:
+                continue
 
-        data_str = match_date.group(1)
+            # Saldo anterior/de abertura serve para validar matematicamente o sinal.
+            if 'saldo anterior' in norm or 'saldo inicial' in norm:
+                if match_data:
+                    data_atual = match_data.group(1)
+                if ocorrencias:
+                    saldo_anterior = limpar_valor_monetario(ocorrencias[-1].group(1))
+                continue
 
-        # Ignora a linha do período, que contém duas datas e não é lançamento.
-        restante_apos_data = linha[match_date.end():]
-        if re.match(r'\s*a\s+\d{2}/\d{2}/\d{4}', restante_apos_data):
-            i += 1
-            continue
+            # Linhas isoladas de saldo não são lançamentos.
+            if ('saldo' in norm and not any(k in norm for k in ['rentab', 'rendimento'])):
+                if ocorrencias:
+                    saldo_anterior = limpar_valor_monetario(ocorrencias[-1].group(1))
+                continue
 
-        bloco_linhas = [linha]
-        j = i + 1
-        while j < len(linhas_layout):
-            proxima = linhas_layout[j]
-            if date_regex.match(proxima):
-                break
-            if any(marcador in proxima.upper() for marcador in ['SALDO', 'FIM DE RELATÓRIO']):
-                break
-            if proxima.strip():
-                bloco_linhas.append(proxima)
-            j += 1
+            # Resumos financeiros e limites não representam movimentações.
+            if any(k in norm for k in [
+                'disponivel', 'limite adicional', 'bloqueado', 'c.p.m.f',
+                'provisionado', 'lancamentos futuros', 'tarifas pendentes',
+                'previsao encargos', 'posicao em:'
+            ]):
+                continue
 
-        # O Fibra pode quebrar valores altos: "R$" fica na primeira linha e
-        # o número aparece na linha imediatamente abaixo.
-        ocorrencias = []
-        for linha_bloco in bloco_linhas:
-            for match_valor in valor_regex.finditer(linha_bloco):
-                ocorrencias.append((match_valor.group(1), match_valor.start(1), linha_bloco))
+            # Uma linha com movimento + saldo tem ao menos dois valores. Quando há
+            # apenas um, o cabeçalho/posição e o histórico definem sua natureza.
+            if not ocorrencias:
+                # Alguns PDFs quebram um valor alto: a linha da transação termina
+                # em "R$" e o número aparece sozinho na linha seguinte.
+                if match_data and len(datas_na_linha) == 1 and 'R$' in linha:
+                    data_atual = match_data.group(1)
+                    historico_pendente = limpar_historico_linha(linha, data_atual)
+                    continue
+                if lancamentos and linha_auxiliar_valida(linha):
+                    complemento = limpar_historico_linha(linha)
+                    if complemento and not date_regex.search(complemento):
+                        hist_atual = lancamentos[-1]['HISTÓRICO']
+                        lancamentos[-1]['HISTÓRICO'] = re.sub(r'\s+', ' ', f"{hist_atual} {complemento}").strip()
+                continue
 
-        if ocorrencias:
-            val_str, pos_valor, linha_valor = ocorrencias[0]
-            v_num = abs(limpar_valor_monetario(val_str))
+            if match_data:
+                data_atual = match_data.group(1)
+            if not data_atual:
+                continue
 
-            # Usa o início do marcador monetário como referência da coluna.
-            pos_rs_mesma_linha = linha_valor.find('R$')
-            if pos_rs_mesma_linha >= 0:
-                pos_valor = pos_rs_mesma_linha
+            # Valores anteriores ao último são movimento; o último é saldo quando
+            # a tabela possui coluna Saldo e há mais de um valor na linha.
+            tem_saldo_linha = pos_saldo is not None and len(ocorrencias) >= 2
+            saldo_linha = limpar_valor_monetario(ocorrencias[-1].group(1)) if tem_saldo_linha else None
+            candidatos = ocorrencias[:-1] if tem_saldo_linha else ocorrencias
+            candidatos_validos = [m for m in candidatos if limpar_valor_monetario(m.group(1)) != 0]
+            if not candidatos_validos:
+                if saldo_linha is not None:
+                    saldo_anterior = saldo_linha
+                continue
 
-            # Quando o valor foi quebrado, usa a posição do "R$" da linha
-            # anterior, que representa corretamente a coluna Débito/Crédito.
-            if 'R$' not in linha_valor:
-                for linha_anterior in bloco_linhas:
-                    pos_rs = linha_anterior.find('R$')
-                    if pos_rs >= 0:
-                        pos_valor = pos_rs
-                        break
+            mov = candidatos_validos[0]
+            token_mov = mov.group(1).strip()
+            valor_bruto = limpar_valor_monetario(token_mov)
+            valor_abs = abs(valor_bruto)
+            natureza = ''
+            if re.search(r'D\s*$', token_mov, re.IGNORECASE):
+                natureza = 'D'
+            elif re.search(r'C\s*$', token_mov, re.IGNORECASE):
+                natureza = 'C'
 
-            valor_final = -v_num if pos_valor < limite_debito_credito else v_num
+            hist_linha = limpar_historico_linha(linha, match_data.group(1) if match_data else None)
+            hist = re.sub(r'\s+', ' ', f"{historico_pendente} {hist_linha}").strip()
+            historico_pendente = ""
+            hist_norm = normalizar_texto(hist)
+            if any(k in hist_norm for k in ['saldo invest', 'saldo anterior', 'saldo final', 'saldo do dia']):
+                if saldo_linha is not None:
+                    saldo_anterior = saldo_linha
+                continue
 
-            texto_bloco = " ".join(bloco_linhas)
-            hist = texto_bloco.replace(data_str, '', 1)
-            hist = hist.replace('Emi\x00do', 'Emitido').replace('\x00', '')
-            hist = re.sub(r'R\$\s*[\d\.]*,?\d{0,2}', ' ', hist)
-            hist = re.sub(r'\s+', ' ', hist).strip()
+            # Prioridade 1: sinal explícito no próprio valor.
+            if valor_bruto < 0 or natureza == 'D':
+                valor_final = -valor_abs
+            elif natureza == 'C':
+                valor_final = valor_abs
+            else:
+                valor_final = None
 
-            if v_num != 0 and 'SALDO' not in hist.upper():
+            # Prioridade 2: diferença exata entre saldo atual e saldo anterior.
+            if valor_final is None and saldo_linha is not None and saldo_anterior is not None:
+                diferenca = round(saldo_linha - saldo_anterior, 2)
+                if abs(abs(diferenca) - valor_abs) <= 0.05:
+                    valor_final = valor_abs if diferenca > 0 else -valor_abs
+
+            # Prioridade 3: posição em colunas Débito/Crédito detectadas.
+            if valor_final is None and pos_debito is not None and pos_credito is not None:
+                pos_movimento = linha.find('R$', max(0, mov.start() - 4), mov.end())
+                if pos_movimento < 0:
+                    pos_movimento = mov.start(1)
+                dist_debito = abs(pos_movimento - pos_debito)
+                dist_credito = abs(pos_movimento - pos_credito)
+                valor_final = -valor_abs if dist_debito < dist_credito else valor_abs
+
+            # Prioridade 4: sinal semântico como último recurso.
+            if valor_final is None:
+                valor_final = interpretar_sinal_inteligente(hist, valor_bruto, natureza)
+
+            if valor_abs != 0:
                 lancamentos.append({
                     'DESCRIÇÃO': banco_identificado,
-                    'DATA': data_str,
+                    'DATA': data_atual,
                     'VALOR': valor_final,
                     'DÉBITO': '',
                     'CRÉDITO': '',
-                    'HISTÓRICO': limpar_caracteres_ilegais(hist)
+                    'HISTÓRICO': limpar_caracteres_ilegais(hist or 'MOVIMENTO BANCARIO')
                 })
 
-        i = max(j, i + 1)
+            if saldo_linha is not None:
+                saldo_anterior = saldo_linha
+
+        if parar_processamento:
+            break
 
     return lancamentos
 
@@ -438,12 +533,10 @@ def processar_arquivo_pdf(caminho_pdf):
             
         banco_identificado = identificar_banco_inteligente(texto_completo, os.path.basename(caminho_pdf))
 
-        # O Banco Fibra informa a natureza pela coluna visual, não pelo sinal.
-        # Usa um processador específico antes de recorrer ao motor universal.
-        if banco_identificado == "BANCO FIBRA":
-            lancamentos_fibra = processar_pdf_banco_fibra(reader, banco_identificado)
-            if lancamentos_fibra:
-                return lancamentos_fibra
+        # Primeiro tenta o analisador estrutural único, independente do banco.
+        lancamentos_layout = processar_pdf_layout_universal(reader, banco_identificado)
+        if lancamentos_layout:
+            return lancamentos_layout
 
         linhas = [l.strip() for l in texto_completo.split('\n') if l.strip()]
         date_regex = re.compile(r'^(\d{2}/\d{2}/\d{4})')
