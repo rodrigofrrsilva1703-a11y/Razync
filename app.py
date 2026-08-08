@@ -69,13 +69,22 @@ def interpretar_sinal_inteligente(historico_str, valor_num, explicit_nature=""):
     explícitos e análise semântica avançada do histórico.
     """
     val = abs(float(valor_num))
-    ind = normalizar_texto(str(explicit_nature))
+    ind = normalizar_texto(str(explicit_nature)).strip()
+    ind_tokens = set(re.findall(r'[a-z]+', ind))
     h_norm = normalizar_texto(historico_str)
     
     # 1. Indicador explícito de natureza (C/D, Crédito/Débito, Entrada/Saída)
-    if any(k in ind for k in ['d', 'deb', 'saida', 'pagamento', 'debito', 'pagto', 'emitido']):
+    natureza_debito = (
+        ind in {'d', 'deb', 'db', 'debito', 'saida'} or
+        bool(ind_tokens.intersection({'debito', 'saida', 'pagamento', 'pagto', 'emitido'}))
+    )
+    natureza_credito = (
+        ind in {'c', 'cred', 'cr', 'credito', 'entrada'} or
+        bool(ind_tokens.intersection({'credito', 'entrada', 'recebimento', 'recebido'}))
+    )
+    if natureza_debito:
         return -val
-    if any(k in ind for k in ['c', 'cred', 'entrada', 'credito', 'recebimento', 'recebido']):
+    if natureza_credito:
         return val
         
     # 2. Se o valor já veio negativo do arquivo original
@@ -376,6 +385,49 @@ def processar_pdf_banco_fibra(reader, banco_identificado):
 
     return lancamentos
 
+def extrair_valor_lancamento_pdf(texto_bloco):
+    """
+    Seleciona o valor da movimentação sem confundi-lo com o saldo.
+
+    Extratos normalmente exibem o valor do lançamento antes do saldo. Esta
+    função também descarta números ligados explicitamente a saldo anterior,
+    saldo atual, disponível, limite e resumos semelhantes.
+    """
+    padrao_valor = re.compile(
+        r'(?<!\d)(?:R\$\s*)?(\(?\s*[+-]?[\d\.]+,\d{2}\s*\)?\s*[CD]?)(?!\d)',
+        re.IGNORECASE
+    )
+    ocorrencias = list(padrao_valor.finditer(texto_bloco))
+    if not ocorrencias:
+        return None, ""
+
+    termos_resumo = [
+        'saldo', 'disponivel', 'limite', 'bloqueado', 'provisionado',
+        'saldo atual', 'saldo anterior', 'saldo final', 'saldo do dia'
+    ]
+    candidatos = []
+    for ocorrencia in ocorrencias:
+        contexto_antes = normalizar_texto(texto_bloco[max(0, ocorrencia.start() - 35):ocorrencia.start()])
+        if any(termo in contexto_antes for termo in termos_resumo):
+            continue
+        candidatos.append(ocorrencia)
+
+    # Se todos foram marcados como resumo, não cria um lançamento de saldo.
+    if not candidatos:
+        return None, ""
+
+    # Nos formatos Valor + Saldo, Débito + Saldo ou Crédito + Saldo, o primeiro
+    # valor monetário útil pertence ao lançamento e os seguintes são saldos.
+    escolhido = candidatos[0]
+    token = escolhido.group(1).strip()
+    natureza = ""
+    if re.search(r'D\s*$', token, re.IGNORECASE):
+        natureza = "D"
+    elif re.search(r'C\s*$', token, re.IGNORECASE):
+        natureza = "C"
+
+    return token, natureza
+
 def processar_arquivo_pdf(caminho_pdf):
     lancamentos = []
     try:
@@ -412,19 +464,20 @@ def processar_arquivo_pdf(caminho_pdf):
                     j += 1
                 
                 texto_bloco = " ".join(bloco_linhas)
-                vals = re.findall(r'(?:R\$)?\s*(-?[\d\.]+,\d{2})', texto_bloco)
-                
-                if vals:
-                    val_str = vals[-1]
+                val_str, natureza_valor = extrair_valor_lancamento_pdf(texto_bloco)
+
+                if val_str is not None:
                     v_num = limpar_valor_monetario(val_str)
-                    
-                    hist = texto_bloco.replace(data_str, '')
-                    for v in vals:
-                        hist = hist.replace(v, '').replace('R$', '')
+
+                    hist = texto_bloco.replace(data_str, '', 1)
+                    hist = re.sub(
+                        r'(?<!\d)(?:R\$\s*)?\(?\s*[+-]?[\d\.]+,\d{2}\s*\)?\s*[CD]?(?!\d)',
+                        ' ', hist, flags=re.IGNORECASE
+                    )
                     hist = re.sub(r'\s+', ' ', hist).strip()
-                    
-                    if 'SALDO' not in hist.upper() and v_num != 0:
-                        v_final = interpretar_sinal_inteligente(hist, v_num)
+
+                    if not any(termo in hist.upper() for termo in ['SALDO ANTERIOR', 'SALDO FINAL', 'SALDO DO DIA']) and v_num != 0:
+                        v_final = interpretar_sinal_inteligente(hist, v_num, natureza_valor)
                         lancamentos.append({'DESCRIÇÃO': banco_identificado, 'DATA': data_str, 'VALOR': v_final, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': limpar_caracteres_ilegais(hist)})
                 i = j - 1
             i += 1
