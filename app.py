@@ -7,6 +7,7 @@ import io
 import os
 from datetime import datetime
 from pypdf import PdfReader
+import traceback
 
 # Configuração da página Web
 st.set_page_config(
@@ -38,26 +39,34 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ==============================================================================
+# FUNÇÕES DE LIMPEZA E FORMATAÇÃO BLINDADAS
+# ==============================================================================
 def limpar_caracteres_ilegais(val):
-    if isinstance(val, str): return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', val)
+    """Remove caracteres que quebram o Excel e o Streamlit"""
+    if isinstance(val, str):
+        return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', val)
     return val
 
-def formatar_moeda(valor):
-    try: return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-    except: return "R$ 0,00"
-
 def sanitizar_dataframe(df):
-    for col in df.select_dtypes(include=['object', 'string']).columns: df[col] = df[col].apply(limpar_caracteres_ilegais)
+    for col in df.select_dtypes(include=['object', 'string']).columns:
+        df[col] = df[col].apply(limpar_caracteres_ilegais)
     return df
 
+def formata_br(val):
+    """Formata qualquer número para o padrão de moeda brasileiro com segurança"""
+    if pd.isna(val): return "R$ 0,00"
+    try:
+        return f"R$ {float(val):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except:
+        return val
+
 def limpar_valor_monetario(v_val):
-    """Extrai o valor numérico e preserva o sinal negativo se houver identificador '-' ou 'D'."""
+    """Extrai o valor numérico preservando sinais negativos pré-existentes"""
     if pd.isna(v_val) or v_val == '': return 0.0
     if isinstance(v_val, (int, float)): return float(v_val)
     
     s = str(v_val).strip()
-    
-    # Verifica o sinal ANTES de limpar as letras e caracteres
     is_negative = '-' in s or s.upper().endswith('D') or s.upper().endswith('SAÍDA') or s.upper().endswith('SAIDA')
     
     s = re.sub(r'[^\d,\.]', '', s)
@@ -76,14 +85,8 @@ def limpar_valor_monetario(v_val):
         return 0.0
 
 def determinar_valor_real(v_float, hist, tipo_str=""):
-    """
-    Motor Inteligente:
-    1º - Respeita o sinal matemático se já foi extraído como negativo.
-    2º - Respeita a coluna de 'Tipo' explícita da planilha (D/C).
-    3º - Se for neutro, usa IA Semântica nas palavras do histórico.
-    """
-    if v_float < 0:
-        return v_float
+    """Inteligência semântica: garante que o Débito fique negativo avaliando o contexto"""
+    if v_float < 0: return v_float
         
     tipo_upper = str(tipo_str).upper()
     if 'D' in tipo_upper or 'SAÍDA' in tipo_upper or 'SAIDA' in tipo_upper or 'DEBITO' in tipo_upper:
@@ -115,6 +118,9 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     elif "SICREDI" in combo: return "SICREDI"
     else: return "BANCO CONTA CORRENTE"
 
+# ==============================================================================
+# MOTORES DE EXTRAÇÃO DE PDF E PLANILHAS
+# ==============================================================================
 def processar_ofx(file_bytes, filename):
     lancamentos = []
     texto = ""
@@ -139,7 +145,7 @@ def processar_ofx(file_bytes, filename):
             if len(dt_s) >= 8: data_fmt = f"{dt_s[6:8]}/{dt_s[4:6]}/{dt_s[:4]}"
             else: continue
             
-            valor_float = limpar_valor_monetario(match_amt.group(1).strip())
+            valor_float = limpar_valor_monetario(match_amt.group(1).replace('+', '').strip())
             historico = limpar_caracteres_ilegais(match_memo.group(1).strip().replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')) if match_memo else "TRANSACAO OFX"
             if 'SALDO' in historico.upper(): continue
             if valor_float != 0: lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': data_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico})
@@ -191,16 +197,9 @@ def processar_planilha_universal(file_bytes, filename):
         dt_raw = str(row[col_data]).strip() if pd.notna(row[col_data]) else ''
         if dt_raw.upper() in ['TOTAL', 'ÚLTIMOS LANÇAMENTOS', 'ULTIMOS LANCAMENTOS', 'SALDOS INVEST FÁCIL / PLUS', 'NAN']:
             if dt_raw.upper() == 'TOTAL': break
-        match_dt = re.search(r'(\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{2})', dt_raw)
+        match_dt = re.search(r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', dt_raw)
         if not match_dt: continue
-        raw_dt = match_dt.group(1)
-        if '-' in raw_dt:
-            parts = raw_dt.split('-')
-            dt_fmt = f"{parts[2]}/{parts[1]}/{parts[0]}"
-        elif len(raw_dt.split('/')[2]) == 2:
-            parts = raw_dt.split('/')
-            dt_fmt = f"{parts[0]}/{parts[1]}/20{parts[2]}"
-        else: dt_fmt = raw_dt
+        dt_fmt = match_dt.group(1).replace('-', '/')
         
         hist_raw = limpar_caracteres_ilegais(str(row[col_hist]).strip()) if col_hist and pd.notna(row[col_hist]) else 'MOVIMENTO BANCARIO'
         doc_raw = limpar_caracteres_ilegais(str(row[col_doc]).strip()) if col_doc and pd.notna(row[col_doc]) else ''
@@ -229,11 +228,6 @@ def extrair_periodo_extrato(caminho_pdf):
         texto = "".join([p.extract_text() for p in reader.pages[:3]])
         datas = re.findall(r'(\d{2}/\d{2}/\d{4})', texto)
         if len(datas) >= 2: return datetime.strptime(datas[0], '%d/%m/%Y'), datetime.strptime(datas[1], '%d/%m/%Y')
-        match_c = re.search(r'Mês:\s*([A-Za-zç]+)/(\d{4})', texto, re.IGNORECASE)
-        if match_c:
-            meses = {'JANEIRO':1, 'FEVEREIRO':2, 'MARCO':3, 'MARÇO':3, 'ABRIL':4, 'MAIO':5, 'JUNHO':6, 'JULHO':7, 'AGOSTO':8, 'SETEMBRO':9, 'OUTUBRO':10, 'NOVEMBRO':11, 'DEZEMBRO':12}
-            m_num, ano = meses.get(match_c.group(1).upper(), datetime.now().month), int(match_c.group(2))
-            return datetime(ano, m_num, 1), datetime(ano, m_num, calendar.monthrange(ano, m_num)[1])
     except: pass
     return None, None
 
@@ -374,9 +368,9 @@ def processar_pdf_generico_universal(caminho_pdf):
                 linha = linha.strip()
                 if not linha or any(s in linha.upper() for s in ['SALDO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL', 'BLOQUEADO', 'PAGINA', 'TRANSPORTE', 'DISPONIVEL']): 
                     continue
-                match_data = re.search(r'(\d{2}/\d{2}(?:/\d{4})?)', linha)
+                match_data = re.search(r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', linha)
                 if match_data:
-                    dt_encontrada = match_data.group(1)
+                    dt_encontrada = match_data.group(1).replace('-', '/')
                     if len(dt_encontrada) == 5: dt_encontrada = f"{dt_encontrada}/{datetime.now().year}"
                     data_atual = dt_encontrada
                 matches_vals = re.findall(r'(-?\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]?)', linha, re.IGNORECASE)
@@ -386,7 +380,6 @@ def processar_pdf_generico_universal(caminho_pdf):
                         v = limpar_valor_monetario(val_str)
                         hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
                         v = determinar_valor_real(v, hist)
-                        
                         if v != 0:
                             if len(hist) < 2 or 'SALDO' in hist.upper(): continue
                             lancamentos.append({'DESCRIÇÃO': 'EXTRATO BANCARIO', 'DATA': data_atual, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
@@ -398,7 +391,8 @@ def processar_arquivo_pdf(caminho_pdf):
     try:
         reader = PdfReader(caminho_pdf, strict=False)
         texto_completo = "\n".join([p.extract_text() for p in reader.pages[:2]]).upper()
-    except: texto_completo = ""
+    except: 
+        texto_completo = ""
         
     banco_identificado = identificar_banco_inteligente(texto_completo, os.path.basename(caminho_pdf))
     
@@ -428,8 +422,7 @@ def processar_razao_dominio(file_bytes, filename):
     ext = os.path.splitext(filename)[1].lower()
     
     try:
-        if ext == '.xlsx':
-            df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None)
+        if ext == '.xlsx': df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None)
         elif ext == '.xls':
             try: df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None, engine='xlrd')
             except Exception as e:
@@ -448,8 +441,7 @@ def processar_razao_dominio(file_bytes, filename):
                         if df.shape[1] > 1: break
                     except: continue
                 if df is not None and df.shape[1] > 1: break
-    except Exception:
-        return None
+    except Exception: return None
     
     if df is None or df.empty: return None
     
@@ -481,12 +473,11 @@ def processar_razao_dominio(file_bytes, filename):
     dados = []
     for _, row in df.iterrows():
         dt_raw = str(row[col_data]).strip() if pd.notna(row[col_data]) else ''
-        match_dt = re.search(r'(\d{2}/\d{2}/\d{4})', dt_raw)
+        match_dt = re.search(r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', dt_raw)
         if not match_dt: continue
-        dt_fmt = match_dt.group(1)
+        dt_fmt = match_dt.group(1).replace('-', '/')
         
-        v_ent = 0.0
-        v_sai = 0.0
+        v_ent, v_sai = 0.0, 0.0
         
         if col_deb and col_cred:
             v_sai = abs(limpar_valor_monetario(row[col_deb])) if pd.notna(row[col_deb]) else 0.0
@@ -503,7 +494,8 @@ def processar_razao_dominio(file_bytes, filename):
             
     if not dados: return None
     df_res = pd.DataFrame(dados)
-    df_res['DATA_DT'] = pd.to_datetime(df_res['DATA'], format='%d/%m/%Y', errors='coerce')
+    # Proteção absoluta na conversão de Data
+    df_res['DATA_DT'] = pd.to_datetime(df_res['DATA'], dayfirst=True, errors='coerce')
     return df_res.dropna(subset=['DATA_DT'])
 
 # ==============================================================================
@@ -523,7 +515,7 @@ if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_
 if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v7.3 · Smart Audit Fix</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v7.4 · Bulletproof Engine</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -570,126 +562,137 @@ elif st.session_state['pagina_ativa'] == 'extratos':
     arquivos = st.file_uploader("Selecione os extratos (PDF, OFX, CSV, Excel)", type=["pdf", "ofx", "csv", "xlsx", "xls"], accept_multiple_files=True)
 
     if arquivos:
-        colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
-        df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
-        if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
-        
-        dados_por_arquivo, todos_lancamentos_brutos = {}, []
-        for arquivo in arquivos:
-            file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
-            lancamentos, data_ini_doc, data_fim_doc = [], None, None
+        try:
+            colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+            df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
+            if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
             
-            if extensao == '.ofx': lancamentos = processar_ofx(file_bytes, arquivo.name)
-            elif extensao in ['.csv', '.xlsx', '.xls']: lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
-            elif extensao == '.pdf':
-                caminho_temp = f"temp_{arquivo.name}"
-                with open(caminho_temp, "wb") as f: f.write(file_bytes)
-                data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
-                lancamentos = processar_arquivo_pdf(caminho_temp)
-                if os.path.exists(caminho_temp): os.remove(caminho_temp)
+            dados_por_arquivo, todos_lancamentos_brutos = {}, []
+            for arquivo in arquivos:
+                file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
+                lancamentos, data_ini_doc, data_fim_doc = [], None, None
                 
-            if lancamentos:
-                df_temp = pd.DataFrame(lancamentos)
-                df_temp['ARQUIVO_ORIGEM'] = arquivo.name
-                dados_por_arquivo[arquivo.name] = {'lancamentos': lancamentos, 'data_ini': data_ini_doc, 'data_fim': data_fim_doc}
-                todos_lancamentos_brutos.extend(lancamentos)
+                if extensao == '.ofx': lancamentos = processar_ofx(file_bytes, arquivo.name)
+                elif extensao in ['.csv', '.xlsx', '.xls']: lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
+                elif extensao == '.pdf':
+                    caminho_temp = f"temp_{arquivo.name}"
+                    with open(caminho_temp, "wb") as f: f.write(file_bytes)
+                    data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
+                    lancamentos = processar_arquivo_pdf(caminho_temp)
+                    if os.path.exists(caminho_temp): os.remove(caminho_temp)
+                    
+                if lancamentos:
+                    df_temp = pd.DataFrame(lancamentos)
+                    df_temp['ARQUIVO_ORIGEM'] = arquivo.name
+                    dados_por_arquivo[arquivo.name] = {'lancamentos': lancamentos, 'data_ini': data_ini_doc, 'data_fim': data_fim_doc}
+                    todos_lancamentos_brutos.extend(lancamentos)
 
-        if todos_lancamentos_brutos:
-            nomes_abas = ["Visão Consolidada"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo] if len(arquivos) > 1 else [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
-            abas = st.tabs(nomes_abas)
-            
-            if len(arquivos) > 1:
-                with abas[0]:
-                    st.markdown("### Resumo Consolidado")
-                    df_geral_bruto = pd.DataFrame(todos_lancamentos_brutos)
-                    df_geral_bruto['DATA_DT'] = pd.to_datetime(df_geral_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
-                    df_geral_bruto = df_geral_bruto.dropna(subset=['DATA_DT'])
-                    
-                    dt_min_geral, dt_max_geral = df_geral_bruto['DATA_DT'].min().date(), df_geral_bruto['DATA_DT'].max().date()
-                    col_g1, col_g2, col_g3 = st.columns([1, 1, 1.5])
-                    with col_g1: data_geral_ini = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
-                    with col_g2: data_geral_fim = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
-                    with col_g3: st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True); termo_busca_geral = st.text_input("Busca rápida", placeholder="Filtrar histórico...", key="gen_busca")
-                    
-                    df_geral_final = df_geral_bruto[(df_geral_bruto['DATA_DT'].dt.date >= data_geral_ini) & (df_geral_bruto['DATA_DT'].dt.date <= data_geral_fim)].copy()
-                    if termo_busca_geral: df_geral_final = df_geral_final[df_geral_final['HISTÓRICO'].str.contains(termo_busca_geral, case=False, na=False)]
-                    
-                    df_geral_final = df_geral_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
-                    df_geral_final = sanitizar_dataframe(df_geral_final)
-                    
-                    tot_cred_g, tot_deb_g = df_geral_final[df_geral_final['VALOR'] > 0]['VALOR'].sum(), df_geral_final[df_geral_final['VALOR'] < 0]['VALOR'].sum()
-                    saldo_liq_g = tot_cred_g + tot_deb_g
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    cg1, cg2, cg3, cg4 = st.columns(4)
-                    with cg1: st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_geral_final)}</div></div>', unsafe_allow_html=True)
-                    with cg2: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_cred_g)}</div></div>', unsafe_allow_html=True)
-                    with cg3: st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_deb_g))}</div></div>', unsafe_allow_html=True)
-                    with cg4:
-                        color_g = "#3fb950" if saldo_liq_g >= 0 else "#f85149"
-                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_g};">{formatar_moeda(saldo_liq_g)}</div></div>', unsafe_allow_html=True)
+            if todos_lancamentos_brutos:
+                nomes_abas = ["Visão Consolidada"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo] if len(arquivos) > 1 else [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
+                abas = st.tabs(nomes_abas)
+                
+                if len(arquivos) > 1:
+                    with abas[0]:
+                        st.markdown("### Resumo Consolidado")
+                        df_geral_bruto = pd.DataFrame(todos_lancamentos_brutos)
+                        df_geral_bruto['DATA_DT'] = pd.to_datetime(df_geral_bruto['DATA'], dayfirst=True, errors='coerce')
+                        df_geral_bruto = df_geral_bruto.dropna(subset=['DATA_DT'])
+                        
+                        if df_geral_bruto.empty:
+                            st.warning("Nenhum lançamento válido encontrado.")
+                        else:
+                            dt_min_geral, dt_max_geral = df_geral_bruto['DATA_DT'].min().date(), df_geral_bruto['DATA_DT'].max().date()
+                            col_g1, col_g2, col_g3 = st.columns([1, 1, 1.5])
+                            with col_g1: data_geral_ini = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
+                            with col_g2: data_geral_fim = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
+                            with col_g3: st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True); termo_busca_geral = st.text_input("Busca rápida", placeholder="Filtrar histórico...", key="gen_busca")
+                            
+                            df_geral_final = df_geral_bruto[(df_geral_bruto['DATA_DT'].dt.date >= data_geral_ini) & (df_geral_bruto['DATA_DT'].dt.date <= data_geral_fim)].copy()
+                            if termo_busca_geral: df_geral_final = df_geral_final[df_geral_final['HISTÓRICO'].str.contains(termo_busca_geral, case=False, na=False)]
+                            
+                            df_geral_final = df_geral_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
+                            df_geral_final = sanitizar_dataframe(df_geral_final)
+                            
+                            tot_cred_g, tot_deb_g = df_geral_final[df_geral_final['VALOR'] > 0]['VALOR'].sum(), df_geral_final[df_geral_final['VALOR'] < 0]['VALOR'].sum()
+                            saldo_liq_g = tot_cred_g + tot_deb_g
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            cg1, cg2, cg3, cg4 = st.columns(4)
+                            with cg1: st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_geral_final)}</div></div>', unsafe_allow_html=True)
+                            with cg2: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_cred_g)}</div></div>', unsafe_allow_html=True)
+                            with cg3: st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_deb_g))}</div></div>', unsafe_allow_html=True)
+                            with cg4:
+                                color_g = "#3fb950" if saldo_liq_g >= 0 else "#f85149"
+                                st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_g};">{formatar_moeda(saldo_liq_g)}</div></div>', unsafe_allow_html=True)
 
-                    st.markdown("<br>", unsafe_allow_html=True); st.markdown("##### Prévia Consolidada")
-                    st.dataframe(df_geral_final, use_container_width=True, height=280)
-                    
-                    st.markdown("##### Exportar")
-                    cc_dl1, cc_dl2 = st.columns(2)
-                    buf_excel_g = io.BytesIO()
-                    with pd.ExcelWriter(buf_excel_g, engine='openpyxl') as writer: df_geral_final.to_excel(writer, index=False)
-                    cc_dl1.download_button("Baixar Excel (.XLSX)", data=buf_excel_g.getvalue(), file_name=f"consolidado_geral_{data_geral_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_excel_geral", use_container_width=True)
-                    cc_dl2.download_button("Baixar TXT para Domínio", data=gerar_txt_dominio(df_geral_final), file_name=f"importacao_dominio_consolidado_{data_geral_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key="dl_txt_geral", use_container_width=True)
+                            st.markdown("<br>", unsafe_allow_html=True); st.markdown("##### Prévia Consolidada")
+                            st.dataframe(df_geral_final, use_container_width=True, height=280)
+                            
+                            st.markdown("##### Exportar")
+                            cc_dl1, cc_dl2 = st.columns(2)
+                            buf_excel_g = io.BytesIO()
+                            with pd.ExcelWriter(buf_excel_g, engine='openpyxl') as writer: df_geral_final.to_excel(writer, index=False)
+                            cc_dl1.download_button("Baixar Excel (.XLSX)", data=buf_excel_g.getvalue(), file_name=f"consolidado_geral_{data_geral_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_excel_geral", use_container_width=True)
+                            cc_dl2.download_button("Baixar TXT para Domínio", data=gerar_txt_dominio(df_geral_final), file_name=f"importacao_dominio_consolidado_{data_geral_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key="dl_txt_geral", use_container_width=True)
 
-            offset_abas = 1 if len(arquivos) > 1 else 0
-            for idx_arq, arquivo in enumerate(arquivos):
-                if arquivo.name not in dados_por_arquivo: continue
-                with abas[idx_arq + offset_abas]:
-                    info_arq = dados_por_arquivo[arquivo.name]
-                    df_bruto = pd.DataFrame(info_arq['lancamentos'])
-                    df_bruto['DATA_DT'] = pd.to_datetime(df_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
-                    df_bruto = df_bruto.dropna(subset=['DATA_DT'])
-                    dt_min_dataset, dt_max_dataset = df_bruto['DATA_DT'].min().date(), df_bruto['DATA_DT'].max().date()
-                    
-                    data_ini_doc, data_fim_doc = info_arq['data_ini'], info_arq['data_fim']
-                    val_ini_def = max(min(data_ini_doc.date(), dt_max_dataset), dt_min_dataset) if data_ini_doc and data_ini_doc.date() else dt_min_dataset
-                    val_fim_def = max(min(data_fim_doc.date(), dt_max_dataset), dt_min_dataset) if data_fim_doc and data_fim_doc.date() else dt_max_dataset
-                    if val_ini_def > val_fim_def: val_ini_def, val_fim_def = dt_min_dataset, dt_max_dataset
-                    
-                    with st.container():
-                        col_f1, col_f2, col_f3 = st.columns([1, 1, 1.5])
-                        with col_f1: data_sel_ini = st.date_input("Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
-                        with col_f2: data_sel_fim = st.date_input("Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
-                        with col_f3: st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True); termo_busca = st.text_input("Busca rápida", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
+                offset_abas = 1 if len(arquivos) > 1 else 0
+                for idx_arq, arquivo in enumerate(arquivos):
+                    if arquivo.name not in dados_por_arquivo: continue
+                    with abas[idx_arq + offset_abas]:
+                        info_arq = dados_por_arquivo[arquivo.name]
+                        df_bruto = pd.DataFrame(info_arq['lancamentos'])
+                        df_bruto['DATA_DT'] = pd.to_datetime(df_bruto['DATA'], dayfirst=True, errors='coerce')
+                        df_bruto = df_bruto.dropna(subset=['DATA_DT'])
+                        
+                        if df_bruto.empty:
+                            st.warning("Não há dados válidos neste arquivo.")
+                            continue
+                            
+                        dt_min_dataset, dt_max_dataset = df_bruto['DATA_DT'].min().date(), df_bruto['DATA_DT'].max().date()
+                        
+                        data_ini_doc, data_fim_doc = info_arq['data_ini'], info_arq['data_fim']
+                        val_ini_def = max(min(data_ini_doc.date(), dt_max_dataset), dt_min_dataset) if data_ini_doc and data_ini_doc.date() else dt_min_dataset
+                        val_fim_def = max(min(data_fim_doc.date(), dt_max_dataset), dt_min_dataset) if data_fim_doc and data_fim_doc.date() else dt_max_dataset
+                        if val_ini_def > val_fim_def: val_ini_def, val_fim_def = dt_min_dataset, dt_max_dataset
+                        
+                        with st.container():
+                            col_f1, col_f2, col_f3 = st.columns([1, 1, 1.5])
+                            with col_f1: data_sel_ini = st.date_input("Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
+                            with col_f2: data_sel_fim = st.date_input("Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
+                            with col_f3: st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True); termo_busca = st.text_input("Busca rápida", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
 
-                    df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
-                    if termo_busca: df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
-                    
-                    df_final = df_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
-                    df_final = sanitizar_dataframe(df_final)
+                        df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
+                        if termo_busca: df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
+                        
+                        df_final = df_final.drop(columns=['DATA_DT', 'ARQUIVO_ORIGEM'], errors='ignore')[df_modelo.columns]
+                        df_final = sanitizar_dataframe(df_final)
 
-                    total_creditos, total_debitos = df_final[df_final['VALOR'] > 0]['VALOR'].sum(), df_final[df_final['VALOR'] < 0]['VALOR'].sum()
-                    saldo_liquido = total_creditos + total_debitos
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1: st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_final)}</div></div>', unsafe_allow_html=True)
-                    with c2: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(total_creditos)}</div></div>', unsafe_allow_html=True)
-                    with c3: st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(total_debitos))}</div></div>', unsafe_allow_html=True)
-                    with c4:
-                        color_liq = "#3fb950" if saldo_liquido >= 0 else "#f85149"
-                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
+                        total_creditos, total_debitos = df_final[df_final['VALOR'] > 0]['VALOR'].sum(), df_final[df_final['VALOR'] < 0]['VALOR'].sum()
+                        saldo_liquido = total_creditos + total_debitos
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1: st.markdown(f'<div class="metric-card"><div class="metric-title">Registros</div><div class="metric-value">{len(df_final)}</div></div>', unsafe_allow_html=True)
+                        with c2: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(total_creditos)}</div></div>', unsafe_allow_html=True)
+                        with c3: st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(total_debitos))}</div></div>', unsafe_allow_html=True)
+                        with c4:
+                            color_liq = "#3fb950" if saldo_liquido >= 0 else "#f85149"
+                            st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
 
-                    st.markdown("<br>", unsafe_allow_html=True); st.markdown("##### Prévia dos Lançamentos")
-                    st.dataframe(df_final, use_container_width=True, height=280)
-                    
-                    st.markdown("##### Exportar")
-                    c_dl1, c_dl2 = st.columns(2)
-                    buffer_excel = io.BytesIO()
-                    with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer: df_final.to_excel(writer, index=False)
-                    c_dl1.download_button("Baixar Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
-                    c_dl2.download_button("Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
+                        st.markdown("<br>", unsafe_allow_html=True); st.markdown("##### Prévia dos Lançamentos")
+                        st.dataframe(df_final, use_container_width=True, height=280)
+                        
+                        st.markdown("##### Exportar")
+                        c_dl1, c_dl2 = st.columns(2)
+                        buffer_excel = io.BytesIO()
+                        with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer: df_final.to_excel(writer, index=False)
+                        c_dl1.download_button("Baixar Excel (.XLSX)", data=buffer_excel.getvalue(), file_name=f"lancamentos_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"excel_{idx_arq}", use_container_width=True)
+                        c_dl2.download_button("Baixar TXT para Domínio", data=gerar_txt_dominio(df_final), file_name=f"importacao_dominio_{os.path.splitext(arquivo.name)[0]}_{data_sel_ini.strftime('%d%m%Y')}.txt", mime="text/plain", key=f"txt_{idx_arq}", use_container_width=True)
+        except Exception as e:
+            st.error(f"🛑 Ocorreu um erro no módulo de extração. O arquivo pode estar corrompido ou fora do formato. Detalhes: {e}")
 
 # ==============================================================================
-# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
+# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO (MÓDULO BLINDADO)
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
     col_voltar, col_tit = st.columns([1.2, 8.8])
@@ -701,7 +704,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
     st.caption("Faça a rolagem do Saldo Acumulado, compare Entradas e Saídas e utilize a Auditoria Fina para descobrir divergências.")
     st.markdown("""<div class="aviso-banner"><p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p></div>""", unsafe_allow_html=True)
 
-    # 1. ENTRADA DOS SALDOS INICIAIS
     st.markdown("##### ⚙️ 1. Configuração de Saldos Iniciais")
     col_s1, col_s2 = st.columns(2)
     with col_s1: saldo_ini_ext = st.number_input("Saldo Inicial Extrato Bancário (R$)", value=0.0, step=100.0, format="%.2f")
@@ -721,7 +723,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
             if ext_ext == '.ofx': lancamentos_ext = processar_ofx(ext_bytes, arq_extrato.name)
             elif ext_ext in ['.csv', '.xlsx', '.xls']: lancamentos_ext = processar_planilha_universal(ext_bytes, arq_extrato.name)
             elif ext_ext == '.pdf':
-                tmp_ext = f"temp_ext_{arq_extrato.name}"
+                tmp_ext = f"temp_ext_conc_{arq_extrato.name}"
                 with open(tmp_ext, "wb") as f: f.write(ext_bytes)
                 lancamentos_ext = processar_arquivo_pdf(tmp_ext)
                 if os.path.exists(tmp_ext): os.remove(tmp_ext)
@@ -729,7 +731,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
             raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
             
             if 'erro_bof_xls' in st.session_state: del st.session_state['erro_bof_xls']
-                
             df_razao_bruto = processar_razao_dominio(raz_bytes, raz_name)
 
             if st.session_state.get('erro_bof_xls', False):
@@ -737,9 +738,9 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 st.stop()
 
             if lancamentos_ext and df_razao_bruto is not None and not df_razao_bruto.empty:
-                # ---------------- PREPARAÇÃO EXTRATO ----------------
+                # ---------------- CONVERSÃO ABSOLUTA DE DATAS E SINAIS ----------------
                 df_ext = pd.DataFrame(lancamentos_ext)
-                df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], format='%d/%m/%Y', errors='coerce')
+                df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], dayfirst=True, errors='coerce')
                 df_ext = df_ext.dropna(subset=['DATA_DT'])
                 
                 df_ext['ENTRADAS_EXTRATO'] = df_ext['VALOR'].apply(lambda x: x if x > 0 else 0.0)
@@ -747,22 +748,23 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 
                 df_ext_agregado = df_ext.groupby('DATA_DT')[['ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].sum().reset_index()
                 
-                # ---------------- PREPARAÇÃO RAZÃO ----------------
-                df_razao_bruto['DATA_DT'] = pd.to_datetime(df_razao_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
+                df_razao_bruto['DATA_DT'] = pd.to_datetime(df_razao_bruto['DATA'], dayfirst=True, errors='coerce')
                 df_razao_bruto = df_razao_bruto.dropna(subset=['DATA_DT'])
                 df_razao_agregado = df_razao_bruto.groupby('DATA_DT')[['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].sum().reset_index()
 
-                # ---------------- MESCLA SEGURA PELA DATA ----------------
                 df_conciliacao = pd.merge(df_ext_agregado, df_razao_agregado, on='DATA_DT', how='outer').fillna(0)
                 df_conciliacao = df_conciliacao.sort_values('DATA_DT')
                 df_conciliacao['DATA_EXIBICAO'] = df_conciliacao['DATA_DT'].dt.strftime('%d/%m/%Y')
+
+                if df_conciliacao.empty:
+                    st.warning("⚠️ Não conseguimos cruzar as datas. Verifique se os arquivos contêm datas válidas.")
+                    st.stop()
 
                 # ---------------- FILTRO DE PERÍODO ----------------
                 st.markdown("---")
                 st.markdown("##### 📅 3. Filtro de Período da Conciliação")
                 
                 dt_min_geral, dt_max_geral = df_conciliacao['DATA_DT'].min().date(), df_conciliacao['DATA_DT'].max().date()
-                
                 col_p1, col_p2 = st.columns(2)
                 with col_p1: data_ini_filtro = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_ini")
                 with col_p2: data_fim_filtro = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_fim")
@@ -773,7 +775,11 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
                 df_conciliacao = df_conciliacao[(df_conciliacao['DATA_DT'].dt.date >= data_ini_filtro) & (df_conciliacao['DATA_DT'].dt.date <= data_fim_filtro)].copy()
 
-                # ---------------- ROLAGEM DE SALDO ACUMULADO ----------------
+                if df_conciliacao.empty:
+                    st.info("Nenhuma movimentação no período selecionado.")
+                    st.stop()
+
+                # ---------------- ROLAGEM DE SALDO ----------------
                 df_conciliacao = df_conciliacao.sort_values('DATA_DT')
                 df_conciliacao['SALDO_EXTRATO'] = saldo_ini_ext + df_conciliacao['ENTRADAS_EXTRATO'].cumsum() - df_conciliacao['SAIDAS_EXTRATO'].cumsum()
                 df_conciliacao['SALDO_RAZAO'] = saldo_ini_raz + df_conciliacao['ENTRADAS_RAZAO'].cumsum() - df_conciliacao['SAIDAS_RAZAO'].cumsum()
@@ -782,43 +788,31 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 df_conciliacao['DIF_SAIDAS'] = df_conciliacao['SAIDAS_EXTRATO'] - df_conciliacao['SAIDAS_RAZAO']
                 df_conciliacao['DIF_SALDO'] = df_conciliacao['SALDO_EXTRATO'] - df_conciliacao['SALDO_RAZAO']
                 
-                def status_dia(row):
-                    return "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 and abs(row['DIF_SALDO']) < 0.01 else "❌ Divergente"
-                    
-                df_conciliacao['STATUS'] = df_conciliacao.apply(status_dia, axis=1)
+                df_conciliacao['STATUS'] = df_conciliacao.apply(lambda row: "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 and abs(row['DIF_SALDO']) < 0.01 else "❌ Divergente", axis=1)
                 
                 # ---------------- CARDS E TABELA PRINCIPAL ----------------
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("### 📊 Resultado da Conferência Diária")
                 
-                saldo_final_ext = df_conciliacao['SALDO_EXTRATO'].iloc[-1] if not df_conciliacao.empty else saldo_ini_ext
-                saldo_final_raz = df_conciliacao['SALDO_RAZAO'].iloc[-1] if not df_conciliacao.empty else saldo_ini_raz
+                saldo_final_ext = df_conciliacao['SALDO_EXTRATO'].iloc[-1]
+                saldo_final_raz = df_conciliacao['SALDO_RAZAO'].iloc[-1]
                 
                 rc1, rc2, rc3 = st.columns(3)
-                with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Extrato)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_ext)}</div></div>', unsafe_allow_html=True)
-                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Razão)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_raz)}</div></div>', unsafe_allow_html=True)
+                with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Extrato)</div><div class="metric-value" style="color: #f0f6fc;">{formata_br(saldo_final_ext)}</div></div>', unsafe_allow_html=True)
+                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Razão)</div><div class="metric-value" style="color: #f0f6fc;">{formata_br(saldo_final_raz)}</div></div>', unsafe_allow_html=True)
                 with rc3:
                     dif_final = saldo_final_ext - saldo_final_raz
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Diferença de Saldo Final</div><div class="metric-value" style="color: {"#3fb950" if abs(dif_final) < 0.01 else "#f85149"};">{formatar_moeda(dif_final)}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-card"><div class="metric-title">Diferença de Saldo Final</div><div class="metric-value" style="color: {"#3fb950" if abs(dif_final) < 0.01 else "#f85149"};">{formata_br(dif_final)}</div></div>', unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO', 'SALDO_EXTRATO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO', 'SALDO_RAZAO', 'STATUS']].copy()
                 df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)', 'Status']
                 
-                st.dataframe(
-                    df_exibicao, 
-                    use_container_width=True, 
-                    height=380,
-                    column_config={
-                        "Entradas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saldo Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Entradas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saídas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saldo Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f")
-                    }
-                )
+                for col in ['Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)']:
+                    df_exibicao[col] = df_exibicao[col].apply(formata_br)
+
+                st.dataframe(df_exibicao, use_container_width=True, height=380)
 
                 # ---------------- AUDITORIA FINA (RAIO-X) ----------------
                 df_divergencias = df_conciliacao[df_conciliacao['STATUS'] == '❌ Divergente'].copy()
@@ -828,8 +822,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
                     st.markdown("### 🔍 Auditoria Fina (Divergências)")
                     st.markdown("Descubra exatamente qual lançamento está faltando comparando os dias divergentes.")
                     
-                    df_divergencias['DATA_FORMATADA'] = df_divergencias['DATA_DT'].dt.strftime('%d/%m/%Y')
-                    opcoes_dias = df_divergencias['DATA_FORMATADA'].tolist()
+                    opcoes_dias = df_divergencias['DATA_EXIBICAO'].tolist()
                     
                     if opcoes_dias:
                         dia_str = st.selectbox("Selecione um dia com divergência para analisar os lançamentos originais:", opcoes_dias)
@@ -839,29 +832,31 @@ elif st.session_state['pagina_ativa'] == 'razao':
                         with col_aud1:
                             st.markdown("##### 🏦 Lançamentos do Extrato")
                             df_ext_dia = df_ext[df_ext['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].copy()
-                            df_ext_dia.columns = ['Histórico Bancário', 'Entrada', 'Saída']
-                            st.dataframe(df_ext_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
+                            df_ext_dia.columns = ['Histórico Bancário', 'Entrada (R$)', 'Saída (R$)']
+                            for c in ['Entrada (R$)', 'Saída (R$)']: df_ext_dia[c] = df_ext_dia[c].apply(formata_br)
+                            st.dataframe(df_ext_dia, use_container_width=True, hide_index=True)
                             
                         with col_aud2:
                             st.markdown("##### 🏢 Lançamentos da Domínio")
                             df_raz_dia = df_razao_bruto[df_razao_bruto['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].copy()
-                            df_raz_dia.columns = ['Histórico Contábil', 'Entrada', 'Saída']
-                            st.dataframe(df_raz_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
+                            df_raz_dia.columns = ['Histórico Contábil', 'Entrada (R$)', 'Saída (R$)']
+                            for c in ['Entrada (R$)', 'Saída (R$)']: df_raz_dia[c] = df_raz_dia[c].apply(formata_br)
+                            st.dataframe(df_raz_dia, use_container_width=True, hide_index=True)
                 else:
                     st.success("✨ Conciliação perfeita! Nenhuma divergência encontrada no período selecionado.")
 
-                # ---------------- EXPORTAÇÃO EXCEL ----------------
+                # ---------------- EXPORTAÇÃO EXCEL BLINDADA ----------------
                 st.markdown("---")
                 st.markdown("##### 📥 Exportar Relatório de Auditoria")
                 st.caption("Faça o download do cruzamento diário e da lista de dias divergentes para correção.")
                 
                 buf_audit = io.BytesIO()
                 with pd.ExcelWriter(buf_audit, engine='openpyxl') as writer:
-                    df_exibicao.to_excel(writer, sheet_name="Resumo Geral", index=False)
+                    sanitizar_dataframe(df_exibicao).to_excel(writer, sheet_name="Resumo Geral", index=False)
                     if not df_divergencias.empty:
                         df_div_export = df_divergencias[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'SALDO_EXTRATO', 'SALDO_RAZAO', 'DIF_SALDO']].copy()
                         df_div_export.columns = ['Data', 'Entradas Extrato', 'Entradas Razao', 'Diferenca Entradas', 'Saidas Extrato', 'Saidas Razao', 'Diferenca Saidas', 'Saldo Extrato', 'Saldo Razao', 'Diferenca Saldo']
-                        df_div_export.to_excel(writer, sheet_name="Dias Divergentes", index=False)
+                        sanitizar_dataframe(df_div_export).to_excel(writer, sheet_name="Dias Divergentes", index=False)
 
                 st.download_button(
                     label="Baixar Relatório em Excel (.XLSX)", 
@@ -872,6 +867,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 )
 
             else:
-                st.warning("⚠️ Não conseguimos extrair as linhas contábeis. Verifique se os arquivos contêm colunas legíveis com Data, Valor/Débito/Crédito.")
+                st.warning("⚠️ Não conseguimos extrair as linhas contábeis válidas. Verifique se os arquivos contêm Data e Valor.")
+        
         except Exception as e:
-            st.error(f"🛑 Erro de execução ao cruzar os relatórios. Dica: Tente salvar o Razão da Domínio como CSV separado por vírgulas. Detalhe do Erro: {e}")
+            st.error(f"🛑 Ocorreu um erro no cruzamento dos dados. Tire um print e envie para análise: \n{traceback.format_exc()}")
