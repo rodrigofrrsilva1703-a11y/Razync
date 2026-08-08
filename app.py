@@ -204,6 +204,10 @@ def processar_planilha_universal(file_bytes, filename):
             if tipo_str:
                 if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEB' in tipo_str: valor_float = -abs(valor_float)
                 elif 'C' in tipo_str or 'ENTRADA' in tipo_str or 'CRED' in tipo_str: valor_float = abs(valor_float)
+            else:
+                # Aplica IA apenas se o valor veio sem sinal na coluna Valor e sem coluna Tipo
+                if valor_float > 0 and deduzir_debito_pela_palavra(hist_fmt, False):
+                    valor_float = -abs(valor_float)
 
         if valor_float != 0:
             lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': dt_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_fmt})
@@ -232,7 +236,7 @@ def processar_pdf_fibra(caminho_pdf):
             if not match_date: continue
             data = match_date.group(1)
             
-            # Captura valores monetários com possível sinal ao redor
+            # Ajuste Fino: Captura valores monetários com possível sinal ao redor
             vals = re.findall(r'(?:R\$)?\s*(-?\s*[\d\.]+\,\d{2}\s*[-DC]?)', block, re.IGNORECASE)
             if not vals: continue
             val_str = vals[-1] 
@@ -241,7 +245,7 @@ def processar_pdf_fibra(caminho_pdf):
             hist = re.sub(r'\s+', ' ', hist)
             
             v = limpar_valor_monetario(val_str)
-            # IA Semântica atua APENAS se o valor veio positivo e sem letra indicadora
+            # IA Semântica atua APENAS se o valor veio positivo e sem letra indicadora de sinal original
             if v > 0 and '-' not in val_str and 'D' not in val_str.upper():
                 if deduzir_debito_pela_palavra(hist, False): v = -abs(v)
                 
@@ -338,6 +342,8 @@ def processar_pdf_bradesco(caminho_pdf):
                     if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
                         try:
                             v = limpar_valor_monetario(val_str)
+                            if v > 0 and '-' not in val_str and 'D' not in val_str.upper():
+                                if deduzir_debito_pela_palavra(historico_completo, False): v = -abs(v)
                             lancamentos.append({'DESCRIÇÃO': 'BANCO BRADESCO', 'DATA': current_date, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico_completo})
                         except: pass
                 else:
@@ -364,7 +370,7 @@ def processar_pdf_generico_universal(caminho_pdf):
                     dt_encontrada = match_data.group(1).replace('-', '/')
                     if len(dt_encontrada) == 5: dt_encontrada = f"{dt_encontrada}/{datetime.now().year}"
                     data_atual = dt_encontrada
-                matches_vals = re.findall(r'(-?\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*[-CD]?)', linha, re.IGNORECASE)
+                matches_vals = re.findall(r'(-?\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*[-DC]?)', linha, re.IGNORECASE)
                 if matches_vals and data_atual:
                     val_str = matches_vals[-1].strip()
                     try:
@@ -485,7 +491,6 @@ def processar_razao_dominio(file_bytes, filename):
             
     if not dados: return None
     df_res = pd.DataFrame(dados)
-    # Proteção absoluta na conversão de Data
     df_res['DATA_DT'] = pd.to_datetime(df_res['DATA'], dayfirst=True, errors='coerce')
     return df_res.dropna(subset=['DATA_DT'])
 
@@ -506,7 +511,7 @@ if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_
 if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v7.5 · Semantic Fix</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v7.6 · Sign Fix</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -789,11 +794,11 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 saldo_final_raz = df_conciliacao['SALDO_RAZAO'].iloc[-1]
                 
                 rc1, rc2, rc3 = st.columns(3)
-                with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Extrato)</div><div class="metric-value" style="color: #f0f6fc;">{formata_br(saldo_final_ext)}</div></div>', unsafe_allow_html=True)
-                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Razão)</div><div class="metric-value" style="color: #f0f6fc;">{formata_br(saldo_final_raz)}</div></div>', unsafe_allow_html=True)
+                with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Extrato)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_ext)}</div></div>', unsafe_allow_html=True)
+                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Razão)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_raz)}</div></div>', unsafe_allow_html=True)
                 with rc3:
                     dif_final = saldo_final_ext - saldo_final_raz
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Diferença de Saldo Final</div><div class="metric-value" style="color: {"#3fb950" if abs(dif_final) < 0.01 else "#f85149"};">{formata_br(dif_final)}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-card"><div class="metric-title">Diferença de Saldo Final</div><div class="metric-value" style="color: {"#3fb950" if abs(dif_final) < 0.01 else "#f85149"};">{formatar_moeda(dif_final)}</div></div>', unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
@@ -801,7 +806,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)', 'Status']
                 
                 for col in ['Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)']:
-                    df_exibicao[col] = df_exibicao[col].apply(formata_br)
+                    df_exibicao[col] = df_exibicao[col].apply(formatar_moeda)
 
                 st.dataframe(df_exibicao, use_container_width=True, height=380)
 
@@ -824,14 +829,14 @@ elif st.session_state['pagina_ativa'] == 'razao':
                             st.markdown("##### 🏦 Lançamentos do Extrato")
                             df_ext_dia = df_ext[df_ext['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].copy()
                             df_ext_dia.columns = ['Histórico Bancário', 'Entrada (R$)', 'Saída (R$)']
-                            for c in ['Entrada (R$)', 'Saída (R$)']: df_ext_dia[c] = df_ext_dia[c].apply(formata_br)
+                            for c in ['Entrada (R$)', 'Saída (R$)']: df_ext_dia[c] = df_ext_dia[c].apply(formatar_moeda)
                             st.dataframe(df_ext_dia, use_container_width=True, hide_index=True)
                             
                         with col_aud2:
                             st.markdown("##### 🏢 Lançamentos da Domínio")
                             df_raz_dia = df_razao_bruto[df_razao_bruto['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].copy()
                             df_raz_dia.columns = ['Histórico Contábil', 'Entrada (R$)', 'Saída (R$)']
-                            for c in ['Entrada (R$)', 'Saída (R$)']: df_raz_dia[c] = df_raz_dia[c].apply(formata_br)
+                            for c in ['Entrada (R$)', 'Saída (R$)']: df_raz_dia[c] = df_raz_dia[c].apply(formatar_moeda)
                             st.dataframe(df_raz_dia, use_container_width=True, hide_index=True)
                 else:
                     st.success("✨ Conciliação perfeita! Nenhuma divergência encontrada no período selecionado.")
