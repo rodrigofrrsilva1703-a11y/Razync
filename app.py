@@ -709,6 +709,154 @@ def processar_razao_dominio(file_bytes, filename):
     return df_res.dropna(subset=['DATA_DT'])
 
 # ==============================================================================
+# ORGANIZADORES ESPECÍFICOS POR EMPRESA
+# ==============================================================================
+def texto_celula_seguro(valor):
+    if valor is None or pd.isna(valor): return ""
+    if isinstance(valor, float) and valor.is_integer(): return str(int(valor))
+    return limpar_caracteres_ilegais(str(valor)).strip()
+
+def identificar_estorno_de_baixa(*campos):
+    """Reconhece apenas estornos ligados a baixa, preservando outros estornos."""
+    texto = normalizar_texto(" ".join(texto_celula_seguro(c) for c in campos))
+    tokens = re.findall(r'[a-z0-9]+', texto)
+    pos_estorno = [i for i, token in enumerate(tokens) if token.startswith(('estorn', 'revers'))]
+    pos_baixa = [i for i, token in enumerate(tokens) if token.startswith('baix')]
+    return any(abs(i - j) <= 6 for i in pos_estorno for j in pos_baixa)
+
+def processar_nova_geracao_itau(file_bytes):
+    """Transforma a aba Itaú da Nova Geração no layout da Domínio."""
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    aba_itau = next((aba for aba in xls.sheet_names if normalizar_texto(aba).strip() == 'itau'), None)
+    if not aba_itau:
+        raise ValueError("A aba 'Itaú' não foi encontrada na planilha da Nova Geração.")
+
+    df = pd.read_excel(xls, sheet_name=aba_itau, dtype=object)
+    mapa = {normalizar_texto(str(col)).strip(): col for col in df.columns}
+
+    def localizar_coluna(nome):
+        return next((original for normalizada, original in mapa.items() if normalizada == nome), None)
+
+    col_conta = localizar_coluna('conta')
+    col_data = localizar_coluna('data')
+    col_valor = localizar_coluna('valor')
+    col_lacto = localizar_coluna('lacto')
+    col_hist = localizar_coluna('historico')
+    col_doc = localizar_coluna('doc')
+    obrigatorias = {
+        'CONTA': col_conta, 'DATA': col_data, 'VALOR': col_valor,
+        'LACTO': col_lacto, 'HISTORICO': col_hist, 'DOC': col_doc
+    }
+    faltantes = [nome for nome, coluna in obrigatorias.items() if coluna is None]
+    if faltantes:
+        raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(faltantes)}")
+
+    colunas_saida = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    principais, retirados = [], []
+
+    for _, linha in df.iterrows():
+        conta = re.sub(r'\D', '', texto_celula_seguro(linha[col_conta]))
+        if conta != '995495':
+            continue
+
+        data_raw = linha[col_data]
+        if isinstance(data_raw, (int, float)) and not pd.isna(data_raw):
+            data = pd.to_datetime(data_raw, unit='D', origin='1899-12-30', errors='coerce')
+        else:
+            data = pd.to_datetime(data_raw, dayfirst=True, errors='coerce')
+        if pd.isna(data):
+            continue
+
+        valor_raw = linha[col_valor]
+        valor = float(valor_raw) if isinstance(valor_raw, (int, float)) and not pd.isna(valor_raw) else limpar_valor_monetario(valor_raw)
+        if valor == 0:
+            continue
+
+        lacto_original = texto_celula_seguro(linha[col_lacto])
+        lacto = re.sub(r'\bRECEBIMENTO\b', 'RECEBIDO', lacto_original, flags=re.IGNORECASE)
+        historico_origem = texto_celula_seguro(linha[col_hist])
+        documento = texto_celula_seguro(linha[col_doc])
+        historico_final = re.sub(r'\s+', ' ', " ".join(
+            parte for parte in [lacto, historico_origem, documento] if parte
+        )).strip()
+
+        registro = {
+            'DESCRIÇÃO': 'BANCO ITAÚ',
+            'DATA': data.to_pydatetime(),
+            'VALOR': valor,
+            'DÉBITO': '',
+            'CRÉDITO': '',
+            'HISTÓRICO': historico_final
+        }
+
+        if identificar_estorno_de_baixa(lacto_original, historico_origem, documento):
+            registro_retirado = dict(registro)
+            registro_retirado['MOTIVO'] = 'Estorno de baixa identificado'
+            retirados.append(registro_retirado)
+        else:
+            principais.append(registro)
+
+    if not principais and not retirados:
+        raise ValueError("Nenhum lançamento da conta Itaú 99549-5 foi encontrado.")
+
+    return pd.DataFrame(principais, columns=colunas_saida), pd.DataFrame(
+        retirados, columns=colunas_saida + ['MOTIVO']
+    )
+
+def gerar_excel_nova_geracao_itau(df_principal, df_retirados, modelo_bytes=None):
+    """Gera o Modelo Domínio com uma aba separada para os itens retirados."""
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    if modelo_bytes:
+        wb = load_workbook(io.BytesIO(modelo_bytes))
+        ws = wb[wb.sheetnames[0]]
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row - 1)
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Planilha1'
+        ws.append(['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO'])
+
+    cabecalhos = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    for col, cabecalho in enumerate(cabecalhos, 1):
+        ws.cell(1, col, cabecalho)
+
+    for registro in df_principal.to_dict('records'):
+        ws.append([registro[c] for c in cabecalhos])
+
+    if 'Lançamentos retirados' in wb.sheetnames:
+        del wb['Lançamentos retirados']
+    ws_ret = wb.create_sheet('Lançamentos retirados')
+    cabecalhos_ret = cabecalhos + ['MOTIVO']
+    ws_ret.append(cabecalhos_ret)
+    for registro in df_retirados.to_dict('records'):
+        ws_ret.append([registro.get(c, '') for c in cabecalhos_ret])
+
+    for planilha in [ws, ws_ret]:
+        for cell in planilha[1]:
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill('solid', fgColor='1F4E78')
+            cell.alignment = Alignment(horizontal='center')
+        planilha.freeze_panes = 'A2'
+        planilha.auto_filter.ref = planilha.dimensions
+        planilha.column_dimensions['A'].width = 20
+        planilha.column_dimensions['B'].width = 13
+        planilha.column_dimensions['C'].width = 16
+        planilha.column_dimensions['D'].width = 12
+        planilha.column_dimensions['E'].width = 12
+        planilha.column_dimensions['F'].width = 80
+        if planilha == ws_ret: planilha.column_dimensions['G'].width = 32
+        for row in range(2, planilha.max_row + 1):
+            planilha.cell(row, 2).number_format = 'dd/mm/yyyy'
+            planilha.cell(row, 3).number_format = '#,##0.00;[Red]-#,##0.00'
+
+    saida = io.BytesIO()
+    wb.save(saida)
+    return saida.getvalue()
+
+# ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
 if 'pagina_ativa' not in st.session_state: st.session_state['pagina_ativa'] = 'home'
@@ -724,8 +872,9 @@ st.sidebar.markdown("---")
 if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_pagina('home')
 if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
+if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v9.1 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.0 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -751,9 +900,11 @@ if st.session_state['pagina_ativa'] == 'home':
             st.rerun()
         
     with col_t3:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">⚙️</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Em Breve</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Utilitários adicionais para relatórios fiscais.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🗂️</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Organizador de Planilhas</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta planilhas específicas de empresas para o Modelo Domínio.</p></div>""", unsafe_allow_html=True)
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        st.button("Indisponível", use_container_width=True, disabled=True, key="btn_futuro_2")
+        if st.button("Acessar", use_container_width=True, key="btn_abrir_organizador"):
+            mudar_pagina('organizador')
+            st.rerun()
 
 # ==============================================================================
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
@@ -906,7 +1057,94 @@ elif st.session_state['pagina_ativa'] == 'extratos':
             st.error(f"🛑 Ocorreu um erro na aba extratos. Detalhes: {e}")
 
 # ==============================================================================
-# TELA 3: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
+# TELA 3: ORGANIZADOR DE PLANILHAS POR EMPRESA
+# ==============================================================================
+elif st.session_state['pagina_ativa'] == 'organizador':
+    col_voltar, col_tit = st.columns([1.2, 8.8])
+    with col_voltar:
+        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+        if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_org"):
+            mudar_pagina('home')
+            st.rerun()
+    with col_tit: st.title("Organizador de Planilhas")
+    st.caption("Selecione a empresa e aplique as regras específicas para gerar o Modelo Domínio.")
+    st.markdown("---")
+
+    if 'empresa_organizador' not in st.session_state:
+        st.session_state['empresa_organizador'] = None
+
+    st.markdown("##### Selecione a empresa")
+    col_emp1, col_emp2 = st.columns(2)
+    with col_emp1:
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Nova Geração</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Organização dos movimentos bancários da matriz.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        if st.button("Selecionar Nova Geração", use_container_width=True, key="org_nova_geracao"):
+            st.session_state['empresa_organizador'] = 'nova_geracao'
+            st.rerun()
+    with col_emp2:
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Segunda Empresa</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">As regras serão configuradas na próxima etapa.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        st.button("Em breve", use_container_width=True, disabled=True, key="org_empresa_2")
+
+    if st.session_state['empresa_organizador'] == 'nova_geracao':
+        st.markdown("---")
+        st.markdown("### Nova Geração")
+        banco_empresa = st.selectbox(
+            "Banco",
+            ["Itaú - Conta 99549-5"],
+            key="org_banco_nova_geracao"
+        )
+        st.caption("A planilha deve conter a aba Itaú com as colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC.")
+        arquivo_empresa = st.file_uploader(
+            "Envie a planilha bancária da Nova Geração",
+            type=["xlsx", "xls"],
+            key="org_upload_nova_geracao"
+        )
+
+        if arquivo_empresa:
+            try:
+                df_org, df_retirados = processar_nova_geracao_itau(arquivo_empresa.getvalue())
+                arquivo_final = gerar_excel_nova_geracao_itau(df_org, df_retirados)
+
+                total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
+                total_saidas = df_org.loc[df_org['VALOR'] < 0, 'VALOR'].sum()
+                saldo_liquido = total_entradas + total_saidas
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                m1, m2, m3, m4 = st.columns(4)
+                with m1: st.markdown(f'<div class="metric-card"><div class="metric-title">Modelo principal</div><div class="metric-value">{len(df_org)}</div></div>', unsafe_allow_html=True)
+                with m2: st.markdown(f'<div class="metric-card"><div class="metric-title">Retirados</div><div class="metric-value">{len(df_retirados)}</div></div>', unsafe_allow_html=True)
+                with m3: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(total_entradas)}</div></div>', unsafe_allow_html=True)
+                with m4:
+                    cor_saldo = "#3fb950" if saldo_liquido >= 0 else "#f85149"
+                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo líquido</div><div class="metric-value" style="color: {cor_saldo};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
+
+                tab_principal, tab_retirados = st.tabs(["Modelo principal", "Lançamentos retirados"])
+                with tab_principal:
+                    previa = df_org.copy()
+                    previa['DATA'] = pd.to_datetime(previa['DATA']).dt.strftime('%d/%m/%Y')
+                    st.dataframe(previa, use_container_width=True, height=320)
+                with tab_retirados:
+                    if df_retirados.empty:
+                        st.info("Nenhum estorno de baixa foi identificado neste arquivo.")
+                    else:
+                        previa_ret = df_retirados.copy()
+                        previa_ret['DATA'] = pd.to_datetime(previa_ret['DATA']).dt.strftime('%d/%m/%Y')
+                        st.dataframe(previa_ret, use_container_width=True, height=280)
+
+                st.download_button(
+                    "Baixar Modelo Domínio organizado (.XLSX)",
+                    data=arquivo_final,
+                    file_name="Nova_Geracao_Itau_Modelo_Dominio.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_org_nova_itau",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Não foi possível organizar a planilha: {e}")
+
+# ==============================================================================
+# TELA 4: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
     col_voltar, col_tit = st.columns([1.2, 8.8])
