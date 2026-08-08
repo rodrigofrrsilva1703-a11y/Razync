@@ -5,6 +5,7 @@ import re
 import calendar
 import io
 import os
+import unicodedata
 from datetime import datetime
 from pypdf import PdfReader
 import traceback
@@ -46,6 +47,10 @@ def limpar_caracteres_ilegais(val):
     if isinstance(val, str): return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', val)
     return val
 
+def normalizar_texto(texto):
+    if not isinstance(texto, str): return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower()
+
 def formatar_moeda(valor):
     try: return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     except: return "R$ 0,00"
@@ -55,7 +60,6 @@ def sanitizar_dataframe(df):
     return df
 
 def limpar_valor_monetario(v_val):
-    """Lê o número mecanicamente. Preserva o sinal negativo se houver '-' ou 'D'."""
     if pd.isna(v_val) or v_val == '': return 0.0
     if isinstance(v_val, (int, float)): return float(v_val)
     
@@ -147,23 +151,21 @@ def processar_planilha_universal(file_bytes, filename):
     
     header_idx = None
     for idx, row in df.iterrows():
-        row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).lower()
-        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'crédito' in row_str or 'credit' in row_str or 'débito' in row_str or 'debit' in row_str or 'lançamento' in row_str):
+        row_str = normalizar_texto(" ".join([str(v) for v in row.values if pd.notna(v)]))
+        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'credito' in row_str or 'debito' in row_str or 'lancamento' in row_str):
             header_idx = idx; break
             
     if header_idx is not None and header_idx > 0:
         df.columns = [str(v).strip() for v in df.iloc[header_idx].values]
         df = df.iloc[header_idx+1:].copy()
         
-    cols = list(df.columns)
-    col_data = next((c for c in cols if any(p in str(c).lower() for p in ['data', 'dt', 'date', 'dia'])), None)
-    col_hist = next((c for c in cols if any(p in str(c).lower() for p in ['lançamento', 'lancamento', 'históric', 'historic', 'descriç', 'descric', 'detalhe', 'memo'])), None)
-    col_val = next((c for c in cols if any(p in str(c).lower() for p in ['valor', 'val', 'monto', 'amount'])), None)
-    
-    # Mapeamento robusto para colunas separadas de Débito e Crédito sem sinal
-    col_cred = next((c for c in cols if any(p in str(c).lower() for p in ['crédit', 'credit', 'entrada', 'vlr_cred', 'crd'])), None)
-    col_deb = next((c for c in cols if any(p in str(c).lower() for p in ['débit', 'debit', 'saída', 'saida', 'vlr_deb', 'deb'])), None)
-    col_tipo = next((c for c in cols if any(p in str(c).lower() for p in ['tipo', 'natureza', 'operacao', 'operaç', 'c/d'])), None)
+    cols_map = {c: normalizar_texto(c) for c in df.columns}
+    col_data = next((c for c, nc in cols_map.items() if any(p in nc for p in ['data', 'dt', 'date', 'dia'])), None)
+    col_hist = next((c for c, nc in cols_map.items() if any(p in nc for p in ['lancamento', 'historico', 'hist', 'descric', 'detalhe', 'memo'])), None)
+    col_val = next((c for c, nc in cols_map.items() if any(p in nc for p in ['valor', 'val', 'monto', 'amount'])), None)
+    col_cred = next((c for c, nc in cols_map.items() if any(p in nc for p in ['credito', 'credit', 'entrada', 'vlr_cred', 'crd'])), None)
+    col_deb = next((c for c, nc in cols_map.items() if any(p in nc for p in ['debito', 'debit', 'saida', 'vlr_deb', 'deb'])), None)
+    col_tipo = next((c for c, nc in cols_map.items() if any(p in nc for p in ['tipo', 'natureza', 'operacao', 'c/d'])), None)
 
     if not col_data: return []
     
@@ -188,7 +190,7 @@ def processar_planilha_universal(file_bytes, filename):
             if v_cred != 0: 
                 valor_float = abs(v_cred)  
             elif v_deb != 0: 
-                valor_float = -abs(v_deb)  # Força débito/saída a ficar negativo
+                valor_float = -abs(v_deb)  # Garante que saídas/débitos fiquem negativos
         elif col_val and pd.notna(row[col_val]):
             valor_float = limpar_valor_monetario(row[col_val])
             tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
@@ -423,8 +425,8 @@ def processar_razao_dominio(file_bytes, filename):
     
     header_row_idx = 0
     for idx, row in df.iterrows():
-        row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).upper()
-        if ('DATA' in row_str or 'DT' in row_str) and ('VALOR' in row_str or 'DEBITO' in row_str or 'DÉBITO' in row_str or 'CREDITO' in row_str or 'CRÉDITO' in row_str):
+        row_str = normalizar_texto(" ".join([str(v) for v in row.values if pd.notna(v)]))
+        if ('data' in row_str or 'dt' in row_str) and ('valor' in row_str or 'debito' in row_str or 'credito' in row_str):
             header_row_idx = idx
             break
             
@@ -435,14 +437,13 @@ def processar_razao_dominio(file_bytes, filename):
         df.columns = [str(v).strip().upper() for v in df.iloc[0].values]
         df = df.iloc[1:].copy()
         
-    df.columns = [re.sub(r'[^\w\s]', '', c) for c in df.columns]
-    cols = list(df.columns)
+    cols_map_raz = {c: normalizar_texto(c) for c in df.columns}
     
-    col_data = next((c for c in cols if any(p in c for p in ['DATA', 'DT'])), None)
-    col_deb = next((c for c in cols if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DEB'])), None)
-    col_cred = next((c for c in cols if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRE'])), None)
-    col_val = next((c for c in cols if any(p in c for p in ['VALOR', 'VL'])), None)
-    col_hist = next((c for c in cols if any(p in c for p in ['HISTORICO', 'HISTÓRICO', 'HIST', 'COMPLEMENTO', 'LANCAMENTO', 'DESCRI'])), None)
+    col_data = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['data', 'dt'])), None)
+    col_deb = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['debito', 'saida', 'deb'])), None)
+    col_cred = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['credito', 'entrada', 'cre'])), None)
+    col_val = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['valor', 'vl'])), None)
+    col_hist = next((c for c, nc in cols_map_raz.items() if any(p in nc for p in ['historico', 'hist', 'complemento', 'lancamento', 'descri'])), None)
     
     if not col_data: return None
     
