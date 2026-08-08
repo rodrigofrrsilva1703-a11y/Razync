@@ -5,6 +5,7 @@ import re
 import calendar
 import io
 import os
+import tempfile
 import unicodedata
 from datetime import datetime
 from pypdf import PdfReader
@@ -849,6 +850,102 @@ def gerar_excel_nova_geracao_itau(df_principal, df_retirados, modelo_bytes=None)
     wb.save(saida)
     return saida.getvalue()
 
+def processar_extrato_conferencia_empresa(file_bytes, filename):
+    """Lê o extrato usado na conferência com os mesmos motores do conversor."""
+    extensao = os.path.splitext(filename)[1].lower()
+    if extensao == '.ofx':
+        return processar_ofx(file_bytes, filename)
+    if extensao in ['.csv', '.xlsx', '.xls']:
+        return processar_planilha_universal(file_bytes, filename)
+    if extensao == '.pdf':
+        caminho_temporario = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
+                temporario.write(file_bytes)
+                caminho_temporario = temporario.name
+            return processar_arquivo_pdf(caminho_temporario)
+        finally:
+            if caminho_temporario and os.path.exists(caminho_temporario):
+                os.remove(caminho_temporario)
+    return []
+
+def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados=None):
+    """Compara movimentos por dia e faz pareamento individual por data e centavos."""
+    colunas_base = ['DATA', 'VALOR', 'HISTÓRICO']
+
+    def preparar_dataframe(dados):
+        if isinstance(dados, pd.DataFrame):
+            df = dados.copy()
+        else:
+            df = pd.DataFrame(dados or [])
+        for coluna in colunas_base:
+            if coluna not in df.columns:
+                df[coluna] = '' if coluna != 'VALOR' else 0.0
+        df['DATA'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.normalize()
+        df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0.0).round(2)
+        df['HISTÓRICO'] = df['HISTÓRICO'].fillna('').astype(str)
+        df = df.dropna(subset=['DATA'])
+        df = df[df['VALOR'].abs() >= 0.005].copy()
+        df['_CENTAVOS'] = (df['VALOR'] * 100).round().astype(int)
+        df['_CHAVE'] = list(zip(df['DATA'], df['_CENTAVOS']))
+        return df.reset_index(drop=True)
+
+    df_modelo = preparar_dataframe(df_planilha)
+    df_extrato = preparar_dataframe(lancamentos_extrato)
+    df_retirados_ok = preparar_dataframe(df_retirados if df_retirados is not None else [])
+
+    # Estornos de baixa retirados de propósito não devem gerar falso alerta.
+    indices_ignorados = set()
+    if not df_retirados_ok.empty and not df_extrato.empty:
+        quantidades_retiradas = df_retirados_ok['_CHAVE'].value_counts().to_dict()
+        for chave, quantidade in quantidades_retiradas.items():
+            candidatos = df_extrato.index[
+                (df_extrato['_CHAVE'] == chave) &
+                df_extrato['HISTÓRICO'].apply(identificar_estorno_de_baixa)
+            ].tolist()
+            indices_ignorados.update(candidatos[:int(quantidade)])
+
+    df_ignorados = df_extrato.loc[sorted(indices_ignorados)].copy() if indices_ignorados else df_extrato.iloc[0:0].copy()
+    df_extrato_comparavel = df_extrato.drop(index=list(indices_ignorados)).reset_index(drop=True)
+
+    # Pareamento um a um: lançamentos repetidos são tratados individualmente.
+    disponiveis_modelo = {}
+    for indice, chave in enumerate(df_modelo['_CHAVE']):
+        disponiveis_modelo.setdefault(chave, []).append(indice)
+
+    indices_modelo_pareados = set()
+    indices_extrato_sem_par = []
+    for indice_extrato, chave in enumerate(df_extrato_comparavel['_CHAVE']):
+        candidatos = disponiveis_modelo.get(chave, [])
+        if candidatos:
+            indices_modelo_pareados.add(candidatos.pop(0))
+        else:
+            indices_extrato_sem_par.append(indice_extrato)
+
+    indices_modelo_sem_par = [
+        indice for indice in range(len(df_modelo))
+        if indice not in indices_modelo_pareados
+    ]
+
+    faltando_planilha = df_extrato_comparavel.loc[indices_extrato_sem_par, colunas_base].copy()
+    a_mais_planilha = df_modelo.loc[indices_modelo_sem_par, colunas_base].copy()
+    ignorados = df_ignorados[colunas_base].copy()
+
+    total_modelo = df_modelo.groupby('DATA')['VALOR'].sum().rename('TOTAL PLANILHA')
+    total_extrato = df_extrato_comparavel.groupby('DATA')['VALOR'].sum().rename('TOTAL EXTRATO')
+    diario = pd.concat([total_extrato, total_modelo], axis=1).fillna(0.0).sort_index().reset_index()
+    diario['DIFERENÇA DO DIA'] = (diario['TOTAL PLANILHA'] - diario['TOTAL EXTRATO']).round(2)
+    diario['ACUMULADO EXTRATO'] = diario['TOTAL EXTRATO'].cumsum().round(2)
+    diario['ACUMULADO PLANILHA'] = diario['TOTAL PLANILHA'].cumsum().round(2)
+    diario['DIFERENÇA ACUMULADA'] = (
+        diario['ACUMULADO PLANILHA'] - diario['ACUMULADO EXTRATO']
+    ).round(2)
+    diario['STATUS'] = diario['DIFERENÇA DO DIA'].apply(
+        lambda valor: '✅ Batendo' if abs(valor) < 0.01 else '❌ Divergente'
+    )
+
+    return diario, faltando_planilha, a_mais_planilha, ignorados
+
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
@@ -867,7 +964,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.1 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.2 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1141,6 +1238,125 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     key="dl_org_nova_itau",
                     use_container_width=True
                 )
+
+                st.markdown("---")
+                st.markdown("### Conferência com o extrato bancário")
+                st.caption(
+                    "Anexe o extrato do Itaú para comparar o movimento líquido de cada dia "
+                    "e localizar lançamentos ausentes ou incluídos a mais."
+                )
+                extrato_conferencia = st.file_uploader(
+                    "Envie o extrato bancário para conferência",
+                    type=["pdf", "ofx", "csv", "xlsx", "xls"],
+                    key="org_extrato_conferencia_nova_itau"
+                )
+
+                if extrato_conferencia:
+                    lancamentos_extrato = processar_extrato_conferencia_empresa(
+                        extrato_conferencia.getvalue(), extrato_conferencia.name
+                    )
+                    if not lancamentos_extrato:
+                        st.warning(
+                            "Não foi possível identificar lançamentos no extrato. "
+                            "Verifique se o arquivo possui data, valor e histórico legíveis."
+                        )
+                    else:
+                        diario, faltando_planilha, a_mais_planilha, ignorados = conciliar_empresa_com_extrato(
+                            df_org, lancamentos_extrato, df_retirados
+                        )
+
+                        if diario.empty:
+                            st.warning("Não existem datas válidas em comum para realizar a conferência.")
+                        else:
+                            periodo_inicial = diario['DATA'].min().strftime('%d/%m/%Y')
+                            periodo_final = diario['DATA'].max().strftime('%d/%m/%Y')
+                            dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())
+                            dias_divergentes = int((diario['STATUS'] == '❌ Divergente').sum())
+
+                            st.info(f"Período analisado: {periodo_inicial} até {periodo_final}")
+                            c1, c2, c3, c4 = st.columns(4)
+                            with c1:
+                                st.markdown(f'<div class="metric-card"><div class="metric-title">Dias batendo</div><div class="metric-value" style="color: #3fb950;">{dias_batendo}</div></div>', unsafe_allow_html=True)
+                            with c2:
+                                st.markdown(f'<div class="metric-card"><div class="metric-title">Dias divergentes</div><div class="metric-value" style="color: #f85149;">{dias_divergentes}</div></div>', unsafe_allow_html=True)
+                            with c3:
+                                st.markdown(f'<div class="metric-card"><div class="metric-title">Faltando na planilha</div><div class="metric-value" style="color: #f85149;">{len(faltando_planilha)}</div></div>', unsafe_allow_html=True)
+                            with c4:
+                                st.markdown(f'<div class="metric-card"><div class="metric-title">A mais na planilha</div><div class="metric-value" style="color: #f85149;">{len(a_mais_planilha)}</div></div>', unsafe_allow_html=True)
+
+                            if dias_divergentes == 0 and faltando_planilha.empty and a_mais_planilha.empty:
+                                st.success("Conferência concluída: todos os dias e lançamentos estão batendo.")
+                            else:
+                                st.warning(
+                                    "Foram encontradas diferenças. Consulte as abas abaixo para identificar "
+                                    "as datas e os possíveis lançamentos responsáveis."
+                                )
+
+                            abas_conferencia = st.tabs([
+                                "Saldo diário",
+                                "Faltando na planilha",
+                                "A mais na planilha",
+                                "Ignorados pelas regras"
+                            ])
+
+                            with abas_conferencia[0]:
+                                exibicao_diaria = diario.copy()
+                                exibicao_diaria['DATA'] = exibicao_diaria['DATA'].dt.strftime('%d/%m/%Y')
+                                st.dataframe(
+                                    exibicao_diaria,
+                                    use_container_width=True,
+                                    height=360,
+                                    column_config={
+                                        "TOTAL EXTRATO": st.column_config.NumberColumn(format="R$ %.2f"),
+                                        "TOTAL PLANILHA": st.column_config.NumberColumn(format="R$ %.2f"),
+                                        "DIFERENÇA DO DIA": st.column_config.NumberColumn(format="R$ %.2f"),
+                                        "ACUMULADO EXTRATO": st.column_config.NumberColumn(format="R$ %.2f"),
+                                        "ACUMULADO PLANILHA": st.column_config.NumberColumn(format="R$ %.2f"),
+                                        "DIFERENÇA ACUMULADA": st.column_config.NumberColumn(format="R$ %.2f")
+                                    }
+                                )
+
+                            with abas_conferencia[1]:
+                                st.caption("Lançamentos que aparecem no extrato, mas não foram encontrados na planilha organizada.")
+                                if faltando_planilha.empty:
+                                    st.success("Nenhum lançamento faltando na planilha.")
+                                else:
+                                    exibir_faltantes = faltando_planilha.copy()
+                                    exibir_faltantes['DATA'] = exibir_faltantes['DATA'].dt.strftime('%d/%m/%Y')
+                                    st.dataframe(
+                                        exibir_faltantes,
+                                        use_container_width=True,
+                                        height=300,
+                                        column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")}
+                                    )
+
+                            with abas_conferencia[2]:
+                                st.caption("Lançamentos existentes na planilha organizada que não foram localizados no extrato.")
+                                if a_mais_planilha.empty:
+                                    st.success("Nenhum lançamento a mais na planilha.")
+                                else:
+                                    exibir_excedentes = a_mais_planilha.copy()
+                                    exibir_excedentes['DATA'] = exibir_excedentes['DATA'].dt.strftime('%d/%m/%Y')
+                                    st.dataframe(
+                                        exibir_excedentes,
+                                        use_container_width=True,
+                                        height=300,
+                                        column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")}
+                                    )
+
+                            with abas_conferencia[3]:
+                                st.caption("Estornos de baixa retirados intencionalmente conforme a regra da Nova Geração.")
+                                if ignorados.empty:
+                                    st.info("Nenhum lançamento foi ignorado na conferência.")
+                                else:
+                                    exibir_ignorados = ignorados.copy()
+                                    exibir_ignorados['DATA'] = exibir_ignorados['DATA'].dt.strftime('%d/%m/%Y')
+                                    st.dataframe(
+                                        exibir_ignorados,
+                                        use_container_width=True,
+                                        height=240,
+                                        column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")}
+                                    )
             except Exception as e:
                 st.error(f"Não foi possível organizar a planilha: {e}")
 
