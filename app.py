@@ -84,7 +84,7 @@ def interpretar_sinal_inteligente(historico_str, valor_num, explicit_nature=""):
         
     # 3. Análise semântica inteligente por palavras-chave de saída no histórico
     termos_saida = [
-        'ted emitido', 'pix env', 'pix enviado', 'ted env', 'doc env', 'pagto', 'pagamento', 
+        'ted emitido', 'ted emi do', 'pix env', 'pix enviado', 'ted env', 'doc env', 'pagto', 'pagamento', 
         'tarifa', 'manut', 'cobranca', 'debito', 'saque', 'compra', 'cartao', 
         'transferencia env', 'transf env', 'cpfl', 'darf', 'gps', 'iss', 'imposto',
         'aplicacao', 'aplic', 'investimento', 'estorno deb', 'saida', 'db', 'sispag',
@@ -264,6 +264,118 @@ def extrair_periodo_extrato(caminho_pdf):
     except: pass
     return None, None
 
+def processar_pdf_banco_fibra(reader, banco_identificado):
+    """
+    Processa o modelo de extrato do Banco Fibra preservando as colunas.
+
+    Nesse PDF os valores não possuem sinal. A natureza do lançamento é dada
+    pela posição visual: coluna Débito = negativo e coluna Crédito = positivo.
+    O modo ``layout`` do pypdf mantém essa posição sem adicionar dependências.
+    """
+    lancamentos = []
+    linhas_layout = []
+    pos_debito = None
+    pos_credito = None
+
+    for pagina in reader.pages:
+        try:
+            texto_layout = pagina.extract_text(extraction_mode="layout") or ""
+        except (TypeError, ValueError):
+            # Compatibilidade com versões antigas do pypdf.
+            texto_layout = pagina.extract_text() or ""
+
+        linhas_pagina = texto_layout.splitlines()
+        linhas_layout.extend(linhas_pagina)
+
+        for linha in linhas_pagina:
+            if 'Débito' in linha and 'Crédito' in linha:
+                pos_debito = linha.find('Débito')
+                pos_credito = linha.find('Crédito')
+                break
+
+    # Se o cabeçalho não foi preservado, deixa o processador universal assumir.
+    if pos_debito is None or pos_credito is None:
+        return []
+
+    limite_debito_credito = (pos_debito + pos_credito) / 2
+    date_regex = re.compile(r'^\s*(\d{2}/\d{2}/\d{4})(?:\s|$)')
+    valor_regex = re.compile(r'(?:R\$\s*)?([\d\.]+,\d{2})')
+
+    i = 0
+    while i < len(linhas_layout):
+        linha = linhas_layout[i]
+        match_date = date_regex.match(linha)
+        if not match_date:
+            i += 1
+            continue
+
+        data_str = match_date.group(1)
+
+        # Ignora a linha do período, que contém duas datas e não é lançamento.
+        restante_apos_data = linha[match_date.end():]
+        if re.match(r'\s*a\s+\d{2}/\d{2}/\d{4}', restante_apos_data):
+            i += 1
+            continue
+
+        bloco_linhas = [linha]
+        j = i + 1
+        while j < len(linhas_layout):
+            proxima = linhas_layout[j]
+            if date_regex.match(proxima):
+                break
+            if any(marcador in proxima.upper() for marcador in ['SALDO', 'FIM DE RELATÓRIO']):
+                break
+            if proxima.strip():
+                bloco_linhas.append(proxima)
+            j += 1
+
+        # O Fibra pode quebrar valores altos: "R$" fica na primeira linha e
+        # o número aparece na linha imediatamente abaixo.
+        ocorrencias = []
+        for linha_bloco in bloco_linhas:
+            for match_valor in valor_regex.finditer(linha_bloco):
+                ocorrencias.append((match_valor.group(1), match_valor.start(1), linha_bloco))
+
+        if ocorrencias:
+            val_str, pos_valor, linha_valor = ocorrencias[0]
+            v_num = abs(limpar_valor_monetario(val_str))
+
+            # Usa o início do marcador monetário como referência da coluna.
+            pos_rs_mesma_linha = linha_valor.find('R$')
+            if pos_rs_mesma_linha >= 0:
+                pos_valor = pos_rs_mesma_linha
+
+            # Quando o valor foi quebrado, usa a posição do "R$" da linha
+            # anterior, que representa corretamente a coluna Débito/Crédito.
+            if 'R$' not in linha_valor:
+                for linha_anterior in bloco_linhas:
+                    pos_rs = linha_anterior.find('R$')
+                    if pos_rs >= 0:
+                        pos_valor = pos_rs
+                        break
+
+            valor_final = -v_num if pos_valor < limite_debito_credito else v_num
+
+            texto_bloco = " ".join(bloco_linhas)
+            hist = texto_bloco.replace(data_str, '', 1)
+            hist = hist.replace('Emi\x00do', 'Emitido').replace('\x00', '')
+            hist = re.sub(r'R\$\s*[\d\.]*,?\d{0,2}', ' ', hist)
+            hist = re.sub(r'\s+', ' ', hist).strip()
+
+            if v_num != 0 and 'SALDO' not in hist.upper():
+                lancamentos.append({
+                    'DESCRIÇÃO': banco_identificado,
+                    'DATA': data_str,
+                    'VALOR': valor_final,
+                    'DÉBITO': '',
+                    'CRÉDITO': '',
+                    'HISTÓRICO': limpar_caracteres_ilegais(hist)
+                })
+
+        i = max(j, i + 1)
+
+    return lancamentos
+
 def processar_arquivo_pdf(caminho_pdf):
     lancamentos = []
     try:
@@ -273,6 +385,14 @@ def processar_arquivo_pdf(caminho_pdf):
             texto_completo += (pagina.extract_text() or "") + "\n"
             
         banco_identificado = identificar_banco_inteligente(texto_completo, os.path.basename(caminho_pdf))
+
+        # O Banco Fibra informa a natureza pela coluna visual, não pelo sinal.
+        # Usa um processador específico antes de recorrer ao motor universal.
+        if banco_identificado == "BANCO FIBRA":
+            lancamentos_fibra = processar_pdf_banco_fibra(reader, banco_identificado)
+            if lancamentos_fibra:
+                return lancamentos_fibra
+
         linhas = [l.strip() for l in texto_completo.split('\n') if l.strip()]
         date_regex = re.compile(r'^(\d{2}/\d{2}/\d{4})')
         
