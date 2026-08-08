@@ -834,6 +834,16 @@ def processar_nova_geracao_fibra(file_bytes):
         file_bytes, 'Fibra', '673947-1', 'BANCO FIBRA'
     )
 
+def filtrar_dataframe_periodo(df, data_inicial, data_final):
+    """Mantém somente os lançamentos entre as datas informadas, inclusive."""
+    if df is None or df.empty:
+        return df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+    if 'DATA' not in df.columns:
+        return df.iloc[0:0].copy()
+    datas = pd.to_datetime(df['DATA'], errors='coerce').dt.date
+    mascara = datas.between(data_inicial, data_final, inclusive='both')
+    return df.loc[mascara].copy().reset_index(drop=True)
+
 def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
     """Gera um único arquivo com uma aba do Modelo Domínio para cada banco."""
     from openpyxl import Workbook, load_workbook
@@ -1028,7 +1038,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.6 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.7 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1282,10 +1292,59 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         if arquivo_empresa:
             try:
                 bytes_empresa = arquivo_empresa.getvalue()
-                modelos_por_banco, retirados_por_banco = [], []
-                dados_exportacao_por_banco = {}
+                dados_processados = []
                 for config in configs_selecionadas:
                     df_banco, df_banco_retirados = config['processador'](bytes_empresa)
+                    dados_processados.append((config, df_banco, df_banco_retirados))
+
+                datas_disponiveis = pd.concat(
+                    [dados[1][['DATA']] for dados in dados_processados if not dados[1].empty],
+                    ignore_index=True
+                )
+                datas_disponiveis['DATA'] = pd.to_datetime(
+                    datas_disponiveis['DATA'], errors='coerce'
+                )
+                datas_disponiveis = datas_disponiveis.dropna(subset=['DATA'])
+                if datas_disponiveis.empty:
+                    raise ValueError("Nenhuma data válida foi encontrada nos bancos selecionados.")
+
+                data_minima = datas_disponiveis['DATA'].min().date()
+                data_maxima = datas_disponiveis['DATA'].max().date()
+                chave_periodo = (
+                    f"org_periodo_nova_{data_minima.isoformat()}_{data_maxima.isoformat()}_"
+                    + "_".join(config['slug'] for config in configs_selecionadas)
+                )
+                st.markdown("### Período dos lançamentos")
+                periodo_selecionado = st.date_input(
+                    "Selecione a data inicial e a data final",
+                    value=(data_minima, data_maxima),
+                    min_value=data_minima,
+                    max_value=data_maxima,
+                    format="DD/MM/YYYY",
+                    key=chave_periodo
+                )
+                if not isinstance(periodo_selecionado, (tuple, list)) or len(periodo_selecionado) != 2:
+                    st.info("Selecione também a data final para concluir o período.")
+                    st.stop()
+                data_inicial, data_final = periodo_selecionado
+                if data_inicial > data_final:
+                    st.error("A data inicial não pode ser maior que a data final.")
+                    st.stop()
+
+                st.caption(
+                    f"Serão considerados os lançamentos de {data_inicial.strftime('%d/%m/%Y')} "
+                    f"até {data_final.strftime('%d/%m/%Y')}."
+                )
+
+                modelos_por_banco, retirados_por_banco = [], []
+                dados_exportacao_por_banco = {}
+                for config, df_banco_completo, df_banco_retirados_completo in dados_processados:
+                    df_banco = filtrar_dataframe_periodo(
+                        df_banco_completo, data_inicial, data_final
+                    )
+                    df_banco_retirados = filtrar_dataframe_periodo(
+                        df_banco_retirados_completo, data_inicial, data_final
+                    )
                     modelos_por_banco.append(df_banco)
                     retirados_por_banco.append(df_banco_retirados)
                     dados_exportacao_por_banco[config['nome']] = {
@@ -1295,6 +1354,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     }
 
                 df_org = pd.concat(modelos_por_banco, ignore_index=True)
+                if df_org.empty:
+                    st.warning("Nenhum lançamento foi encontrado no período selecionado.")
+                    st.stop()
                 df_org = df_org.sort_values(
                     ['DATA', 'DESCRIÇÃO'], kind='stable'
                 ).reset_index(drop=True)
@@ -1347,7 +1409,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 st.download_button(
                     "Baixar Modelo Domínio com abas por banco (.XLSX)",
                     data=arquivo_final,
-                    file_name=f"Nova_Geracao_{nome_saida_banco}_Modelo_Dominio.xlsx",
+                    file_name=(
+                        f"Nova_Geracao_{nome_saida_banco}_"
+                        f"{data_inicial.strftime('%d%m%Y')}_a_{data_final.strftime('%d%m%Y')}_"
+                        "Modelo_Dominio.xlsx"
+                    ),
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="dl_org_nova_multibanco",
                     use_container_width=True
@@ -1378,8 +1444,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             "Verifique se o arquivo possui data, valor e histórico legíveis."
                         )
                     else:
+                        df_extrato_periodo = filtrar_dataframe_periodo(
+                            pd.DataFrame(lancamentos_extrato), data_inicial, data_final
+                        )
+                        if df_extrato_periodo.empty:
+                            st.warning(
+                                "O extrato não possui lançamentos dentro do período selecionado."
+                            )
+                            st.stop()
                         diario, faltando_planilha, a_mais_planilha, ignorados = conciliar_empresa_com_extrato(
-                            df_org, lancamentos_extrato, df_retirados
+                            df_org, df_extrato_periodo, df_retirados
                         )
 
                         if diario.empty:
