@@ -829,24 +829,29 @@ def processar_nova_geracao_bradesco(file_bytes):
         file_bytes, 'Bradesco', '451990-6', 'BANCO BRADESCO'
     )
 
-def gerar_excel_nova_geracao(df_principal, df_retirados, modelo_bytes=None):
-    """Gera o Modelo Domínio sem alterar o layout simples exigido na importação."""
+def processar_nova_geracao_fibra(file_bytes):
+    return processar_nova_geracao_banco(
+        file_bytes, 'Fibra', '673947-1', 'BANCO FIBRA'
+    )
+
+def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
+    """Gera um único arquivo com uma aba do Modelo Domínio para cada banco."""
     from openpyxl import Workbook, load_workbook
 
     if modelo_bytes:
         wb = load_workbook(io.BytesIO(modelo_bytes))
-        ws = wb[wb.sheetnames[0]]
-        if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row - 1)
+        ws_modelo = wb[wb.sheetnames[0]]
+        if ws_modelo.max_row > 1:
+            ws_modelo.delete_rows(2, ws_modelo.max_row - 1)
     else:
         wb = Workbook()
-        ws = wb.active
-        ws.title = 'Planilha1'
-        ws.append(['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO'])
+        ws_modelo = wb.active
+        ws_modelo.title = 'Modelo temporário'
+        ws_modelo.append(['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO'])
 
     cabecalhos = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
     for col, cabecalho in enumerate(cabecalhos, 1):
-        ws.cell(1, col, cabecalho)
+        ws_modelo.cell(1, col, cabecalho)
 
     def preparar_linha_modelo(registro, colunas):
         linha = []
@@ -860,16 +865,38 @@ def gerar_excel_nova_geracao(df_principal, df_retirados, modelo_bytes=None):
             linha.append(valor)
         return linha
 
-    for registro in df_principal.to_dict('records'):
-        ws.append(preparar_linha_modelo(registro, cabecalhos))
+    nomes_criados = []
+    retirados_gerais = []
+    for nome_banco, dados_banco in dados_por_banco.items():
+        nome_aba = str(nome_banco)[:31]
+        if nome_aba in nomes_criados:
+            sufixo = 2
+            while f"{nome_aba[:28]} {sufixo}" in nomes_criados:
+                sufixo += 1
+            nome_aba = f"{nome_aba[:28]} {sufixo}"
 
-    if 'Lançamentos retirados' in wb.sheetnames:
-        del wb['Lançamentos retirados']
-    ws_ret = wb.create_sheet('Lançamentos retirados')
-    cabecalhos_ret = cabecalhos + ['MOTIVO']
-    ws_ret.append(cabecalhos_ret)
-    for registro in df_retirados.to_dict('records'):
-        ws_ret.append(preparar_linha_modelo(registro, cabecalhos_ret))
+        ws_banco = wb.copy_worksheet(ws_modelo)
+        ws_banco.title = nome_aba
+        nomes_criados.append(nome_aba)
+
+        df_principal = dados_banco.get('principal', pd.DataFrame())
+        df_retirados = dados_banco.get('retirados', pd.DataFrame())
+        for registro in df_principal.to_dict('records'):
+            ws_banco.append(preparar_linha_modelo(registro, cabecalhos))
+        if not df_retirados.empty:
+            retirados_gerais.extend(df_retirados.to_dict('records'))
+
+    wb.remove(ws_modelo)
+
+    if retirados_gerais:
+        nome_retirados = 'Lançamentos retirados'
+        if nome_retirados in wb.sheetnames:
+            del wb[nome_retirados]
+        ws_ret = wb.create_sheet(nome_retirados)
+        cabecalhos_ret = cabecalhos + ['MOTIVO']
+        ws_ret.append(cabecalhos_ret)
+        for registro in retirados_gerais:
+            ws_ret.append(preparar_linha_modelo(registro, cabecalhos_ret))
 
     saida = io.BytesIO()
     wb.save(saida)
@@ -896,7 +923,7 @@ def processar_extrato_conferencia_empresa(file_bytes, filename):
 
 def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados=None):
     """Compara movimentos por dia e faz pareamento individual por data e centavos."""
-    colunas_base = ['DATA', 'VALOR', 'HISTÓRICO']
+    colunas_base = ['DESCRIÇÃO', 'DATA', 'VALOR', 'HISTÓRICO']
 
     def preparar_dataframe(dados):
         if isinstance(dados, pd.DataFrame):
@@ -906,18 +933,30 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
         for coluna in colunas_base:
             if coluna not in df.columns:
                 df[coluna] = '' if coluna != 'VALOR' else 0.0
+        df['DESCRIÇÃO'] = df['DESCRIÇÃO'].fillna('').astype(str)
         df['DATA'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.normalize()
         df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0.0).round(2)
         df['HISTÓRICO'] = df['HISTÓRICO'].fillna('').astype(str)
         df = df.dropna(subset=['DATA'])
         df = df[df['VALOR'].abs() >= 0.005].copy()
         df['_CENTAVOS'] = (df['VALOR'] * 100).round().astype(int)
-        df['_CHAVE'] = list(zip(df['DATA'], df['_CENTAVOS']))
+        df['_BANCO'] = df['DESCRIÇÃO'].apply(
+            lambda valor: re.sub(r'\s+', ' ', normalizar_texto(valor).replace('banco', '')).strip()
+        )
         return df.reset_index(drop=True)
 
     df_modelo = preparar_dataframe(df_planilha)
     df_extrato = preparar_dataframe(lancamentos_extrato)
     df_retirados_ok = preparar_dataframe(df_retirados if df_retirados is not None else [])
+
+    usar_banco_na_chave = df_modelo.loc[df_modelo['_BANCO'] != '', '_BANCO'].nunique() > 1
+    for dataframe in [df_modelo, df_extrato, df_retirados_ok]:
+        if usar_banco_na_chave:
+            dataframe['_CHAVE'] = list(zip(
+                dataframe['_BANCO'], dataframe['DATA'], dataframe['_CENTAVOS']
+            ))
+        else:
+            dataframe['_CHAVE'] = list(zip(dataframe['DATA'], dataframe['_CENTAVOS']))
 
     # Estornos de baixa retirados de propósito não devem gerar falso alerta.
     indices_ignorados = set()
@@ -989,7 +1028,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.4 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.6 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1212,27 +1251,58 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "Bradesco - Conta 451990-6": {
                 "nome": "Bradesco", "conta": "451990-6", "slug": "bradesco",
                 "processador": processar_nova_geracao_bradesco
+            },
+            "Fibra - Conta 673947-1": {
+                "nome": "Fibra", "conta": "673947-1", "slug": "fibra",
+                "processador": processar_nova_geracao_fibra
             }
         }
-        banco_empresa = st.selectbox(
-            "Banco",
+        bancos_empresa = st.multiselect(
+            "Bancos",
             list(configuracoes_bancos.keys()),
+            default=["Itaú - Conta 99549-5"],
             key="org_banco_nova_geracao"
         )
-        config_banco = configuracoes_bancos[banco_empresa]
+        if not bancos_empresa:
+            st.info("Selecione pelo menos um banco para continuar.")
+            st.stop()
+
+        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
+        nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
         st.caption(
-            f"A planilha deve conter a aba {config_banco['nome']} com as colunas "
+            f"A planilha deve conter as abas selecionadas ({nomes_bancos}) com as colunas "
             "CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
         )
         arquivo_empresa = st.file_uploader(
             "Envie a planilha bancária da Nova Geração",
             type=["xlsx", "xls"],
-            key=f"org_upload_nova_geracao_{config_banco['slug']}"
+            key="org_upload_nova_geracao_multibanco"
         )
 
         if arquivo_empresa:
             try:
-                df_org, df_retirados = config_banco['processador'](arquivo_empresa.getvalue())
+                bytes_empresa = arquivo_empresa.getvalue()
+                modelos_por_banco, retirados_por_banco = [], []
+                dados_exportacao_por_banco = {}
+                for config in configs_selecionadas:
+                    df_banco, df_banco_retirados = config['processador'](bytes_empresa)
+                    modelos_por_banco.append(df_banco)
+                    retirados_por_banco.append(df_banco_retirados)
+                    dados_exportacao_por_banco[config['nome']] = {
+                        'principal': df_banco.sort_values('DATA', kind='stable').reset_index(drop=True),
+                        'retirados': df_banco_retirados.sort_values('DATA', kind='stable').reset_index(drop=True)
+                        if not df_banco_retirados.empty else df_banco_retirados
+                    }
+
+                df_org = pd.concat(modelos_por_banco, ignore_index=True)
+                df_org = df_org.sort_values(
+                    ['DATA', 'DESCRIÇÃO'], kind='stable'
+                ).reset_index(drop=True)
+                df_retirados = pd.concat(retirados_por_banco, ignore_index=True)
+                if not df_retirados.empty:
+                    df_retirados = df_retirados.sort_values(
+                        ['DATA', 'DESCRIÇÃO'], kind='stable'
+                    ).reset_index(drop=True)
                 modelo_org_bytes = None
                 for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
                     if os.path.exists(caminho_modelo):
@@ -1240,7 +1310,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             modelo_org_bytes = arquivo_modelo.read()
                         break
                 arquivo_final = gerar_excel_nova_geracao(
-                    df_org, df_retirados, modelo_org_bytes
+                    dados_exportacao_por_banco, modelo_org_bytes
                 )
 
                 total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
@@ -1269,31 +1339,39 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         previa_ret['DATA'] = pd.to_datetime(previa_ret['DATA']).dt.strftime('%d/%m/%Y')
                         st.dataframe(formatar_dataframe_moeda_br(previa_ret, ['VALOR']), use_container_width=True, height=280)
 
+                nome_saida_banco = (
+                    configs_selecionadas[0]['nome']
+                    if len(configs_selecionadas) == 1
+                    else f"Separado_{len(configs_selecionadas)}_Bancos"
+                )
                 st.download_button(
-                    "Baixar Modelo Domínio organizado (.XLSX)",
+                    "Baixar Modelo Domínio com abas por banco (.XLSX)",
                     data=arquivo_final,
-                    file_name=f"Nova_Geracao_{config_banco['nome']}_Modelo_Dominio.xlsx",
+                    file_name=f"Nova_Geracao_{nome_saida_banco}_Modelo_Dominio.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key=f"dl_org_nova_{config_banco['slug']}",
+                    key="dl_org_nova_multibanco",
                     use_container_width=True
                 )
 
                 st.markdown("---")
                 st.markdown("### Conferência com o extrato bancário")
                 st.caption(
-                    f"Anexe o extrato do {config_banco['nome']} para comparar o movimento líquido de cada dia "
-                    "e localizar lançamentos ausentes ou incluídos a mais."
+                    f"Anexe os extratos dos bancos selecionados ({nomes_bancos}) para comparar "
+                    "o movimento líquido de cada dia e localizar lançamentos ausentes ou incluídos a mais."
                 )
-                extrato_conferencia = st.file_uploader(
-                    "Envie o extrato bancário para conferência",
+                extratos_conferencia = st.file_uploader(
+                    "Envie o(s) extrato(s) bancário(s) para conferência",
                     type=["pdf", "ofx", "csv", "xlsx", "xls"],
-                    key=f"org_extrato_conferencia_nova_{config_banco['slug']}"
+                    accept_multiple_files=True,
+                    key="org_extrato_conferencia_nova_multibanco"
                 )
 
-                if extrato_conferencia:
-                    lancamentos_extrato = processar_extrato_conferencia_empresa(
-                        extrato_conferencia.getvalue(), extrato_conferencia.name
-                    )
+                if extratos_conferencia:
+                    lancamentos_extrato = []
+                    for extrato_conferencia in extratos_conferencia:
+                        lancamentos_extrato.extend(processar_extrato_conferencia_empresa(
+                            extrato_conferencia.getvalue(), extrato_conferencia.name
+                        ))
                     if not lancamentos_extrato:
                         st.warning(
                             "Não foi possível identificar lançamentos no extrato. "
