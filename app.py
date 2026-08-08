@@ -97,6 +97,16 @@ st.markdown("""
         }
         .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
         .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
+        
+        /* Banner de aviso padrão */
+        .aviso-banner {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .aviso-banner p { margin: 0; color: #c9d1d9; font-size: 14px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -616,7 +626,7 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
     mudar_pagina('razao')
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v6.0 · AI Powered</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v6.1 · Smart Layout</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -868,7 +878,13 @@ elif st.session_state['pagina_ativa'] == 'razao':
         st.title("Conciliação: Extrato x Razão da Domínio")
     
     st.caption("Compare separadamente as Entradas e Saídas diárias do extrato bancário com o Razão contábil no período desejado.")
-    st.markdown("---")
+    
+    # Aviso centralizado e alinhado ACIMA das colunas de upload
+    st.markdown("""
+        <div class="aviso-banner">
+            <p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
     col_up1, col_up2 = st.columns(2)
     with col_up1:
@@ -876,7 +892,6 @@ elif st.session_state['pagina_ativa'] == 'razao':
         arq_extrato = st.file_uploader("Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
     with col_up2:
         st.markdown("##### 2. Razão da Domínio")
-        st.caption("⚠️ **Dica:** Para evitar erros de leitura, abra o relatório `.xls` da Domínio no Excel e salve-o como **CSV (separado por vírgulas)** antes de importar.")
         arq_razao = st.file_uploader("Envie o Razão exportado (XLSX, XLS ou CSV)", type=["csv", "xlsx", "xls"], key="up_razao")
 
     if arq_extrato and arq_razao:
