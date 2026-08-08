@@ -90,8 +90,18 @@ def interpretar_sinal_inteligente(historico_str, valor_num, explicit_nature=""):
     # 2. Se o valor já veio negativo do arquivo original
     if valor_num < 0:
         return -val
+
+    # 3. Indicadores inequívocos de entrada têm prioridade sobre termos como
+    # "aplic" que podem aparecer no complemento de um rendimento.
+    termos_entrada = [
+        'pix recebido', 'ted recebida', 'ted recebido', 'recebimento',
+        'recebimentos', 'rendimento', 'rendimentos', 'deposito',
+        'boleto recebido', 'boletos recebidos', 'estorno cred', 'credito'
+    ]
+    if any(termo in h_norm for termo in termos_entrada):
+        return val
         
-    # 3. Análise semântica inteligente por palavras-chave de saída no histórico
+    # 4. Análise semântica inteligente por palavras-chave de saída no histórico
     termos_saida = [
         'ted emitido', 'ted emi do', 'pix env', 'pix enviado', 'ted env', 'doc env', 'pagto', 'pagamento', 
         'tarifa', 'manut', 'cobranca', 'debito', 'saque', 'compra', 'cartao', 
@@ -131,18 +141,32 @@ def limpar_valor_monetario(v_val):
         return 0.0
 
 def identificar_banco_inteligente(texto_conteudo, filename_str=""):
-    combo = (str(texto_conteudo) + " " + str(filename_str)).upper()
-    if "FIBRA" in combo or "58.616.418" in combo: return "BANCO FIBRA"
-    elif "ITAÚ" in combo or "ITAU" in combo or "0341" in combo: return "BANCO ITAU"
-    elif "BRADESCO" in combo: return "BANCO BRADESCO"
-    elif "SANTANDER" in combo: return "BANCO SANTANDER"
-    elif "CAIXA" in combo: return "CAIXA ECONOMICA"
-    elif "BANCO DO BRASIL" in combo or " BB " in combo or combo.startswith("BB"): return "BANCO DO BRASIL"
-    elif "NUBANK" in combo or "NU PAGAMENTO" in combo: return "NUBANK"
-    elif "INTER" in combo: return "BANCO INTER"
-    elif "SICOOB" in combo: return "SICOOB"
-    elif "SICREDI" in combo: return "SICREDI"
-    else: return "BANCO CONTA CORRENTE"
+    # O nome do arquivo tem prioridade para impedir que fornecedores citados no
+    # histórico sejam confundidos com o banco emissor do extrato.
+    nome = normalizar_texto(str(filename_str)).upper()
+    cabecalho = normalizar_texto(str(texto_conteudo)[:6000]).upper()
+
+    bancos = [
+        (['ITAU'], 'BANCO ITAU'),
+        (['BRADESCO'], 'BANCO BRADESCO'),
+        (['FIBRA'], 'BANCO FIBRA'),
+        (['SANTANDER'], 'BANCO SANTANDER'),
+        (['SICOOB'], 'SICOOB'),
+        (['SICREDI'], 'SICREDI'),
+        (['NUBANK', 'NU PAGAMENTO'], 'NUBANK'),
+        (['CAIXA ECONOMICA'], 'CAIXA ECONOMICA'),
+        (['BANCO DO BRASIL'], 'BANCO DO BRASIL'),
+        (['BANCO INTER'], 'BANCO INTER'),
+    ]
+    for termos, banco in bancos:
+        if any(termo in nome for termo in termos):
+            return banco
+    for termos, banco in bancos:
+        if any(termo in cabecalho for termo in termos):
+            return banco
+    if '58.616.418' in str(texto_conteudo)[:6000]: return 'BANCO FIBRA'
+    if re.search(r'\b0?341\b', cabecalho): return 'BANCO ITAU'
+    return "BANCO CONTA CORRENTE"
 
 # ==============================================================================
 # MOTORES DE EXTRAÇÃO UNIVERSAL
@@ -325,6 +349,15 @@ def processar_pdf_layout_universal(reader, banco_identificado):
         linhas = texto_layout.splitlines()
         for indice_linha, linha in enumerate(linhas):
             norm = normalizar_texto(linha)
+
+            # Encerra o extrato principal antes de avisos, projeções ou uma nova
+            # tabela de lançamentos futuros existente no mesmo PDF.
+            if lancamentos and (
+                'lancamentos futuros do periodo' in norm or
+                norm.startswith('aviso: os saldos acima')
+            ):
+                parar_processamento = True
+                break
 
             # Detecta dinamicamente as colunas da tabela.
             tem_data = re.search(r'\bdata\b', norm) is not None
