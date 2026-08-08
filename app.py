@@ -51,17 +51,55 @@ def sanitizar_dataframe(df):
     return df
 
 def limpar_valor_monetario(v_val):
+    """Extrai o valor numérico e preserva o sinal negativo se houver identificador '-' ou 'D'."""
     if pd.isna(v_val) or v_val == '': return 0.0
     if isinstance(v_val, (int, float)): return float(v_val)
+    
     s = str(v_val).strip()
-    s = re.sub(r'[^\d,\.-]', '', s)
-    if not s or s.lower() == 'nan': return 0.0
+    
+    # Verifica o sinal ANTES de limpar as letras e caracteres
+    is_negative = '-' in s or s.upper().endswith('D') or s.upper().endswith('SAÍDA') or s.upper().endswith('SAIDA')
+    
+    s = re.sub(r'[^\d,\.]', '', s)
+    if not s: return 0.0
+    
     if ',' in s and '.' in s:
         last_dot, last_comma = s.rfind('.'), s.rfind(',')
         s = s.replace('.', '').replace(',', '.') if last_comma > last_dot else s.replace(',', '')
-    elif ',' in s: s = s.replace(',', '.')
-    try: return float(s)
-    except: return 0.0
+    elif ',' in s: 
+        s = s.replace(',', '.')
+        
+    try: 
+        val = float(s)
+        return -abs(val) if is_negative else abs(val)
+    except: 
+        return 0.0
+
+def determinar_valor_real(v_float, hist, tipo_str=""):
+    """
+    Motor Inteligente:
+    1º - Respeita o sinal matemático se já foi extraído como negativo.
+    2º - Respeita a coluna de 'Tipo' explícita da planilha (D/C).
+    3º - Se for neutro, usa IA Semântica nas palavras do histórico.
+    """
+    if v_float < 0:
+        return v_float
+        
+    tipo_upper = str(tipo_str).upper()
+    if 'D' in tipo_upper or 'SAÍDA' in tipo_upper or 'SAIDA' in tipo_upper or 'DEBITO' in tipo_upper:
+        return -abs(v_float)
+    elif 'C' in tipo_upper or 'ENTRADA' in tipo_upper or 'CREDITO' in tipo_upper:
+        return abs(v_float)
+        
+    hist_upper = str(hist).upper()
+    palavras_debito = ['TARIFA', 'EMITIDO', 'PGTO', 'DEBITO', 'CHEQUE', 'SAQUE', 'PAGAMENTO', 'IMPOSTO', 'IOF', 'IRRF', 'ENVIADO', 'COMPRA', 'MENSALIDADE', 'APLICACAO', 'APLICAÇÃO', 'PAG ']
+    palavras_credito = ['RECEBIDO', 'ESTORNO', 'DEVOLUCAO', 'DEVOLUÇÃO', 'CREDITO', 'REMUNERACAO', 'RENDIMENTO', 'RESGATE']
+    
+    if any(w in hist_upper for w in palavras_debito):
+        if not any(w in hist_upper for w in palavras_credito):
+            return -abs(v_float)
+            
+    return abs(v_float)
 
 def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     combo = (str(texto_conteudo) + " " + str(filename_str)).upper()
@@ -76,15 +114,6 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     elif "SICOOB" in combo: return "SICOOB"
     elif "SICREDI" in combo: return "SICREDI"
     else: return "BANCO CONTA CORRENTE"
-
-def deduzir_debito_pela_palavra(hist, is_negativo_atual):
-    if is_negativo_atual: return True
-    hist_upper = str(hist).upper()
-    palavras_debito = ['TARIFA', 'EMITIDO', 'PGTO', 'DEBITO', 'CHEQUE', 'SAQUE', 'RESGATE', 'PAGAMENTO', 'IMPOSTO', 'IOF', 'IRRF', 'PIX ENVIADO', 'TED ENVIADA', 'DOC ENVIADO']
-    palavras_credito = ['RECEBIDO', 'ESTORNO', 'DEVOLUCAO', 'DEVOLUÇÃO', 'CREDITO']
-    if any(w in hist_upper for w in palavras_debito):
-        if not any(w in hist_upper for w in palavras_credito): return True
-    return False
 
 def processar_ofx(file_bytes, filename):
     lancamentos = []
@@ -109,7 +138,8 @@ def processar_ofx(file_bytes, filename):
             dt_s = match_date.group(1).replace('-', '').replace('/', '').replace('.', '')
             if len(dt_s) >= 8: data_fmt = f"{dt_s[6:8]}/{dt_s[4:6]}/{dt_s[:4]}"
             else: continue
-            valor_float = limpar_valor_monetario(match_amt.group(1).replace('+', '').strip())
+            
+            valor_float = limpar_valor_monetario(match_amt.group(1).strip())
             historico = limpar_caracteres_ilegais(match_memo.group(1).strip().replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')) if match_memo else "TRANSACAO OFX"
             if 'SALDO' in historico.upper(): continue
             if valor_float != 0: lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': data_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico})
@@ -180,19 +210,14 @@ def processar_planilha_universal(file_bytes, filename):
         valor_float = 0.0
         
         if col_cred or col_deb:
-            v_cred = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else 0.0
-            v_deb = limpar_valor_monetario(row[col_deb]) if col_deb and pd.notna(row[col_deb]) else 0.0
-            if v_cred != 0: valor_float = abs(v_cred)  
-            elif v_deb != 0: valor_float = -abs(v_deb) 
+            v_cred = abs(limpar_valor_monetario(row[col_cred])) if col_cred and pd.notna(row[col_cred]) else 0.0
+            v_deb = abs(limpar_valor_monetario(row[col_deb])) if col_deb and pd.notna(row[col_deb]) else 0.0
+            if v_cred != 0: valor_float = v_cred  
+            elif v_deb != 0: valor_float = -v_deb 
         elif col_val and pd.notna(row[col_val]):
-            val_base = limpar_valor_monetario(row[col_val])
-            if val_base != 0:
-                is_negativo = False
-                tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
-                if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEBITO' in tipo_str: is_negativo = True
-                elif val_base < 0: is_negativo = True
-                is_negativo = deduzir_debito_pela_palavra(hist_fmt, is_negativo)
-                valor_float = -abs(val_base) if is_negativo else abs(val_base)
+            v_base = limpar_valor_monetario(row[col_val])
+            tipo_str = row[col_tipo] if col_tipo and pd.notna(row[col_tipo]) else ""
+            valor_float = determinar_valor_real(v_base, hist_fmt, tipo_str)
 
         if valor_float != 0:
             lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': dt_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_fmt})
@@ -230,9 +255,10 @@ def processar_pdf_fibra(caminho_pdf):
             val_str = vals[-1] 
             hist = block[10:].replace(f'R$ {val_str}', '').strip()
             hist = re.sub(r'\s+', ' ', hist)
+            
             v = limpar_valor_monetario(val_str)
-            is_debito = deduzir_debito_pela_palavra(hist, False)
-            if is_debito: v = -abs(v)
+            v = determinar_valor_real(v, hist)
+            
             hist = limpar_caracteres_ilegais(hist)
             lancamentos.append({'DESCRIÇÃO': 'BANCO FIBRA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
     except: pass
@@ -268,9 +294,7 @@ def processar_pdf_santander(caminho_pdf):
                         if 'SALDO' not in hist.upper():
                             try:
                                 v = limpar_valor_monetario(val_str)
-                                is_negativo = '-' in val_str
-                                is_negativo = deduzir_debito_pela_palavra(hist, is_negativo)
-                                v = -abs(v) if is_negativo else abs(v)
+                                v = determinar_valor_real(v, hist)
                                 lancamentos.append({'DESCRIÇÃO': 'BANCO SANTANDER', 'DATA': dt_str, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
                             except: pass
                 i += 1
@@ -296,6 +320,7 @@ def processar_pdf_caixa(caminho_pdf):
                         v = limpar_valor_monetario(val_str)
                         if tipo == 'D': v = -abs(v)
                         hist_completo = limpar_caracteres_ilegais(f"{historico.strip()} {doc.strip()}" if doc else historico.strip())
+                        v = determinar_valor_real(v, hist_completo)
                         lancamentos.append({'DESCRIÇÃO': 'CAIXA ECONOMICA', 'DATA': data, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist_completo})
                     except: pass
     except: pass
@@ -327,9 +352,7 @@ def processar_pdf_bradesco(caminho_pdf):
                     if 'SALDO' not in historico_completo.upper() and 'TOTAL' not in historico_completo.upper():
                         try:
                             v = limpar_valor_monetario(val_str)
-                            is_negativo = '-' in val_str
-                            is_negativo = deduzir_debito_pela_palavra(historico_completo, is_negativo)
-                            v = -abs(v) if is_negativo else abs(v)
+                            v = determinar_valor_real(v, historico_completo)
                             lancamentos.append({'DESCRIÇÃO': 'BANCO BRADESCO', 'DATA': current_date, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico_completo})
                         except: pass
                 else:
@@ -349,7 +372,8 @@ def processar_pdf_generico_universal(caminho_pdf):
             if not texto: continue
             for linha in texto.split('\n'):
                 linha = linha.strip()
-                if not linha or any(s in linha.upper() for s in ['SALDO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL', 'BLOQUEADO', 'PAGINA', 'TRANSPORTE', 'DISPONIVEL']): continue
+                if not linha or any(s in linha.upper() for s in ['SALDO', 'TOTAL', 'SUBTOTAL', 'INICIAL', 'FINAL', 'BLOQUEADO', 'PAGINA', 'TRANSPORTE', 'DISPONIVEL']): 
+                    continue
                 match_data = re.search(r'(\d{2}/\d{2}(?:/\d{4})?)', linha)
                 if match_data:
                     dt_encontrada = match_data.group(1)
@@ -358,15 +382,12 @@ def processar_pdf_generico_universal(caminho_pdf):
                 matches_vals = re.findall(r'(-?\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]?)', linha, re.IGNORECASE)
                 if matches_vals and data_atual:
                     val_str = matches_vals[-1].strip()
-                    is_debito = False
-                    if val_str.upper().endswith('D') or '-' in val_str: is_debito = True
-                    val_limpo = val_str.upper().replace('C', '').replace('D', '').strip()
                     try:
-                        v = limpar_valor_monetario(val_limpo)
+                        v = limpar_valor_monetario(val_str)
                         hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
-                        is_debito = deduzir_debito_pela_palavra(hist, is_debito)
+                        v = determinar_valor_real(v, hist)
+                        
                         if v != 0:
-                            if is_debito: v = -abs(v)
                             if len(hist) < 2 or 'SALDO' in hist.upper(): continue
                             lancamentos.append({'DESCRIÇÃO': 'EXTRATO BANCARIO', 'DATA': data_atual, 'VALOR': v, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': hist})
                     except: pass
@@ -427,7 +448,7 @@ def processar_razao_dominio(file_bytes, filename):
                         if df.shape[1] > 1: break
                     except: continue
                 if df is not None and df.shape[1] > 1: break
-    except Exception as e:
+    except Exception:
         return None
     
     if df is None or df.empty: return None
@@ -468,8 +489,8 @@ def processar_razao_dominio(file_bytes, filename):
         v_sai = 0.0
         
         if col_deb and col_cred:
-            v_sai = limpar_valor_monetario(row[col_deb]) if pd.notna(row[col_deb]) else 0.0
-            v_ent = limpar_valor_monetario(row[col_cred]) if pd.notna(row[col_cred]) else 0.0
+            v_sai = abs(limpar_valor_monetario(row[col_deb])) if pd.notna(row[col_deb]) else 0.0
+            v_ent = abs(limpar_valor_monetario(row[col_cred])) if pd.notna(row[col_cred]) else 0.0
         elif col_val and pd.notna(row[col_val]):
             val_num = limpar_valor_monetario(row[col_val])
             if val_num < 0: v_sai = abs(val_num)
@@ -482,7 +503,6 @@ def processar_razao_dominio(file_bytes, filename):
             
     if not dados: return None
     df_res = pd.DataFrame(dados)
-    # GARANTINDO A DATA ÂNCORA COM ROBUSTEZ
     df_res['DATA_DT'] = pd.to_datetime(df_res['DATA'], format='%d/%m/%Y', errors='coerce')
     return df_res.dropna(subset=['DATA_DT'])
 
@@ -503,7 +523,7 @@ if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_
 if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v7.2 · Fast Audit</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v7.3 · Smart Audit Fix</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -695,156 +715,163 @@ elif st.session_state['pagina_ativa'] == 'razao':
     with col_up2: arq_razao = st.file_uploader("2º - Envie o Razão exportado (CSV ou XLSX)", type=["csv", "xlsx", "xls"], key="up_razao")
 
     if arq_extrato and arq_razao:
-        ext_bytes, ext_ext = arq_extrato.getvalue(), os.path.splitext(arq_extrato.name)[1].lower()
-        lancamentos_ext = []
-        if ext_ext == '.ofx': lancamentos_ext = processar_ofx(ext_bytes, arq_extrato.name)
-        elif ext_ext in ['.csv', '.xlsx', '.xls']: lancamentos_ext = processar_planilha_universal(ext_bytes, arq_extrato.name)
-        elif ext_ext == '.pdf':
-            tmp_ext = f"temp_ext_{arq_extrato.name}"
-            with open(tmp_ext, "wb") as f: f.write(ext_bytes)
-            lancamentos_ext = processar_arquivo_pdf(tmp_ext)
-            if os.path.exists(tmp_ext): os.remove(tmp_ext)
-            
-        raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
-        
-        if 'erro_bof_xls' in st.session_state: del st.session_state['erro_bof_xls']
-            
-        df_razao_bruto = processar_razao_dominio(raz_bytes, raz_name)
-
-        if st.session_state.get('erro_bof_xls', False):
-            st.markdown("""<div class="alerta-dominio"><h4>🚨 Formato .XLS da Domínio Detectado!</h4><p>O sistema Domínio exporta relatórios em <code>.xls</code> usando um formato binário antigo da Microsoft que oculta os valores originais.</p><p style="margin-top: 10px;"><strong>💡 Como resolver agora:</strong><br>Abra o arquivo <code>.xls</code> no seu Excel e clique em <b>Salvar Como -> CSV (separado por vírgulas)</b> ou <b>Pasta de Trabalho do Excel (.xlsx)</b> e anexe novamente.</p></div>""", unsafe_allow_html=True)
-            st.stop()
-
-        if lancamentos_ext and df_razao_bruto is not None and not df_razao_bruto.empty:
-            df_ext = pd.DataFrame(lancamentos_ext)
-            df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], format='%d/%m/%Y', errors='coerce')
-            df_ext = df_ext.dropna(subset=['DATA_DT'])
-            
-            df_ext['ENTRADAS_EXTRATO'] = df_ext['VALOR'].apply(lambda x: x if x > 0 else 0.0)
-            df_ext['SAIDAS_EXTRATO'] = df_ext['VALOR'].apply(lambda x: abs(x) if x < 0 else 0.0)
-            
-            # Agrupamento Diário Extrato usando a DATA ANCÔRA (DATA_DT)
-            df_ext_agregado = df_ext.groupby('DATA_DT')[['ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].sum().reset_index()
-            
-            # Agrupamento Diário Razão usando a DATA ANCÔRA (DATA_DT)
-            df_razao_agregado = df_razao_bruto.groupby('DATA_DT')[['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].sum().reset_index()
-
-            # Mescla Segura via DATA_DT para garantir que dias idênticos se encontrem!
-            df_conciliacao = pd.merge(df_ext_agregado, df_razao_agregado, on='DATA_DT', how='outer').fillna(0)
-            df_conciliacao = df_conciliacao.sort_values('DATA_DT')
-            df_conciliacao['DATA'] = df_conciliacao['DATA_DT'].dt.strftime('%d/%m/%Y')
-
-            # 2. FILTRO DE PERÍODO
-            st.markdown("---")
-            st.markdown("##### 📅 3. Filtro de Período da Conciliação")
-            
-            dt_min_geral, dt_max_geral = df_conciliacao['DATA_DT'].min().date(), df_conciliacao['DATA_DT'].max().date()
-            
-            col_p1, col_p2 = st.columns(2)
-            with col_p1: data_ini_filtro = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_ini")
-            with col_p2: data_fim_filtro = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_fim")
-            
-            if data_ini_filtro > data_fim_filtro:
-                st.warning("⚠️ A data inicial não pode ser maior que a data final.")
-                data_ini_filtro, data_fim_filtro = dt_min_geral, dt_max_geral
-
-            df_conciliacao = df_conciliacao[(df_conciliacao['DATA_DT'].dt.date >= data_ini_filtro) & (df_conciliacao['DATA_DT'].dt.date <= data_fim_filtro)].copy()
-
-            # 3. CÁLCULO DE ROLAGEM DE SALDO ACUMULADO
-            df_conciliacao = df_conciliacao.sort_values('DATA_DT')
-            df_conciliacao['SALDO_EXTRATO'] = saldo_ini_ext + df_conciliacao['ENTRADAS_EXTRATO'].cumsum() - df_conciliacao['SAIDAS_EXTRATO'].cumsum()
-            df_conciliacao['SALDO_RAZAO'] = saldo_ini_raz + df_conciliacao['ENTRADAS_RAZAO'].cumsum() - df_conciliacao['SAIDAS_RAZAO'].cumsum()
-
-            df_conciliacao['DIF_ENTRADAS'] = df_conciliacao['ENTRADAS_EXTRATO'] - df_conciliacao['ENTRADAS_RAZAO']
-            df_conciliacao['DIF_SAIDAS'] = df_conciliacao['SAIDAS_EXTRATO'] - df_conciliacao['SAIDAS_RAZAO']
-            df_conciliacao['DIF_SALDO'] = df_conciliacao['SALDO_EXTRATO'] - df_conciliacao['SALDO_RAZAO']
-            
-            def status_dia(row):
-                return "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 and abs(row['DIF_SALDO']) < 0.01 else "❌ Divergente"
+        try:
+            ext_bytes, ext_ext = arq_extrato.getvalue(), os.path.splitext(arq_extrato.name)[1].lower()
+            lancamentos_ext = []
+            if ext_ext == '.ofx': lancamentos_ext = processar_ofx(ext_bytes, arq_extrato.name)
+            elif ext_ext in ['.csv', '.xlsx', '.xls']: lancamentos_ext = processar_planilha_universal(ext_bytes, arq_extrato.name)
+            elif ext_ext == '.pdf':
+                tmp_ext = f"temp_ext_{arq_extrato.name}"
+                with open(tmp_ext, "wb") as f: f.write(ext_bytes)
+                lancamentos_ext = processar_arquivo_pdf(tmp_ext)
+                if os.path.exists(tmp_ext): os.remove(tmp_ext)
                 
-            df_conciliacao['STATUS'] = df_conciliacao.apply(status_dia, axis=1)
+            raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
             
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("### 📊 Resultado da Conferência Diária")
-            
-            saldo_final_ext = df_conciliacao['SALDO_EXTRATO'].iloc[-1] if not df_conciliacao.empty else saldo_ini_ext
-            saldo_final_raz = df_conciliacao['SALDO_RAZAO'].iloc[-1] if not df_conciliacao.empty else saldo_ini_raz
-            
-            rc1, rc2, rc3 = st.columns(3)
-            with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Extrato)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_ext)}</div></div>', unsafe_allow_html=True)
-            with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Razão)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_raz)}</div></div>', unsafe_allow_html=True)
-            with rc3:
-                dif_final = saldo_final_ext - saldo_final_raz
-                st.markdown(f'<div class="metric-card"><div class="metric-title">Diferença de Saldo Final</div><div class="metric-value" style="color: {"#3fb950" if abs(dif_final) < 0.01 else "#f85149"};">{formatar_moeda(dif_final)}</div></div>', unsafe_allow_html=True)
+            if 'erro_bof_xls' in st.session_state: del st.session_state['erro_bof_xls']
+                
+            df_razao_bruto = processar_razao_dominio(raz_bytes, raz_name)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Tabela limpa configurada pelo Streamlit (evita erros de conversão no dataframe original)
-            df_exibicao = df_conciliacao[['DATA', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO', 'SALDO_EXTRATO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO', 'SALDO_RAZAO', 'STATUS']].copy()
-            df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)', 'Status']
-            
-            st.dataframe(
-                df_exibicao, 
-                use_container_width=True, 
-                height=380,
-                column_config={
-                    "Entradas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Saldo Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Entradas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Saídas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Saldo Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f")
-                }
-            )
+            if st.session_state.get('erro_bof_xls', False):
+                st.markdown("""<div class="alerta-dominio"><h4>🚨 Formato .XLS da Domínio Detectado!</h4><p>O sistema Domínio exporta relatórios em <code>.xls</code> usando um formato binário antigo da Microsoft que oculta os valores originais.</p><p style="margin-top: 10px;"><strong>💡 Como resolver agora:</strong><br>Abra o arquivo <code>.xls</code> no seu Excel e clique em <b>Salvar Como -> CSV (separado por vírgulas)</b> ou <b>Pasta de Trabalho do Excel (.xlsx)</b> e anexe novamente.</p></div>""", unsafe_allow_html=True)
+                st.stop()
 
-            # 4. AUDITORIA FINA (RAIO-X)
-            df_divergencias = df_conciliacao[df_conciliacao['STATUS'] == '❌ Divergente'].copy()
-            
-            if not df_divergencias.empty:
+            if lancamentos_ext and df_razao_bruto is not None and not df_razao_bruto.empty:
+                # ---------------- PREPARAÇÃO EXTRATO ----------------
+                df_ext = pd.DataFrame(lancamentos_ext)
+                df_ext['DATA_DT'] = pd.to_datetime(df_ext['DATA'], format='%d/%m/%Y', errors='coerce')
+                df_ext = df_ext.dropna(subset=['DATA_DT'])
+                
+                df_ext['ENTRADAS_EXTRATO'] = df_ext['VALOR'].apply(lambda x: x if x > 0 else 0.0)
+                df_ext['SAIDAS_EXTRATO'] = df_ext['VALOR'].apply(lambda x: abs(x) if x < 0 else 0.0)
+                
+                df_ext_agregado = df_ext.groupby('DATA_DT')[['ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].sum().reset_index()
+                
+                # ---------------- PREPARAÇÃO RAZÃO ----------------
+                df_razao_bruto['DATA_DT'] = pd.to_datetime(df_razao_bruto['DATA'], format='%d/%m/%Y', errors='coerce')
+                df_razao_bruto = df_razao_bruto.dropna(subset=['DATA_DT'])
+                df_razao_agregado = df_razao_bruto.groupby('DATA_DT')[['ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].sum().reset_index()
+
+                # ---------------- MESCLA SEGURA PELA DATA ----------------
+                df_conciliacao = pd.merge(df_ext_agregado, df_razao_agregado, on='DATA_DT', how='outer').fillna(0)
+                df_conciliacao = df_conciliacao.sort_values('DATA_DT')
+                df_conciliacao['DATA_EXIBICAO'] = df_conciliacao['DATA_DT'].dt.strftime('%d/%m/%Y')
+
+                # ---------------- FILTRO DE PERÍODO ----------------
                 st.markdown("---")
-                st.markdown("### 🔍 Auditoria Fina (Divergências)")
-                st.markdown("Descubra exatamente qual lançamento está faltando no sistema comparando os dias divergentes.")
+                st.markdown("##### 📅 3. Filtro de Período da Conciliação")
                 
-                lista_dias_div_str = df_divergencias['DATA'].tolist()
+                dt_min_geral, dt_max_geral = df_conciliacao['DATA_DT'].min().date(), df_conciliacao['DATA_DT'].max().date()
                 
-                if lista_dias_div_str:
-                    dia_selecionado_str = st.selectbox("Selecione um dia com divergência para analisar os lançamentos originais:", lista_dias_div_str)
-                    dia_selecionado_dt = pd.to_datetime(dia_selecionado_str, format='%d/%m/%Y')
+                col_p1, col_p2 = st.columns(2)
+                with col_p1: data_ini_filtro = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_ini")
+                with col_p2: data_fim_filtro = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="raz_fim")
+                
+                if data_ini_filtro > data_fim_filtro:
+                    st.warning("⚠️ A data inicial não pode ser maior que a data final.")
+                    data_ini_filtro, data_fim_filtro = dt_min_geral, dt_max_geral
+
+                df_conciliacao = df_conciliacao[(df_conciliacao['DATA_DT'].dt.date >= data_ini_filtro) & (df_conciliacao['DATA_DT'].dt.date <= data_fim_filtro)].copy()
+
+                # ---------------- ROLAGEM DE SALDO ACUMULADO ----------------
+                df_conciliacao = df_conciliacao.sort_values('DATA_DT')
+                df_conciliacao['SALDO_EXTRATO'] = saldo_ini_ext + df_conciliacao['ENTRADAS_EXTRATO'].cumsum() - df_conciliacao['SAIDAS_EXTRATO'].cumsum()
+                df_conciliacao['SALDO_RAZAO'] = saldo_ini_raz + df_conciliacao['ENTRADAS_RAZAO'].cumsum() - df_conciliacao['SAIDAS_RAZAO'].cumsum()
+
+                df_conciliacao['DIF_ENTRADAS'] = df_conciliacao['ENTRADAS_EXTRATO'] - df_conciliacao['ENTRADAS_RAZAO']
+                df_conciliacao['DIF_SAIDAS'] = df_conciliacao['SAIDAS_EXTRATO'] - df_conciliacao['SAIDAS_RAZAO']
+                df_conciliacao['DIF_SALDO'] = df_conciliacao['SALDO_EXTRATO'] - df_conciliacao['SALDO_RAZAO']
+                
+                def status_dia(row):
+                    return "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 and abs(row['DIF_SALDO']) < 0.01 else "❌ Divergente"
                     
-                    col_aud1, col_aud2 = st.columns(2)
-                    with col_aud1:
-                        st.markdown("##### 🏦 Lançamentos do Extrato")
-                        df_ext_dia = df_ext[df_ext['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].copy()
-                        df_ext_dia.columns = ['Histórico Bancário', 'Entrada', 'Saída']
-                        st.dataframe(df_ext_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
-                        
-                    with col_aud2:
-                        st.markdown("##### 🏢 Lançamentos da Domínio")
-                        df_raz_dia = df_razao_bruto[df_razao_bruto['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].copy()
-                        df_raz_dia.columns = ['Histórico Contábil', 'Entrada', 'Saída']
-                        st.dataframe(df_raz_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
-            else:
-                st.success("✨ Conciliação perfeita! Nenhuma divergência encontrada no período selecionado.")
+                df_conciliacao['STATUS'] = df_conciliacao.apply(status_dia, axis=1)
+                
+                # ---------------- CARDS E TABELA PRINCIPAL ----------------
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("### 📊 Resultado da Conferência Diária")
+                
+                saldo_final_ext = df_conciliacao['SALDO_EXTRATO'].iloc[-1] if not df_conciliacao.empty else saldo_ini_ext
+                saldo_final_raz = df_conciliacao['SALDO_RAZAO'].iloc[-1] if not df_conciliacao.empty else saldo_ini_raz
+                
+                rc1, rc2, rc3 = st.columns(3)
+                with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Extrato)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_ext)}</div></div>', unsafe_allow_html=True)
+                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Final (Razão)</div><div class="metric-value" style="color: #f0f6fc;">{formatar_moeda(saldo_final_raz)}</div></div>', unsafe_allow_html=True)
+                with rc3:
+                    dif_final = saldo_final_ext - saldo_final_raz
+                    st.markdown(f'<div class="metric-card"><div class="metric-title">Diferença de Saldo Final</div><div class="metric-value" style="color: {"#3fb950" if abs(dif_final) < 0.01 else "#f85149"};">{formatar_moeda(dif_final)}</div></div>', unsafe_allow_html=True)
 
-            # 5. EXPORTAÇÃO DO RELATÓRIO DE AUDITORIA
-            st.markdown("---")
-            st.markdown("##### 📥 Exportar Relatório de Auditoria")
-            st.caption("Faça o download do cruzamento diário e da lista de dias divergentes para correção.")
-            
-            buf_audit = io.BytesIO()
-            with pd.ExcelWriter(buf_audit, engine='openpyxl') as writer:
-                df_exibicao.to_excel(writer, sheet_name="Resumo Geral", index=False)
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO', 'SALDO_EXTRATO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO', 'SALDO_RAZAO', 'STATUS']].copy()
+                df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)', 'Status']
+                
+                st.dataframe(
+                    df_exibicao, 
+                    use_container_width=True, 
+                    height=380,
+                    column_config={
+                        "Entradas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saldo Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Entradas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saídas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saldo Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f")
+                    }
+                )
+
+                # ---------------- AUDITORIA FINA (RAIO-X) ----------------
+                df_divergencias = df_conciliacao[df_conciliacao['STATUS'] == '❌ Divergente'].copy()
+                
                 if not df_divergencias.empty:
-                    df_div_export = df_divergencias[['DATA', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'SALDO_EXTRATO', 'SALDO_RAZAO', 'DIF_SALDO']].copy()
-                    df_div_export.columns = ['Data', 'Entradas Extrato', 'Entradas Razao', 'Diferenca Entradas', 'Saidas Extrato', 'Saidas Razao', 'Diferenca Saidas', 'Saldo Extrato', 'Saldo Razao', 'Diferenca Saldo']
-                    df_div_export.to_excel(writer, sheet_name="Dias Divergentes", index=False)
+                    st.markdown("---")
+                    st.markdown("### 🔍 Auditoria Fina (Divergências)")
+                    st.markdown("Descubra exatamente qual lançamento está faltando comparando os dias divergentes.")
+                    
+                    df_divergencias['DATA_FORMATADA'] = df_divergencias['DATA_DT'].dt.strftime('%d/%m/%Y')
+                    opcoes_dias = df_divergencias['DATA_FORMATADA'].tolist()
+                    
+                    if opcoes_dias:
+                        dia_str = st.selectbox("Selecione um dia com divergência para analisar os lançamentos originais:", opcoes_dias)
+                        dia_selecionado_dt = pd.to_datetime(dia_str, format='%d/%m/%Y')
+                        
+                        col_aud1, col_aud2 = st.columns(2)
+                        with col_aud1:
+                            st.markdown("##### 🏦 Lançamentos do Extrato")
+                            df_ext_dia = df_ext[df_ext['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO']].copy()
+                            df_ext_dia.columns = ['Histórico Bancário', 'Entrada', 'Saída']
+                            st.dataframe(df_ext_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
+                            
+                        with col_aud2:
+                            st.markdown("##### 🏢 Lançamentos da Domínio")
+                            df_raz_dia = df_razao_bruto[df_razao_bruto['DATA_DT'] == dia_selecionado_dt][['HISTÓRICO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO']].copy()
+                            df_raz_dia.columns = ['Histórico Contábil', 'Entrada', 'Saída']
+                            st.dataframe(df_raz_dia, use_container_width=True, hide_index=True, column_config={"Entrada": st.column_config.NumberColumn(format="R$ %.2f"), "Saída": st.column_config.NumberColumn(format="R$ %.2f")})
+                else:
+                    st.success("✨ Conciliação perfeita! Nenhuma divergência encontrada no período selecionado.")
 
-            st.download_button(
-                label="Baixar Relatório em Excel (.XLSX)", 
-                data=buf_audit.getvalue(), 
-                file_name=f"Auditoria_Conciliacao_{data_ini_filtro.strftime('%d%m%Y')}_a_{data_fim_filtro.strftime('%d%m%Y')}.xlsx", 
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-                use_container_width=False
-            )
-        else:
-            st.warning("⚠️ Não conseguimos gerar a conciliação. Verifique se os arquivos contêm lançamentos válidos nas colunas de Data e Valores.")
+                # ---------------- EXPORTAÇÃO EXCEL ----------------
+                st.markdown("---")
+                st.markdown("##### 📥 Exportar Relatório de Auditoria")
+                st.caption("Faça o download do cruzamento diário e da lista de dias divergentes para correção.")
+                
+                buf_audit = io.BytesIO()
+                with pd.ExcelWriter(buf_audit, engine='openpyxl') as writer:
+                    df_exibicao.to_excel(writer, sheet_name="Resumo Geral", index=False)
+                    if not df_divergencias.empty:
+                        df_div_export = df_divergencias[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'SALDO_EXTRATO', 'SALDO_RAZAO', 'DIF_SALDO']].copy()
+                        df_div_export.columns = ['Data', 'Entradas Extrato', 'Entradas Razao', 'Diferenca Entradas', 'Saidas Extrato', 'Saidas Razao', 'Diferenca Saidas', 'Saldo Extrato', 'Saldo Razao', 'Diferenca Saldo']
+                        df_div_export.to_excel(writer, sheet_name="Dias Divergentes", index=False)
+
+                st.download_button(
+                    label="Baixar Relatório em Excel (.XLSX)", 
+                    data=buf_audit.getvalue(), 
+                    file_name=f"Auditoria_Conciliacao_{data_ini_filtro.strftime('%d%m%Y')}_a_{data_fim_filtro.strftime('%d%m%Y')}.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                    use_container_width=False
+                )
+
+            else:
+                st.warning("⚠️ Não conseguimos extrair as linhas contábeis. Verifique se os arquivos contêm colunas legíveis com Data, Valor/Débito/Crédito.")
+        except Exception as e:
+            st.error(f"🛑 Erro de execução ao cruzar os relatórios. Dica: Tente salvar o Razão da Domínio como CSV separado por vírgulas. Detalhe do Erro: {e}")
