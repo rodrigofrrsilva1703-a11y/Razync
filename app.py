@@ -59,6 +59,16 @@ def formatar_moeda(valor):
     try: return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     except: return "R$ 0,00"
 
+def formatar_dataframe_moeda_br(df, colunas):
+    """Formata apenas a cópia exibida; os dados originais continuam numéricos."""
+    exibicao = df.copy()
+    for coluna in colunas:
+        if coluna in exibicao.columns:
+            exibicao[coluna] = exibicao[coluna].apply(
+                lambda valor: formatar_moeda(valor) if pd.notna(valor) and valor != '' else ''
+            )
+    return exibicao
+
 def sanitizar_dataframe(df):
     for col in df.select_dtypes(include=['object', 'string']).columns: df[col] = df[col].apply(limpar_caracteres_ilegais)
     return df
@@ -964,7 +974,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.2 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.3 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1079,7 +1089,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                                 st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_g};">{formatar_moeda(saldo_liq_g)}</div></div>', unsafe_allow_html=True)
 
                             st.markdown("<br>", unsafe_allow_html=True); st.markdown("##### Prévia Consolidada")
-                            st.dataframe(df_geral_final, use_container_width=True, height=280)
+                            st.dataframe(formatar_dataframe_moeda_br(df_geral_final, ['VALOR']), use_container_width=True, height=280)
                             
                             st.markdown("##### Exportar")
                             cc_dl1, cc_dl2 = st.columns(2)
@@ -1135,7 +1145,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                             st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo Líquido</div><div class="metric-value" style="color: {color_liq};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
 
                         st.markdown("<br>", unsafe_allow_html=True); st.markdown("##### Prévia dos Lançamentos")
-                        st.dataframe(df_final, use_container_width=True, height=280)
+                        st.dataframe(formatar_dataframe_moeda_br(df_final, ['VALOR']), use_container_width=True, height=280)
                         
                         st.markdown("##### Exportar")
                         c_dl1, c_dl2 = st.columns(2)
@@ -1221,14 +1231,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 with tab_principal:
                     previa = df_org.copy()
                     previa['DATA'] = pd.to_datetime(previa['DATA']).dt.strftime('%d/%m/%Y')
-                    st.dataframe(previa, use_container_width=True, height=320)
+                    st.dataframe(formatar_dataframe_moeda_br(previa, ['VALOR']), use_container_width=True, height=320)
                 with tab_retirados:
                     if df_retirados.empty:
                         st.info("Nenhum estorno de baixa foi identificado neste arquivo.")
                     else:
                         previa_ret = df_retirados.copy()
                         previa_ret['DATA'] = pd.to_datetime(previa_ret['DATA']).dt.strftime('%d/%m/%Y')
-                        st.dataframe(previa_ret, use_container_width=True, height=280)
+                        st.dataframe(formatar_dataframe_moeda_br(previa_ret, ['VALOR']), use_container_width=True, height=280)
 
                 st.download_button(
                     "Baixar Modelo Domínio organizado (.XLSX)",
@@ -1293,27 +1303,33 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                 )
 
                             abas_conferencia = st.tabs([
-                                "Saldo diário",
+                                "Movimento diário",
                                 "Faltando na planilha",
                                 "A mais na planilha",
                                 "Ignorados pelas regras"
                             ])
 
                             with abas_conferencia[0]:
+                                with st.expander("O que significam os valores acumulados?"):
+                                    st.markdown(
+                                        "O **acumulado** soma progressivamente os movimentos desde o primeiro "
+                                        "dia do período analisado. Ele **não é o saldo bancário real**, pois não "
+                                        "inclui o saldo inicial da conta. A diferença acumulada mostra quanto das "
+                                        "divergências anteriores ainda permanece sem correção."
+                                    )
                                 exibicao_diaria = diario.copy()
                                 exibicao_diaria['DATA'] = exibicao_diaria['DATA'].dt.strftime('%d/%m/%Y')
+                                colunas_monetarias_diarias = [
+                                    'TOTAL EXTRATO', 'TOTAL PLANILHA', 'DIFERENÇA DO DIA',
+                                    'ACUMULADO EXTRATO', 'ACUMULADO PLANILHA', 'DIFERENÇA ACUMULADA'
+                                ]
+                                exibicao_diaria = formatar_dataframe_moeda_br(
+                                    exibicao_diaria, colunas_monetarias_diarias
+                                )
                                 st.dataframe(
                                     exibicao_diaria,
                                     use_container_width=True,
-                                    height=360,
-                                    column_config={
-                                        "TOTAL EXTRATO": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "TOTAL PLANILHA": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "DIFERENÇA DO DIA": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "ACUMULADO EXTRATO": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "ACUMULADO PLANILHA": st.column_config.NumberColumn(format="R$ %.2f"),
-                                        "DIFERENÇA ACUMULADA": st.column_config.NumberColumn(format="R$ %.2f")
-                                    }
+                                    height=360
                                 )
 
                             with abas_conferencia[1]:
@@ -1324,10 +1340,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                     exibir_faltantes = faltando_planilha.copy()
                                     exibir_faltantes['DATA'] = exibir_faltantes['DATA'].dt.strftime('%d/%m/%Y')
                                     st.dataframe(
-                                        exibir_faltantes,
+                                        formatar_dataframe_moeda_br(exibir_faltantes, ['VALOR']),
                                         use_container_width=True,
-                                        height=300,
-                                        column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")}
+                                        height=300
                                     )
 
                             with abas_conferencia[2]:
@@ -1338,10 +1353,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                     exibir_excedentes = a_mais_planilha.copy()
                                     exibir_excedentes['DATA'] = exibir_excedentes['DATA'].dt.strftime('%d/%m/%Y')
                                     st.dataframe(
-                                        exibir_excedentes,
+                                        formatar_dataframe_moeda_br(exibir_excedentes, ['VALOR']),
                                         use_container_width=True,
-                                        height=300,
-                                        column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")}
+                                        height=300
                                     )
 
                             with abas_conferencia[3]:
@@ -1352,10 +1366,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                     exibir_ignorados = ignorados.copy()
                                     exibir_ignorados['DATA'] = exibir_ignorados['DATA'].dt.strftime('%d/%m/%Y')
                                     st.dataframe(
-                                        exibir_ignorados,
+                                        formatar_dataframe_moeda_br(exibir_ignorados, ['VALOR']),
                                         use_container_width=True,
-                                        height=240,
-                                        column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")}
+                                        height=240
                                     )
             except Exception as e:
                 st.error(f"Não foi possível organizar a planilha: {e}")
@@ -1475,19 +1488,15 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 # ---------------- TABELA DE EXIBIÇÃO ----------------
                 df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'STATUS']].copy()
                 df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas (R$)', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas (R$)', 'Status']
+                colunas_monetarias_conciliacao = [
+                    'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas (R$)',
+                    'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas (R$)'
+                ]
                 
                 st.dataframe(
-                    df_exibicao, 
+                    formatar_dataframe_moeda_br(df_exibicao, colunas_monetarias_conciliacao),
                     use_container_width=True, 
-                    height=380,
-                    column_config={
-                        "Entradas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Entradas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Dif. Entradas (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saídas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Dif. Saídas (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                    }
+                    height=380
                 )
 
                 # ---------------- EXPORTAÇÃO EXCEL BLINDADA ----------------
