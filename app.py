@@ -66,29 +66,29 @@ def interpretar_sinal_inteligente(historico_str, valor_num, explicit_nature=""):
     """
     Motor Inteligente Universal:
     Avalia se o lançamento é Entrada (+) ou Saída (-) com base em indicadores
-    explícitos e análise semântica do histórico.
+    explícitos e análise semântica avançada do histórico.
     """
     val = abs(float(valor_num))
     ind = normalizar_texto(str(explicit_nature))
     h_norm = normalizar_texto(historico_str)
     
     # 1. Indicador explícito de natureza (C/D, Crédito/Débito, Entrada/Saída)
-    if any(k in ind for k in ['d', 'deb', 'saida', 'pagamento', 'debito', 'pagto']):
+    if any(k in ind for k in ['d', 'deb', 'saida', 'pagamento', 'debito', 'pagto', 'emitido']):
         return -val
-    if any(k in ind for k in ['c', 'cred', 'entrada', 'credito', 'recebimento']):
+    if any(k in ind for k in ['c', 'cred', 'entrada', 'credito', 'recebimento', 'recebido']):
         return val
         
-    # 2. Se o valor já veio negativo do arquivo
+    # 2. Se o valor já veio negativo do arquivo original
     if valor_num < 0:
         return -val
         
     # 3. Análise semântica inteligente por palavras-chave de saída no histórico
     termos_saida = [
-        'boleto pago', 'pix env', 'pix enviado', 'ted env', 'doc env', 'pagto', 'pagamento', 
+        'ted emitido', 'pix env', 'pix enviado', 'ted env', 'doc env', 'pagto', 'pagamento', 
         'tarifa', 'manut', 'cobranca', 'debito', 'saque', 'compra', 'cartao', 
         'transferencia env', 'transf env', 'cpfl', 'darf', 'gps', 'iss', 'imposto',
         'aplicacao', 'aplic', 'investimento', 'estorno deb', 'saida', 'db', 'sispag',
-        'concessionaria', 'tributo'
+        'concessionaria', 'tributo', 'boleto pago', 'tarifa emissao'
     ]
     
     if any(termo in h_norm for termo in termos_saida):
@@ -123,8 +123,8 @@ def limpar_valor_monetario(v_val):
 
 def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     combo = (str(texto_conteudo) + " " + str(filename_str)).upper()
-    if "ITAÚ" in combo or "ITAU" in combo or "0341" in combo: return "BANCO ITAU"
-    elif "FIBRA" in combo or "58.616.418" in combo: return "BANCO FIBRA"
+    if "FIBRA" in combo or "58.616.418" in combo: return "BANCO FIBRA"
+    elif "ITAÚ" in combo or "ITAU" in combo or "0341" in combo: return "BANCO ITAU"
     elif "BRADESCO" in combo: return "BANCO BRADESCO"
     elif "SANTANDER" in combo: return "BANCO SANTANDER"
     elif "CAIXA" in combo: return "CAIXA ECONOMICA"
@@ -136,7 +136,7 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     else: return "BANCO CONTA CORRENTE"
 
 # ==============================================================================
-# MOTORES DE EXTRAÇÃO UNIVERSAL (OFX, PLANILHAS, PDF)
+# MOTORES DE EXTRAÇÃO UNIVERSAL
 # ==============================================================================
 def processar_ofx(file_bytes, filename):
     lancamentos = []
@@ -167,7 +167,6 @@ def processar_ofx(file_bytes, filename):
             
             if 'SALDO' in historico.upper(): continue
             
-            # Se for OFX, o TRNTYPE 'DEBIT' ou 'PAYMENT' força negativo, 'CREDIT' força positivo
             if trntype in ['DEBIT', 'PAYMENT', 'FEE']:
                 valor_float = -abs(valor_bruto)
             elif trntype in ['CREDIT', 'DEP', 'DIRECTDEP']:
