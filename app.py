@@ -159,8 +159,10 @@ def processar_planilha_universal(file_bytes, filename):
     col_data = next((c for c in cols if any(p in str(c).lower() for p in ['data', 'dt', 'date', 'dia'])), None)
     col_hist = next((c for c in cols if any(p in str(c).lower() for p in ['lançamento', 'lancamento', 'históric', 'historic', 'descriç', 'descric', 'detalhe', 'memo'])), None)
     col_val = next((c for c in cols if any(p in str(c).lower() for p in ['valor', 'val', 'monto', 'amount'])), None)
-    col_cred = next((c for c in cols if any(p in str(c).lower() for p in ['crédit', 'credit', 'entrada', 'vlr_cred'])), None)
-    col_deb = next((c for c in cols if any(p in str(c).lower() for p in ['débit', 'debit', 'saída', 'saida', 'vlr_deb'])), None)
+    
+    # Mapeamento robusto para colunas separadas de Débito e Crédito sem sinal
+    col_cred = next((c for c in cols if any(p in str(c).lower() for p in ['crédit', 'credit', 'entrada', 'vlr_cred', 'crd'])), None)
+    col_deb = next((c for c in cols if any(p in str(c).lower() for p in ['débit', 'debit', 'saída', 'saida', 'vlr_deb', 'deb'])), None)
     col_tipo = next((c for c in cols if any(p in str(c).lower() for p in ['tipo', 'natureza', 'operacao', 'operaç', 'c/d'])), None)
 
     if not col_data: return []
@@ -180,10 +182,13 @@ def processar_planilha_universal(file_bytes, filename):
         valor_float = 0.0
         
         if col_cred or col_deb:
-            v_cred = abs(limpar_valor_monetario(row[col_cred])) if col_cred and pd.notna(row[col_cred]) else 0.0
-            v_deb = abs(limpar_valor_monetario(row[col_deb])) if col_deb and pd.notna(row[col_deb]) else 0.0
-            if v_cred != 0: valor_float = v_cred  
-            elif v_deb != 0: valor_float = -v_deb 
+            v_cred = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else 0.0
+            v_deb = limpar_valor_monetario(row[col_deb]) if col_deb and pd.notna(row[col_deb]) else 0.0
+            
+            if v_cred != 0: 
+                valor_float = abs(v_cred)  
+            elif v_deb != 0: 
+                valor_float = -abs(v_deb)  # Força débito/saída a ficar negativo
         elif col_val and pd.notna(row[col_val]):
             valor_float = limpar_valor_monetario(row[col_val])
             tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
