@@ -735,14 +735,18 @@ def identificar_estorno_de_baixa(*campos):
     pos_baixa = [i for i, token in enumerate(tokens) if token.startswith('baix')]
     return any(abs(i - j) <= 6 for i in pos_estorno for j in pos_baixa)
 
-def processar_nova_geracao_itau(file_bytes):
-    """Transforma a aba Itaú da Nova Geração no layout da Domínio."""
+def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao_banco):
+    """Transforma a aba de um banco da Nova Geração no layout da Domínio."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
-    aba_itau = next((aba for aba in xls.sheet_names if normalizar_texto(aba).strip() == 'itau'), None)
-    if not aba_itau:
-        raise ValueError("A aba 'Itaú' não foi encontrada na planilha da Nova Geração.")
+    nome_aba_normalizado = normalizar_texto(nome_aba).strip()
+    aba_banco = next(
+        (aba for aba in xls.sheet_names if normalizar_texto(aba).strip() == nome_aba_normalizado),
+        None
+    )
+    if not aba_banco:
+        raise ValueError(f"A aba '{nome_aba}' não foi encontrada na planilha da Nova Geração.")
 
-    df = pd.read_excel(xls, sheet_name=aba_itau, dtype=object)
+    df = pd.read_excel(xls, sheet_name=aba_banco, dtype=object)
     mapa = {normalizar_texto(str(col)).strip(): col for col in df.columns}
 
     def localizar_coluna(nome):
@@ -764,10 +768,11 @@ def processar_nova_geracao_itau(file_bytes):
 
     colunas_saida = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
     principais, retirados = [], []
+    conta_normalizada = re.sub(r'\D', '', conta_esperada)
 
     for _, linha in df.iterrows():
         conta = re.sub(r'\D', '', texto_celula_seguro(linha[col_conta]))
-        if conta != '995495':
+        if conta != conta_normalizada:
             continue
 
         data_raw = linha[col_data]
@@ -792,7 +797,7 @@ def processar_nova_geracao_itau(file_bytes):
         )).strip()
 
         registro = {
-            'DESCRIÇÃO': 'BANCO ITAÚ',
+            'DESCRIÇÃO': descricao_banco,
             'DATA': data.to_pydatetime(),
             'VALOR': valor,
             'DÉBITO': '',
@@ -808,13 +813,23 @@ def processar_nova_geracao_itau(file_bytes):
             principais.append(registro)
 
     if not principais and not retirados:
-        raise ValueError("Nenhum lançamento da conta Itaú 99549-5 foi encontrado.")
+        raise ValueError(f"Nenhum lançamento da conta {nome_aba} {conta_esperada} foi encontrado.")
 
     return pd.DataFrame(principais, columns=colunas_saida), pd.DataFrame(
         retirados, columns=colunas_saida + ['MOTIVO']
     )
 
-def gerar_excel_nova_geracao_itau(df_principal, df_retirados, modelo_bytes=None):
+def processar_nova_geracao_itau(file_bytes):
+    return processar_nova_geracao_banco(
+        file_bytes, 'Itaú', '99549-5', 'BANCO ITAÚ'
+    )
+
+def processar_nova_geracao_bradesco(file_bytes):
+    return processar_nova_geracao_banco(
+        file_bytes, 'Bradesco', '451990-6', 'BANCO BRADESCO'
+    )
+
+def gerar_excel_nova_geracao(df_principal, df_retirados, modelo_bytes=None):
     """Gera o Modelo Domínio sem alterar o layout simples exigido na importação."""
     from openpyxl import Workbook, load_workbook
 
@@ -974,7 +989,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.3 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.4 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1189,28 +1204,42 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         st.markdown("---")
         st.markdown("### Nova Geração")
+        configuracoes_bancos = {
+            "Itaú - Conta 99549-5": {
+                "nome": "Itaú", "conta": "99549-5", "slug": "itau",
+                "processador": processar_nova_geracao_itau
+            },
+            "Bradesco - Conta 451990-6": {
+                "nome": "Bradesco", "conta": "451990-6", "slug": "bradesco",
+                "processador": processar_nova_geracao_bradesco
+            }
+        }
         banco_empresa = st.selectbox(
             "Banco",
-            ["Itaú - Conta 99549-5"],
+            list(configuracoes_bancos.keys()),
             key="org_banco_nova_geracao"
         )
-        st.caption("A planilha deve conter a aba Itaú com as colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC.")
+        config_banco = configuracoes_bancos[banco_empresa]
+        st.caption(
+            f"A planilha deve conter a aba {config_banco['nome']} com as colunas "
+            "CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
+        )
         arquivo_empresa = st.file_uploader(
             "Envie a planilha bancária da Nova Geração",
             type=["xlsx", "xls"],
-            key="org_upload_nova_geracao"
+            key=f"org_upload_nova_geracao_{config_banco['slug']}"
         )
 
         if arquivo_empresa:
             try:
-                df_org, df_retirados = processar_nova_geracao_itau(arquivo_empresa.getvalue())
+                df_org, df_retirados = config_banco['processador'](arquivo_empresa.getvalue())
                 modelo_org_bytes = None
                 for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
                     if os.path.exists(caminho_modelo):
                         with open(caminho_modelo, 'rb') as arquivo_modelo:
                             modelo_org_bytes = arquivo_modelo.read()
                         break
-                arquivo_final = gerar_excel_nova_geracao_itau(
+                arquivo_final = gerar_excel_nova_geracao(
                     df_org, df_retirados, modelo_org_bytes
                 )
 
@@ -1243,22 +1272,22 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 st.download_button(
                     "Baixar Modelo Domínio organizado (.XLSX)",
                     data=arquivo_final,
-                    file_name="Nova_Geracao_Itau_Modelo_Dominio.xlsx",
+                    file_name=f"Nova_Geracao_{config_banco['nome']}_Modelo_Dominio.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_org_nova_itau",
+                    key=f"dl_org_nova_{config_banco['slug']}",
                     use_container_width=True
                 )
 
                 st.markdown("---")
                 st.markdown("### Conferência com o extrato bancário")
                 st.caption(
-                    "Anexe o extrato do Itaú para comparar o movimento líquido de cada dia "
+                    f"Anexe o extrato do {config_banco['nome']} para comparar o movimento líquido de cada dia "
                     "e localizar lançamentos ausentes ou incluídos a mais."
                 )
                 extrato_conferencia = st.file_uploader(
                     "Envie o extrato bancário para conferência",
                     type=["pdf", "ofx", "csv", "xlsx", "xls"],
-                    key="org_extrato_conferencia_nova_itau"
+                    key=f"org_extrato_conferencia_nova_{config_banco['slug']}"
                 )
 
                 if extrato_conferencia:
