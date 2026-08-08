@@ -36,6 +36,9 @@ st.markdown("""
         .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
         .aviso-banner { background-color: #161b22; border: 1px solid #30363d; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; }
         .aviso-banner p { margin: 0; color: #c9d1d9; font-size: 14px; }
+        
+        /* Ajuste fino para alinhar o input de texto com o date_input */
+        div[data-testid="column"] div.stTextInput { margin-top: 0px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -600,7 +603,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                             with col_g2: data_geral_fim = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
                             with col_g3: 
                                 st.markdown("<label style='font-size:14px; font-weight:400; color:inherit;'>Busca rápida</label>", unsafe_allow_html=True)
-                                termo_busca_geral = st.text_input("Busca rápida", placeholder="Digite para filtrar...", label_visibility="collapsed", key="gen_busca")
+                                termo_busca_geral = st.text_input("Busca rápida", placeholder="Filtrar histórico...", label_visibility="collapsed", key="gen_busca")
                             
                             df_geral_final = df_geral_bruto[(df_geral_bruto['DATA_DT'].dt.date >= data_geral_ini) & (df_geral_bruto['DATA_DT'].dt.date <= data_geral_fim)].copy()
                             if termo_busca_geral: df_geral_final = df_geral_final[df_geral_final['HISTÓRICO'].str.contains(termo_busca_geral, case=False, na=False)]
