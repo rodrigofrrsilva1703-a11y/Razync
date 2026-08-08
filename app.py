@@ -40,7 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# FUNÇÕES DE LIMPEZA E INTELIGÊNCIA DE SINAIS CONDICIONAL
+# FUNÇÕES DE LIMPEZA E FORMATAÇÃO
 # ==============================================================================
 def limpar_caracteres_ilegais(val):
     if isinstance(val, str): return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', val)
@@ -54,17 +54,10 @@ def sanitizar_dataframe(df):
     for col in df.select_dtypes(include=['object', 'string']).columns: df[col] = df[col].apply(limpar_caracteres_ilegais)
     return df
 
-def arquivo_possui_sinais_negativos(lista_valores_brutos):
-    """Inspeciona o extrato para ver se ele já possui pelo menos um sinal de menos ou D original."""
-    for val in lista_valores_brutos:
-        s = str(val).strip().upper()
-        if '-' in s or s.endswith('D') or s.endswith('SAÍDA') or s.endswith('SAIDA') or re.search(r'\(\s*[\d\.,]+\s*\)', s):
-            return True
-    return False
-
 def limpar_valor_monetario(v_val):
-    if pd.isna(v_val) or v_val == '': return 0.0
-    if isinstance(v_val, (int, float)): return float(v_val)
+    """Extrai o valor numérico detectando se é negativo por sinal ou letra D."""
+    if pd.isna(v_val) or v_val == '': return 0.0, False
+    if isinstance(v_val, (int, float)): return float(v_val), float(v_val) < 0
     
     s = str(v_val).strip().upper()
     is_negative = False
@@ -72,7 +65,7 @@ def limpar_valor_monetario(v_val):
         is_negative = True
         
     s = re.sub(r'[^\d,\.]', '', s)
-    if not s: return 0.0
+    if not s: return 0.0, False
     
     if ',' in s and '.' in s:
         last_dot, last_comma = s.rfind('.'), s.rfind(',')
@@ -82,12 +75,12 @@ def limpar_valor_monetario(v_val):
         
     try: 
         val = float(s)
-        return -abs(val) if is_negative else abs(val)
+        return (-abs(val) if is_negative else abs(val)), is_negative
     except: 
-        return 0.0
+        return 0.0, False
 
 def deduzir_debito_pela_palavra(hist):
-    """Regra de Débito e Crédito por semântica (aplicada apenas a extratos sem sinais)."""
+    """Regra semântica para extratos que vêm sem nenhum sinal explícito."""
     hist_upper = str(hist).upper()
     palavras_debito = ['TARIFA', 'EMITIDO', 'PGTO', 'DEBITO', 'CHEQUE', 'SAQUE', 'PAGAMENTO', 'IMPOSTO', 'IOF', 'IRRF', 'ENVIADO', 'APLICACAO', 'APLICAÇÃO', 'COMPRA', 'PIX ENVIADO', 'TED ENVIADA']
     palavras_credito = ['RECEBIDO', 'ESTORNO', 'DEVOLUCAO', 'DEVOLUÇÃO', 'CREDITO', 'RESGATE', 'RENDIMENTO', 'PIX RECEBIDO', 'TED RECEBIDO']
@@ -111,7 +104,7 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     else: return "BANCO CONTA CORRENTE"
 
 # ==============================================================================
-# MOTORES DE EXTRAÇÃO DE PDF E PLANILHAS (COM INTELIGÊNCIA SELETIVA)
+# MOTORES DE EXTRAÇÃO DE PDF E PLANILHAS
 # ==============================================================================
 def processar_ofx(file_bytes, filename):
     lancamentos = []
@@ -135,7 +128,7 @@ def processar_ofx(file_bytes, filename):
             if len(dt_s) >= 8: data_fmt = f"{dt_s[6:8]}/{dt_s[4:6]}/{dt_s[:4]}"
             else: continue
             
-            valor_float = limpar_valor_monetario(match_amt.group(1).strip())
+            valor_float, _ = limpar_valor_monetario(match_amt.group(1).strip())
             historico = limpar_caracteres_ilegais(match_memo.group(1).strip().replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')) if match_memo else "TRANSACAO OFX"
             if 'SALDO' in historico.upper(): continue
             if valor_float != 0: lancamentos.append({'DESCRIÇÃO': banco_detectado, 'DATA': data_fmt, 'VALOR': valor_float, 'DÉBITO': '', 'CRÉDITO': '', 'HISTÓRICO': historico})
@@ -182,10 +175,6 @@ def processar_planilha_universal(file_bytes, filename):
 
     if not col_data: return []
     
-    # Análise Prévia: O arquivo já possui sinais nativos?
-    valores_brutos_arquivo = df[col_val].dropna().tolist() if col_val else []
-    tem_sinal_nativo = arquivo_possui_sinais_negativos(valores_brutos_arquivo) or (col_deb is not None and col_cred is not None)
-
     for _, row in df.iterrows():
         dt_raw = str(row[col_data]).strip() if pd.notna(row[col_data]) else ''
         if dt_raw.upper() in ['TOTAL', 'ÚLTIMOS LANÇAMENTOS', 'ULTIMOS LANCAMENTOS', 'SALDOS INVEST FÁCIL / PLUS', 'NAN']:
@@ -201,19 +190,18 @@ def processar_planilha_universal(file_bytes, filename):
         valor_float = 0.0
         
         if col_cred or col_deb:
-            v_cred = abs(limpar_valor_monetario(row[col_cred])) if col_cred and pd.notna(row[col_cred]) else 0.0
-            v_deb = abs(limpar_valor_monetario(row[col_deb])) if col_deb and pd.notna(row[col_deb]) else 0.0
-            if v_cred != 0: valor_float = v_cred  
-            elif v_deb != 0: valor_float = -v_deb 
+            v_cred, _ = limpar_valor_monetario(row[col_cred]) if col_cred and pd.notna(row[col_cred]) else (0.0, False)
+            v_deb, _ = limpar_valor_monetario(row[col_deb]) if col_deb and pd.notna(row[col_deb]) else (0.0, False)
+            if v_cred != 0: valor_float = abs(v_cred)  
+            elif v_deb != 0: valor_float = -abs(v_deb) 
         elif col_val and pd.notna(row[col_val]):
-            valor_float = limpar_valor_monetario(row[col_val])
+            valor_float, tem_sinal = limpar_valor_monetario(row[col_val])
             tipo_str = str(row[col_tipo]).upper() if col_tipo and pd.notna(row[col_tipo]) else ""
             if tipo_str:
                 if 'D' in tipo_str or 'SAÍDA' in tipo_str or 'SAIDA' in tipo_str or 'DEB' in tipo_str: valor_float = -abs(valor_float)
                 elif 'C' in tipo_str or 'ENTRADA' in tipo_str or 'CRED' in tipo_str: valor_float = abs(valor_float)
-            else:
-                # SÓ APLICA A REGRA DE SINAIS SE O EXTRATO NÃO VEIO COM SINAIS NATIVOS
-                if not tem_sinal_nativo and valor_float > 0 and deduzir_debito_pela_palavra(hist_fmt):
+            elif not tem_sinal and valor_float > 0:
+                if deduzir_debito_pela_palavra(hist_fmt):
                     valor_float = -abs(valor_float)
 
         if valor_float != 0:
@@ -229,15 +217,15 @@ def extrair_periodo_extrato(caminho_pdf):
     except: pass
     return None, None
 
-def processar_pdf_generico_com_seletividade(caminho_pdf, nome_banco):
+def processar_pdf_generico_inteligente(caminho_pdf, nome_banco):
     lancamentos = []
     try:
         reader = PdfReader(caminho_pdf, strict=False)
         texto_completo = ""
         for page in reader.pages: texto_completo += page.extract_text() + "\n"
         
-        # Análise prévia no texto do PDF: Contém sinais negativos explícitos?
-        tem_sinal_negativo_pdf = '-' in texto_completo or 'D' in texto_completo
+        # Detector global de sinais no PDF: Se o PDF tem '-' ou 'D', consideramos que ele já traz os sinais nativos
+        tem_sinais_nativos = '-' in texto_completo or re.search(r'\b\d+,\d{2}\s*D\b', texto_completo, re.IGNORECASE)
         
         data_atual = None
         for linha in texto_completo.split('\n'):
@@ -254,11 +242,11 @@ def processar_pdf_generico_com_seletividade(caminho_pdf, nome_banco):
             if matches_vals and data_atual:
                 val_str = matches_vals[-2] if len(matches_vals) >= 2 else matches_vals[0]
                 try:
-                    v = limpar_valor_monetario(val_str)
+                    v, tem_sinal_individual = limpar_valor_monetario(val_str)
                     hist = limpar_caracteres_ilegais(linha.replace(data_atual, '').replace(val_str, '').strip())
                     
-                    # Se o PDF NÃO tiver sinal nativo, aplica a regra de débito e crédito por palavra
-                    if not tem_sinal_negativo_pdf and v > 0 and '-' not in val_str and 'D' not in val_str.upper():
+                    # Se o PDF NÃO tem sinais nativos, aplica a semântica de palavras
+                    if not tem_sinais_nativos and not tem_sinal_individual and v > 0:
                         if deduzir_debito_pela_palavra(hist): v = -abs(v)
                         
                     if v != 0:
@@ -275,7 +263,7 @@ def processar_arquivo_pdf(caminho_pdf):
     except: texto_completo = ""
         
     banco_identificado = identificar_banco_inteligente(texto_completo, os.path.basename(caminho_pdf))
-    lancamentos = processar_pdf_generico_com_seletividade(caminho_pdf, banco_identificado)
+    lancamentos = processar_pdf_generico_inteligente(caminho_pdf, banco_identificado)
     for l in lancamentos: l['DESCRIÇÃO'] = banco_identificado
     return lancamentos
 
@@ -349,10 +337,10 @@ def processar_razao_dominio(file_bytes, filename):
         v_ent, v_sai = 0.0, 0.0
         
         if col_deb and col_cred:
-            v_sai = abs(limpar_valor_monetario(row[col_deb])) if pd.notna(row[col_deb]) else 0.0
-            v_ent = abs(limpar_valor_monetario(row[col_cred])) if pd.notna(row[col_cred]) else 0.0
+            v_sai = abs(limpar_valor_monetario(row[col_deb])[0]) if pd.notna(row[col_deb]) else 0.0
+            v_ent = abs(limpar_valor_monetario(row[col_cred])[0]) if pd.notna(row[col_cred]) else 0.0
         elif col_val and pd.notna(row[col_val]):
-            val_num = limpar_valor_monetario(row[col_val])
+            val_num, _ = limpar_valor_monetario(row[col_val])
             if val_num < 0: v_sai = abs(val_num)
             else: v_ent = val_num
                 
@@ -383,7 +371,7 @@ if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_
 if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v9.2 · Smart Sign Detection</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v9.3 · Smart Adaptive Sign</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
