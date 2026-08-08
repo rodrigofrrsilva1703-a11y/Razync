@@ -179,7 +179,6 @@ def processar_planilha_universal(file_bytes, filename):
         
         valor_float = 0.0
         
-        # Leitura puramente baseada nas colunas e sinais do arquivo
         if col_cred or col_deb:
             v_cred = abs(limpar_valor_monetario(row[col_cred])) if col_cred and pd.notna(row[col_cred]) else 0.0
             v_deb = abs(limpar_valor_monetario(row[col_deb])) if col_deb and pd.notna(row[col_deb]) else 0.0
@@ -672,17 +671,10 @@ elif st.session_state['pagina_ativa'] == 'razao':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_razao"): mudar_pagina('home'); st.rerun()
     with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
     
-    st.caption("Acompanhe o saldo consolidado diário, conferindo o total de Entradas e Saídas entre os relatórios.")
+    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas do Extrato com o Razão da Domínio.")
     st.markdown("""<div class="aviso-banner"><p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p></div>""", unsafe_allow_html=True)
 
-    st.markdown("##### ⚙️ 1. Configuração de Saldos Iniciais")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1: saldo_ini_ext = st.number_input("Saldo Inicial Extrato Bancário (R$)", value=0.0, step=100.0, format="%.2f")
-    with col_s2: saldo_ini_raz = st.number_input("Saldo Inicial Razão da Domínio (R$)", value=0.0, step=100.0, format="%.2f")
-        
-    st.markdown("---")
-    st.markdown("##### 📁 2. Arquivos de Importação")
-    
+    st.markdown("##### 📁 Arquivos de Importação")
     col_up1, col_up2 = st.columns(2)
     with col_up1: arq_extrato = st.file_uploader("1º - Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
     with col_up2: arq_razao = st.file_uploader("2º - Envie o Razão exportado (CSV ou XLSX)", type=["csv", "xlsx", "xls"], key="up_razao")
@@ -732,7 +724,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
                 # ---------------- FILTRO DE PERÍODO ----------------
                 st.markdown("---")
-                st.markdown("##### 📅 3. Filtro de Período da Conciliação")
+                st.markdown("##### 📅 Filtro de Período da Conciliação")
                 
                 dt_min_geral, dt_max_geral = df_conciliacao['DATA_DT'].min().date(), df_conciliacao['DATA_DT'].max().date()
                 col_p1, col_p2 = st.columns(2)
@@ -749,16 +741,15 @@ elif st.session_state['pagina_ativa'] == 'razao':
                     st.info("Nenhuma movimentação no período selecionado.")
                     st.stop()
 
-                # ---------------- CÁLCULOS ----------------
+                # ---------------- CÁLCULOS DE DIFERENÇAS ----------------
                 df_conciliacao = df_conciliacao.sort_values('DATA_DT')
-                df_conciliacao['SALDO_EXTRATO'] = saldo_ini_ext + df_conciliacao['ENTRADAS_EXTRATO'].cumsum() - df_conciliacao['SAIDAS_EXTRATO'].cumsum()
-                df_conciliacao['SALDO_RAZAO'] = saldo_ini_raz + df_conciliacao['ENTRADAS_RAZAO'].cumsum() - df_conciliacao['SAIDAS_RAZAO'].cumsum()
-
                 df_conciliacao['DIF_ENTRADAS'] = df_conciliacao['ENTRADAS_EXTRATO'] - df_conciliacao['ENTRADAS_RAZAO']
                 df_conciliacao['DIF_SAIDAS'] = df_conciliacao['SAIDAS_EXTRATO'] - df_conciliacao['SAIDAS_RAZAO']
-                df_conciliacao['DIF_SALDO'] = df_conciliacao['SALDO_EXTRATO'] - df_conciliacao['SALDO_RAZAO']
                 
-                df_conciliacao['STATUS'] = df_conciliacao.apply(lambda row: "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 and abs(row['DIF_SALDO']) < 0.01 else "❌ Divergente", axis=1)
+                df_conciliacao['STATUS'] = df_conciliacao.apply(
+                    lambda row: "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 else "❌ Divergente", 
+                    axis=1
+                )
                 
                 # ---------------- 4 CARDS RESUMO ----------------
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -771,15 +762,15 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 
                 rc1, rc2, rc3, rc4 = st.columns(4)
                 with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Entradas (Extrato)</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_ent_ext)}</div></div>', unsafe_allow_html=True)
-                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Saídas (Extrato)</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_sai_ext))}</div></div>', unsafe_allow_html=True)
-                with rc3: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Entradas (Razão)</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_ent_raz)}</div></div>', unsafe_allow_html=True)
+                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Entradas (Razão)</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_ent_raz)}</div></div>', unsafe_allow_html=True)
+                with rc3: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Saídas (Extrato)</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_sai_ext))}</div></div>', unsafe_allow_html=True)
                 with rc4: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Saídas (Razão)</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_sai_raz))}</div></div>', unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 # ---------------- TABELA DE EXIBIÇÃO ----------------
-                df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'SAIDAS_EXTRATO', 'SALDO_EXTRATO', 'ENTRADAS_RAZAO', 'SAIDAS_RAZAO', 'SALDO_RAZAO', 'STATUS']].copy()
-                df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)', 'Status']
+                df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'STATUS']].copy()
+                df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas (R$)', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas (R$)', 'Status']
                 
                 st.dataframe(
                     df_exibicao, 
@@ -787,11 +778,11 @@ elif st.session_state['pagina_ativa'] == 'razao':
                     height=380,
                     column_config={
                         "Entradas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saldo Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
                         "Entradas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Dif. Entradas (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saídas Ext. (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
                         "Saídas Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saldo Razão (R$)": st.column_config.NumberColumn(format="R$ %.2f")
+                        "Dif. Saídas (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
                     }
                 )
 
@@ -802,17 +793,16 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 
                 buf_audit = io.BytesIO()
                 with pd.ExcelWriter(buf_audit, engine='openpyxl') as writer:
-                    # Aplica a máscara R$ para o Excel ficar idêntico à tela
                     df_exib_excel = df_exibicao.copy()
-                    for col in ['Entradas Ext. (R$)', 'Saídas Ext. (R$)', 'Saldo Ext. (R$)', 'Entradas Razão (R$)', 'Saídas Razão (R$)', 'Saldo Razão (R$)']:
+                    for col in ['Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas (R$)', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas (R$)']:
                         df_exib_excel[col] = df_exib_excel[col].apply(formatar_moeda)
                         
                     sanitizar_dataframe(df_exib_excel).to_excel(writer, sheet_name="Resumo Geral", index=False)
                     
                     df_divergencias = df_conciliacao[df_conciliacao['STATUS'] == '❌ Divergente'].copy()
                     if not df_divergencias.empty:
-                        df_div_export = df_divergencias[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'SALDO_EXTRATO', 'SALDO_RAZAO', 'DIF_SALDO']].copy()
-                        df_div_export.columns = ['Data', 'Entradas Extrato', 'Entradas Razao', 'Diferenca Entradas', 'Saidas Extrato', 'Saidas Razao', 'Diferenca Saidas', 'Saldo Extrato', 'Saldo Razao', 'Diferenca Saldo']
+                        df_div_export = df_divergencias[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS']].copy()
+                        df_div_export.columns = ['Data', 'Entradas Extrato', 'Entradas Razao', 'Diferenca Entradas', 'Saidas Extrato', 'Saidas Razao', 'Diferenca Saidas']
                         for col in df_div_export.columns[1:]: df_div_export[col] = df_div_export[col].apply(formatar_moeda)
                         sanitizar_dataframe(df_div_export).to_excel(writer, sheet_name="Dias Divergentes", index=False)
 
