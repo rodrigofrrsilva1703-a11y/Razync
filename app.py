@@ -11,7 +11,7 @@ import traceback
 
 # Configuração da página Web
 st.set_page_config(
-    page_title="Plataforma Contábil Pro", 
+    page_title="Hub Contabil", 
     page_icon="🤖", 
     layout="wide",
     initial_sidebar_state="expanded"
@@ -521,7 +521,7 @@ st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: cent
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
-    st.title("Início")
+    st.title("Hub Contabil - Início")
     st.caption("Selecione uma ferramenta abaixo para começar.")
     st.markdown("<br>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
