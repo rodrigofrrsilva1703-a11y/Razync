@@ -88,7 +88,7 @@ def interpretar_sinal_inteligente(historico_str, valor_num, explicit_nature=""):
         'tarifa', 'manut', 'cobranca', 'debito', 'saque', 'compra', 'cartao', 
         'transferencia env', 'transf env', 'cpfl', 'darf', 'gps', 'iss', 'imposto',
         'aplicacao', 'aplic', 'investimento', 'estorno deb', 'saida', 'db', 'sispag',
-        'concessionaria', 'tributo', 'boleto pago', 'tarifa emissao'
+        'concessionaria', 'tributo', 'boleto pago', 'tarifa emissao', 'tarifa emissao de ted'
     ]
     
     if any(termo in h_norm for termo in termos_saida):
