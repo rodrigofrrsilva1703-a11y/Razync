@@ -11,7 +11,7 @@ import traceback
 
 # Configuração da página Web
 st.set_page_config(
-    page_title="Hub Contabil", 
+    page_title="Plataforma Contábil Pro", 
     page_icon="🤖", 
     layout="wide",
     initial_sidebar_state="expanded"
@@ -204,7 +204,6 @@ def extrair_periodo_extrato(caminho_pdf):
     return None, None
 
 def processar_pdf_fibra(caminho_pdf):
-    """Motor dedicado e específico para o extrato do Banco Fibra com separação exata de Débito e Crédito[cite: 1]."""
     lancamentos = []
     try:
         reader = PdfReader(caminho_pdf, strict=False)
@@ -212,7 +211,6 @@ def processar_pdf_fibra(caminho_pdf):
         for page in reader.pages: texto += page.extract_text() + "\n"
         texto = texto.replace('\x00', 'ti')
         
-        # Cada linha de lançamento começa com uma data DD/MM/YYYY
         linhas = [l.strip() for l in texto.split('\n') if l.strip()]
         date_regex = re.compile(r'^(\d{2}/\d{2}/\d{4})')
         
@@ -223,7 +221,6 @@ def processar_pdf_fibra(caminho_pdf):
             if match_date:
                 data_str = match_date.group(1)
                 bloco_linhas = [linha]
-                # Coleta as linhas subsequentes até a próxima data ou cabeçalho/saldo
                 j = i + 1
                 while j < len(linhas):
                     next_linha = linhas[j]
@@ -233,21 +230,17 @@ def processar_pdf_fibra(caminho_pdf):
                     j += 1
                 
                 texto_bloco = " ".join(bloco_linhas)
-                # Procura por valores monetários no bloco (formato R$ X.XXX,XX ou X.XXX,XX)
                 vals = re.findall(r'(?:R\$)?\s*([\d\.]+,\d{2})', texto_bloco)
                 
                 if vals:
-                    # Identifica se é débito ou crédito checando palavras-chave no bloco
                     val_str = vals[-1]
                     v_num = limpar_valor_monetario(val_str)
                     
-                    # Se houver menção de 'Emitido' ou 'Tarifa Emissão De TED' ou 'Débito' óbvio, inverte para negativo
                     if any(termo in texto_bloco.upper() for termo in ['TED EMITIDO', 'TARIFA', 'DEBITO', 'DÉBITO']):
                         v_num = -abs(v_num)
                     else:
-                        v_num = abs(v_num) # Crédito / Entrada por padrão no Fibra
+                        v_num = abs(v_num)
                         
-                    # Remove a data e os valores do texto para isolar o histórico
                     hist = texto_bloco.replace(data_str, '')
                     for v in vals:
                         hist = hist.replace(v, '').replace('R$', '')
@@ -521,7 +514,7 @@ st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: cent
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
-    st.title("Hub Contabil - Início")
+    st.title("Início")
     st.caption("Selecione uma ferramenta abaixo para começar.")
     st.markdown("<br>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
@@ -605,7 +598,9 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                             col_g1, col_g2, col_g3 = st.columns([1, 1, 1.5])
                             with col_g1: data_geral_ini = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
                             with col_g2: data_geral_fim = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
-                            with col_g3: st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True); termo_busca_geral = st.text_input("Busca rápida", placeholder="Filtrar histórico...", key="gen_busca")
+                            with col_g3: 
+                                st.markdown("<label style='font-size:14px; font-weight:400; color:inherit;'>Busca rápida</label>", unsafe_allow_html=True)
+                                termo_busca_geral = st.text_input("Busca rápida", placeholder="Digite para filtrar...", label_visibility="collapsed", key="gen_busca")
                             
                             df_geral_final = df_geral_bruto[(df_geral_bruto['DATA_DT'].dt.date >= data_geral_ini) & (df_geral_bruto['DATA_DT'].dt.date <= data_geral_fim)].copy()
                             if termo_busca_geral: df_geral_final = df_geral_final[df_geral_final['HISTÓRICO'].str.contains(termo_busca_geral, case=False, na=False)]
@@ -659,7 +654,9 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                             col_f1, col_f2, col_f3 = st.columns([1, 1, 1.5])
                             with col_f1: data_sel_ini = st.date_input("Data Inicial", value=val_ini_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"ini_{idx_arq}")
                             with col_f2: data_sel_fim = st.date_input("Data Final", value=val_fim_def, min_value=dt_min_dataset, max_value=dt_max_dataset, format="DD/MM/YYYY", key=f"fim_{idx_arq}")
-                            with col_f3: st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True); termo_busca = st.text_input("Busca rápida", placeholder="Digite para filtrar...", key=f"busca_{idx_arq}")
+                            with col_f3: 
+                                st.markdown("<label style='font-size:14px; font-weight:400; color:inherit;'>Busca rápida</label>", unsafe_allow_html=True)
+                                termo_busca = st.text_input("Busca rápida", placeholder="Digite para filtrar...", label_visibility="collapsed", key=f"busca_{idx_arq}")
 
                         df_final = df_bruto[(df_bruto['DATA_DT'].dt.date >= data_sel_ini) & (df_bruto['DATA_DT'].dt.date <= data_sel_fim)].copy()
                         if termo_busca: df_final = df_final[df_final['HISTÓRICO'].str.contains(termo_busca, case=False, na=False)]
@@ -701,7 +698,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_razao"): mudar_pagina('home'); st.rerun()
     with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
     
-    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas duplas com o Razão da Domínio.")
+    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas do Extrato com o Razão da Domínio.")
     st.markdown("""<div class="aviso-banner"><p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p></div>""", unsafe_allow_html=True)
 
     st.markdown("##### 📁 Arquivos de Importação")
@@ -839,7 +836,7 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 st.download_button(
                     label="Baixar Relatório em Excel (.XLSX)", 
                     data=buf_audit.getvalue(), 
-                    file_name=f"Analise_Conciliação_{data_ini_filtro.strftime('%d%m%Y')}_a_{data_fim_filtro.strftime('%d%m%Y')}.xlsx", 
+                    file_name=f"Analise_Conciliacao_{data_ini_filtro.strftime('%d%m%Y')}_a_{data_fim_filtro.strftime('%d%m%Y')}.xlsx", 
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                     use_container_width=False
                 )
