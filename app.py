@@ -1043,18 +1043,24 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
     if not filename.lower().endswith('.xlsx'):
         raise ValueError('A planilha final deve estar no formato .xlsx.')
 
+    contas_bancarias = {'itau': '508', 'bradesco': '9', 'fibra': '506'}
     candidatos_por_banco = {}
     periodos_por_banco = {}
     for item in base_classificacoes:
         banco = item.get('banco', '')
         assinatura = item.get('assinatura', '')
-        par = (
-            texto_celula_seguro(item.get('debito')),
-            texto_celula_seguro(item.get('credito'))
-        )
-        if banco not in {'itau', 'bradesco', 'fibra'} or not assinatura or not all(par):
+        natureza = assinatura.split('|', 1)[0] if assinatura else ''
+        if natureza == 'pago':
+            contrapartida = texto_celula_seguro(item.get('debito'))
+        elif natureza == 'recebido':
+            contrapartida = texto_celula_seguro(item.get('credito'))
+        else:
+            contrapartida = ''
+        if banco not in contas_bancarias or not assinatura or not contrapartida:
             continue
-        candidatos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).add(par)
+        candidatos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).add(
+            contrapartida
+        )
         periodos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).update(
             item.get('periodos') or []
         )
@@ -1062,9 +1068,9 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
     mapas_seguros = {}
     for banco, candidatos in candidatos_por_banco.items():
         mapas_seguros[banco] = {
-            assinatura: next(iter(pares))
-            for assinatura, pares in candidatos.items()
-            if len(pares) == 1 and len(
+            assinatura: next(iter(contas))
+            for assinatura, contas in candidatos.items()
+            if len(contas) == 1 and len(
                 periodos_por_banco.get(banco, {}).get(assinatura, set())
             ) >= 3
         }
@@ -1078,6 +1084,8 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
     wb = load_workbook(io.BytesIO(file_bytes))
     resumo = {
         'automaticos': 0,
+        'somente_banco': 0,
+        'antecipados': 0,
         'ja_preenchidos': 0,
         'conflitos': 0,
         'padroes_novos': 0,
@@ -1129,17 +1137,35 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
                 continue
 
             assinatura = criar_assinatura_classificacao(historico)
+            natureza = assinatura.split('|', 1)[0] if assinatura else ''
+            conta_banco = contas_bancarias[banco_linha]
+            if natureza == 'pago':
+                ws.cell(numero_linha, col_credito).value = valor_conta_excel(conta_banco)
+                coluna_contrapartida = col_debito
+            elif natureza == 'recebido':
+                ws.cell(numero_linha, col_debito).value = valor_conta_excel(conta_banco)
+                coluna_contrapartida = col_credito
+            else:
+                resumo['padroes_novos'] += 1
+                continue
+
             candidatos = candidatos_por_banco.get(banco_linha, {}).get(assinatura, set())
-            par_seguro = mapas_seguros.get(banco_linha, {}).get(assinatura)
-            if par_seguro:
-                debito, credito = par_seguro
-                ws.cell(numero_linha, col_debito).value = valor_conta_excel(debito)
-                ws.cell(numero_linha, col_credito).value = valor_conta_excel(credito)
+            conta_segura = mapas_seguros.get(banco_linha, {}).get(assinatura)
+            if 'antecipad' in normalizar_texto(historico):
+                ws.cell(numero_linha, coluna_contrapartida).value = 532
+                resumo['automaticos'] += 1
+                resumo['antecipados'] += 1
+            elif conta_segura:
+                ws.cell(numero_linha, coluna_contrapartida).value = valor_conta_excel(
+                    conta_segura
+                )
                 resumo['automaticos'] += 1
             elif len(candidatos) > 1:
                 resumo['conflitos'] += 1
+                resumo['somente_banco'] += 1
             else:
                 resumo['padroes_novos'] += 1
+                resumo['somente_banco'] += 1
 
     if resumo['abas_processadas'] == 0:
         raise ValueError(
@@ -1588,7 +1614,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.7 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.8 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1893,22 +1919,31 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             planilha_final_classificacao.name,
                             base_classificacoes
                         )
-                        c_auto, c_pendente, c_conflito = st.columns(3)
+                        c_auto, c_banco, c_antecipado, c_conflito = st.columns(4)
                         with c_auto:
                             st.metric(
                                 "Classificados automaticamente",
                                 resumo_classificacao['automaticos']
                             )
-                        with c_pendente:
+                        with c_banco:
                             st.metric(
-                                "Permaneceram em branco",
-                                resumo_classificacao['padroes_novos']
-                                + resumo_classificacao['banco_nao_identificado']
+                                "Somente conta bancária",
+                                resumo_classificacao['somente_banco']
+                            )
+                        with c_antecipado:
+                            st.metric(
+                                "Antecipados — conta 532",
+                                resumo_classificacao['antecipados']
                             )
                         with c_conflito:
                             st.metric(
                                 "Conflitos para revisão",
                                 resumo_classificacao['conflitos']
+                            )
+                        if resumo_classificacao['banco_nao_identificado']:
+                            st.warning(
+                                f"{resumo_classificacao['banco_nao_identificado']} lançamentos "
+                                "não tiveram o banco identificado e permaneceram sem classificação."
                             )
                         if resumo_classificacao['automaticos']:
                             st.success(
