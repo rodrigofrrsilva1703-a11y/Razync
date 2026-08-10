@@ -813,6 +813,18 @@ def obter_config_classificacao_online():
         }
         if url.upper() in placeholders_url or not url.startswith(('https://', 'http://')):
             url = ''
+        elif url:
+            partes_url = urllib.parse.urlsplit(url)
+            caminho_url = partes_url.path or ''
+            if '/rest/v1' in caminho_url:
+                caminho_url = caminho_url.split('/rest/v1', 1)[0]
+            url = urllib.parse.urlunsplit((
+                partes_url.scheme,
+                partes_url.netloc,
+                caminho_url.rstrip('/'),
+                '',
+                ''
+            )).rstrip('/')
         if chave.upper() in placeholders_chave:
             chave = ''
         return url, chave, senha
@@ -1462,7 +1474,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.5 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.6 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
