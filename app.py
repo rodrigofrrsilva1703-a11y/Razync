@@ -876,6 +876,110 @@ def filtrar_dataframe_periodo(df, data_inicial, data_final):
     mascara = datas.between(data_inicial, data_final, inclusive='both')
     return df.loc[mascara].copy().reset_index(drop=True)
 
+def identificar_chave_banco_empresa(valor):
+    """Identifica os bancos da Nova Geração por descrição, aba ou conta."""
+    texto = normalizar_texto(texto_celula_seguro(valor))
+    digitos = re.sub(r'\D', '', texto_celula_seguro(valor))
+    if 'itau' in texto or digitos == '995495':
+        return 'itau'
+    if 'bradesco' in texto or digitos == '4519906':
+        return 'bradesco'
+    if 'fibra' in texto or digitos == '6739471':
+        return 'fibra'
+    return ''
+
+def nome_banco_por_chave(chave):
+    return {'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra'}.get(chave, chave)
+
+def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
+    """Lê a planilha final e retorna somente o banco escolhido para conferência."""
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    colunas_base = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    principais, retirados, bancos_encontrados = [], [], set()
+
+    for nome_aba in xls.sheet_names:
+        df_bruto = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
+        if df_bruto.empty:
+            continue
+
+        indice_cabecalho = None
+        for indice in range(min(len(df_bruto), 30)):
+            nomes_linha = [
+                normalizar_texto(texto_celula_seguro(valor)).strip()
+                for valor in df_bruto.iloc[indice].tolist()
+            ]
+            if ('data' in nomes_linha and 'valor' in nomes_linha and
+                    any(nome in nomes_linha for nome in ['historico', 'histórico'])):
+                indice_cabecalho = indice
+                break
+        if indice_cabecalho is None:
+            continue
+
+        cabecalhos = [texto_celula_seguro(valor) for valor in df_bruto.iloc[indice_cabecalho]]
+        df_aba = df_bruto.iloc[indice_cabecalho + 1:].copy()
+        df_aba.columns = cabecalhos
+        mapa = {normalizar_texto(str(coluna)).strip(): coluna for coluna in df_aba.columns}
+        col_data = mapa.get('data')
+        col_valor = mapa.get('valor')
+        col_hist = mapa.get('historico')
+        col_desc = mapa.get('descricao')
+        col_motivo = mapa.get('motivo')
+        if col_data is None or col_valor is None or col_hist is None:
+            continue
+
+        banco_aba = identificar_chave_banco_empresa(nome_aba)
+        aba_retirados = 'retir' in normalizar_texto(nome_aba)
+        for _, linha in df_aba.iterrows():
+            banco_linha = (
+                identificar_chave_banco_empresa(linha[col_desc]) if col_desc is not None else ''
+            ) or banco_aba
+            if banco_linha:
+                bancos_encontrados.add(banco_linha)
+            if banco_linha != banco_alvo:
+                continue
+
+            data_raw = linha[col_data]
+            if isinstance(data_raw, (int, float)) and not pd.isna(data_raw):
+                data = pd.to_datetime(data_raw, unit='D', origin='1899-12-30', errors='coerce')
+            else:
+                data = pd.to_datetime(data_raw, dayfirst=True, errors='coerce')
+            valor = limpar_valor_monetario(linha[col_valor])
+            if pd.isna(data) or valor == 0:
+                continue
+
+            descricao = texto_celula_seguro(linha[col_desc]) if col_desc is not None else ''
+            if not descricao:
+                descricao = {
+                    'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO', 'fibra': 'BANCO FIBRA'
+                }[banco_alvo]
+            historico_valor = linha[col_hist]
+            historico = (
+                '' if historico_valor is None or pd.isna(historico_valor)
+                else limpar_caracteres_ilegais(str(historico_valor))
+            )
+            registro = {
+                'DESCRIÇÃO': descricao,
+                'DATA': data.to_pydatetime(),
+                'VALOR': valor,
+                'DÉBITO': '',
+                'CRÉDITO': '',
+                'HISTÓRICO': historico
+            }
+            if aba_retirados:
+                registro['MOTIVO'] = (
+                    texto_celula_seguro(linha[col_motivo]) if col_motivo is not None
+                    else 'Estorno de baixa identificado'
+                )
+                retirados.append(registro)
+            else:
+                principais.append(registro)
+
+    return (
+        pd.DataFrame(principais, columns=colunas_base),
+        pd.DataFrame(retirados, columns=colunas_base + ['MOTIVO']),
+        [nome_banco_por_chave(chave) for chave in sorted(bancos_encontrados)]
+    )
+
 def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
     """Gera um único arquivo com uma aba do Modelo Domínio para cada banco."""
     from openpyxl import Workbook, load_workbook
@@ -1070,7 +1174,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.0 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.1 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1453,15 +1557,78 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
                 st.markdown("---")
                 st.markdown("### Conferência com o extrato bancário")
+                banco_conferencia = st.selectbox(
+                    "Banco que será conferido",
+                    [config['nome'] for config in configs_selecionadas],
+                    key=(
+                        "org_banco_conferencia_nova_"
+                        + "_".join(config['slug'] for config in configs_selecionadas)
+                    )
+                )
+                config_conferencia = next(
+                    config for config in configs_selecionadas
+                    if config['nome'] == banco_conferencia
+                )
+                chave_banco_conferencia = config_conferencia['slug']
+
+                df_modelo_conferencia = df_org[
+                    df_org['DESCRIÇÃO'].apply(identificar_chave_banco_empresa).eq(
+                        chave_banco_conferencia
+                    )
+                ].copy().reset_index(drop=True)
+                df_retirados_conferencia = df_retirados[
+                    df_retirados['DESCRIÇÃO'].apply(identificar_chave_banco_empresa).eq(
+                        chave_banco_conferencia
+                    )
+                ].copy().reset_index(drop=True) if not df_retirados.empty else df_retirados.copy()
+
+                planilha_atualizada_conferencia = st.file_uploader(
+                    "Planilha organizada atualizada para conferência (opcional)",
+                    type=["xlsx", "xls"],
+                    key="org_planilha_atualizada_conferencia_nova",
+                    help=(
+                        "Você pode anexar a planilha final com os três bancos. "
+                        "Somente o banco escolhido acima será utilizado."
+                    )
+                )
+                if planilha_atualizada_conferencia:
+                    try:
+                        df_atualizada, df_retirados_atualizada, bancos_detectados = (
+                            ler_planilha_organizada_conferencia(
+                                planilha_atualizada_conferencia.getvalue(),
+                                chave_banco_conferencia
+                            )
+                        )
+                        df_modelo_conferencia = filtrar_dataframe_periodo(
+                            df_atualizada, data_inicial, data_final
+                        )
+                        df_retirados_conferencia = filtrar_dataframe_periodo(
+                            df_retirados_atualizada, data_inicial, data_final
+                        )
+                        if df_modelo_conferencia.empty:
+                            st.error(
+                                f"A planilha atualizada não possui lançamentos do {banco_conferencia} "
+                                "dentro do período selecionado."
+                            )
+                            st.stop()
+                        bancos_texto = ", ".join(bancos_detectados) if bancos_detectados else "não identificados"
+                        st.success(
+                            f"Planilha atualizada carregada: {len(df_modelo_conferencia)} lançamentos "
+                            f"do {banco_conferencia}. Bancos identificados no arquivo: {bancos_texto}."
+                        )
+                    except Exception as erro_planilha_atualizada:
+                        st.error(f"Não foi possível ler a planilha organizada atualizada: {erro_planilha_atualizada}")
+                        st.stop()
+
                 st.caption(
-                    f"Anexe os extratos dos bancos selecionados ({nomes_bancos}) para comparar "
+                    f"Anexe o extrato do {banco_conferencia} para comparar "
                     "o movimento líquido de cada dia e localizar lançamentos ausentes ou incluídos a mais."
                 )
                 extratos_conferencia = st.file_uploader(
                     "Envie o(s) extrato(s) bancário(s) para conferência",
                     type=["pdf", "ofx", "csv", "xlsx", "xls"],
                     accept_multiple_files=True,
-                    key="org_extrato_conferencia_nova_multibanco"
+                    key=f"org_extrato_conferencia_nova_{chave_banco_conferencia}"
                 )
 
                 if extratos_conferencia:
@@ -1479,13 +1646,23 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         df_extrato_periodo = filtrar_dataframe_periodo(
                             pd.DataFrame(lancamentos_extrato), data_inicial, data_final
                         )
+                        if not df_extrato_periodo.empty:
+                            chaves_extrato = df_extrato_periodo['DESCRIÇÃO'].apply(
+                                identificar_chave_banco_empresa
+                            )
+                            reconhecidos = chaves_extrato.ne('')
+                            if reconhecidos.any():
+                                df_extrato_periodo = df_extrato_periodo[
+                                    chaves_extrato.eq(chave_banco_conferencia) | ~reconhecidos
+                                ].copy().reset_index(drop=True)
                         if df_extrato_periodo.empty:
                             st.warning(
-                                "O extrato não possui lançamentos dentro do período selecionado."
+                                f"O extrato não possui lançamentos do {banco_conferencia} "
+                                "dentro do período selecionado."
                             )
                             st.stop()
                         diario, faltando_planilha, a_mais_planilha, ignorados = conciliar_empresa_com_extrato(
-                            df_org, df_extrato_periodo, df_retirados
+                            df_modelo_conferencia, df_extrato_periodo, df_retirados_conferencia
                         )
 
                         if diario.empty:
