@@ -571,7 +571,7 @@ def extrair_valor_lancamento_pdf(texto_bloco):
 
     return token, natureza
 
-def processar_arquivo_pdf(caminho_pdf):
+def processar_arquivo_pdf(caminho_pdf, filename_original=None):
     lancamentos = []
     try:
         reader = PdfReader(caminho_pdf, strict=False)
@@ -579,7 +579,8 @@ def processar_arquivo_pdf(caminho_pdf):
         for pagina in reader.pages:
             texto_completo += (pagina.extract_text() or "") + "\n"
             
-        banco_identificado = identificar_banco_inteligente(texto_completo, os.path.basename(caminho_pdf))
+        nome_para_identificacao = filename_original or os.path.basename(caminho_pdf)
+        banco_identificado = identificar_banco_inteligente(texto_completo, nome_para_identificacao)
 
         # Primeiro tenta o analisador estrutural único, independente do banco.
         lancamentos_layout = processar_pdf_layout_universal(reader, banco_identificado)
@@ -869,7 +870,9 @@ def filtrar_dataframe_periodo(df, data_inicial, data_final):
         return df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
     if 'DATA' not in df.columns:
         return df.iloc[0:0].copy()
-    datas = pd.to_datetime(df['DATA'], errors='coerce').dt.date
+    # Extratos brasileiros usam dia/mês/ano. Sem dayfirst=True, por exemplo,
+    # 01/04/2026 seria interpretado como 4 de janeiro e sairia do filtro de abril.
+    datas = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.date
     mascara = datas.between(data_inicial, data_final, inclusive='both')
     return df.loc[mascara].copy().reset_index(drop=True)
 
@@ -954,7 +957,7 @@ def processar_extrato_conferencia_empresa(file_bytes, filename):
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
                 temporario.write(file_bytes)
                 caminho_temporario = temporario.name
-            return processar_arquivo_pdf(caminho_temporario)
+            return processar_arquivo_pdf(caminho_temporario, filename)
         finally:
             if caminho_temporario and os.path.exists(caminho_temporario):
                 os.remove(caminho_temporario)
@@ -1067,7 +1070,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.9 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.0 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
