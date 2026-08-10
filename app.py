@@ -736,39 +736,41 @@ def identificar_estorno_de_baixa(*campos):
     return any(abs(i - j) <= 6 for i in pos_estorno for j in pos_baixa)
 
 def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao_banco):
-    """Transforma a aba de um banco da Nova Geração no layout da Domínio."""
+    """Localiza uma conta na planilha consolidada e transforma seus lançamentos."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
-    nome_aba_normalizado = normalizar_texto(nome_aba).strip()
-    aba_banco = next(
-        (aba for aba in xls.sheet_names if normalizar_texto(aba).strip() == nome_aba_normalizado),
-        None
-    )
-    if not aba_banco:
-        raise ValueError(f"A aba '{nome_aba}' não foi encontrada na planilha da Nova Geração.")
+    conta_normalizada = re.sub(r'\D', '', conta_esperada)
 
-    df = pd.read_excel(xls, sheet_name=aba_banco, dtype=object)
-    mapa = {normalizar_texto(str(col)).strip(): col for col in df.columns}
+    df, colunas = None, None
+    for aba_candidata in xls.sheet_names:
+        df_candidata = pd.read_excel(xls, sheet_name=aba_candidata, dtype=object)
+        mapa = {normalizar_texto(str(col)).strip(): col for col in df_candidata.columns}
+        obrigatorias = ['conta', 'data', 'valor', 'lacto', 'historico', 'doc']
+        if not all(nome in mapa for nome in obrigatorias):
+            continue
+        contas_aba = df_candidata[mapa['conta']].apply(
+            lambda valor: re.sub(r'\D', '', texto_celula_seguro(valor))
+        )
+        if contas_aba.eq(conta_normalizada).any():
+            df = df_candidata
+            colunas = mapa
+            break
 
-    def localizar_coluna(nome):
-        return next((original for normalizada, original in mapa.items() if normalizada == nome), None)
+    if df is None or colunas is None:
+        raise ValueError(
+            f"A conta {conta_esperada} ({nome_aba}) não foi encontrada em nenhuma aba "
+            "válida da planilha consolidada."
+        )
 
-    col_conta = localizar_coluna('conta')
-    col_data = localizar_coluna('data')
-    col_valor = localizar_coluna('valor')
-    col_lacto = localizar_coluna('lacto')
-    col_hist = localizar_coluna('historico')
-    col_doc = localizar_coluna('doc')
-    obrigatorias = {
-        'CONTA': col_conta, 'DATA': col_data, 'VALOR': col_valor,
-        'LACTO': col_lacto, 'HISTORICO': col_hist, 'DOC': col_doc
-    }
-    faltantes = [nome for nome, coluna in obrigatorias.items() if coluna is None]
-    if faltantes:
-        raise ValueError(f"Colunas obrigatórias não encontradas: {', '.join(faltantes)}")
+    col_conta = colunas['conta']
+    col_data = colunas['data']
+    col_valor = colunas['valor']
+    col_lacto = colunas['lacto']
+    col_hist = colunas['historico']
+    col_doc = colunas['doc']
+    col_tipo = colunas.get('tipo')
 
     colunas_saida = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
     principais, retirados = [], []
-    conta_normalizada = re.sub(r'\D', '', conta_esperada)
 
     for _, linha in df.iterrows():
         conta = re.sub(r'\D', '', texto_celula_seguro(linha[col_conta]))
@@ -783,14 +785,40 @@ def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao
         if pd.isna(data):
             continue
 
+        lacto_original = texto_celula_seguro(linha[col_lacto])
+        lacto_normalizado = normalizar_texto(lacto_original).strip()
+        lacto = re.sub(r'\bPAGAR\b', 'PAGO', lacto_original, flags=re.IGNORECASE)
+        lacto = re.sub(
+            r'\b(?:RECEBER|RECEBIMENTO)\b', 'RECEBIDO', lacto, flags=re.IGNORECASE
+        )
+
         valor_raw = linha[col_valor]
-        valor = float(valor_raw) if isinstance(valor_raw, (int, float)) and not pd.isna(valor_raw) else limpar_valor_monetario(valor_raw)
-        if valor == 0:
+        valor_original = (
+            float(valor_raw)
+            if isinstance(valor_raw, (int, float)) and not pd.isna(valor_raw)
+            else limpar_valor_monetario(valor_raw)
+        )
+        if valor_original == 0:
             continue
 
-        lacto_original = texto_celula_seguro(linha[col_lacto])
-        lacto = re.sub(r'\bRECEBIMENTO\b', 'RECEBIDO', lacto_original, flags=re.IGNORECASE)
-        historico_origem = texto_celula_seguro(linha[col_hist])
+        tipo_normalizado = normalizar_texto(texto_celula_seguro(linha[col_tipo])) if col_tipo else ''
+        if lacto_normalizado.startswith(('pagar', 'pago')):
+            valor = -abs(valor_original)
+        elif lacto_normalizado.startswith(('receber', 'recebido', 'recebimento')):
+            valor = abs(valor_original)
+        elif 'debito' in tipo_normalizado:
+            valor = -abs(valor_original)
+        elif 'credito' in tipo_normalizado:
+            valor = abs(valor_original)
+        else:
+            valor = valor_original
+
+        historico_valor_original = linha[col_hist]
+        historico_origem_exato = (
+            '' if historico_valor_original is None or pd.isna(historico_valor_original)
+            else limpar_caracteres_ilegais(str(historico_valor_original))
+        )
+        historico_origem = texto_celula_seguro(historico_valor_original)
         documento = texto_celula_seguro(linha[col_doc])
         historico_final = re.sub(r'\s+', ' ', " ".join(
             parte for parte in [lacto, historico_origem, documento] if parte
@@ -807,6 +835,7 @@ def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao
 
         if identificar_estorno_de_baixa(lacto_original, historico_origem, documento):
             registro_retirado = dict(registro)
+            registro_retirado['HISTÓRICO'] = historico_origem_exato
             registro_retirado['MOTIVO'] = 'Estorno de baixa identificado'
             retirados.append(registro_retirado)
         else:
@@ -1038,7 +1067,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.7 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v10.9 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1280,8 +1309,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
         nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
         st.caption(
-            f"A planilha deve conter as abas selecionadas ({nomes_bancos}) com as colunas "
-            "CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
+            f"O sistema localizará automaticamente as contas de {nomes_bancos} dentro da "
+            "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
         )
         arquivo_empresa = st.file_uploader(
             "Envie a planilha bancária da Nova Geração",
