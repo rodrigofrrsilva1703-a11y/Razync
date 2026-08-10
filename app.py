@@ -1087,6 +1087,7 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
         'somente_banco': 0,
         'antecipados': 0,
         'ja_preenchidos': 0,
+        'parciais_completados': 0,
         'conflitos': 0,
         'padroes_novos': 0,
         'banco_nao_identificado': 0,
@@ -1124,9 +1125,10 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
                 continue
             debito_atual = texto_celula_seguro(ws.cell(numero_linha, col_debito).value)
             credito_atual = texto_celula_seguro(ws.cell(numero_linha, col_credito).value)
-            if debito_atual or credito_atual:
+            if debito_atual and credito_atual:
                 resumo['ja_preenchidos'] += 1
                 continue
+            linha_estava_parcial = bool(debito_atual or credito_atual)
 
             banco_linha = (
                 identificar_chave_banco_empresa(ws.cell(numero_linha, col_descricao).value)
@@ -1140,13 +1142,24 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
             natureza = assinatura.split('|', 1)[0] if assinatura else ''
             conta_banco = contas_bancarias[banco_linha]
             if natureza == 'pago':
-                ws.cell(numero_linha, col_credito).value = valor_conta_excel(conta_banco)
+                if not credito_atual:
+                    ws.cell(numero_linha, col_credito).value = valor_conta_excel(conta_banco)
                 coluna_contrapartida = col_debito
             elif natureza == 'recebido':
-                ws.cell(numero_linha, col_debito).value = valor_conta_excel(conta_banco)
+                if not debito_atual:
+                    ws.cell(numero_linha, col_debito).value = valor_conta_excel(conta_banco)
                 coluna_contrapartida = col_credito
             else:
                 resumo['padroes_novos'] += 1
+                continue
+
+            contrapartida_atual = texto_celula_seguro(
+                ws.cell(numero_linha, coluna_contrapartida).value
+            )
+            if contrapartida_atual:
+                resumo['automaticos'] += 1
+                if linha_estava_parcial:
+                    resumo['parciais_completados'] += 1
                 continue
 
             candidatos = candidatos_por_banco.get(banco_linha, {}).get(assinatura, set())
@@ -1155,11 +1168,15 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
                 ws.cell(numero_linha, coluna_contrapartida).value = 532
                 resumo['automaticos'] += 1
                 resumo['antecipados'] += 1
+                if linha_estava_parcial:
+                    resumo['parciais_completados'] += 1
             elif conta_segura:
                 ws.cell(numero_linha, coluna_contrapartida).value = valor_conta_excel(
                     conta_segura
                 )
                 resumo['automaticos'] += 1
+                if linha_estava_parcial:
+                    resumo['parciais_completados'] += 1
             elif len(candidatos) > 1:
                 resumo['conflitos'] += 1
                 resumo['somente_banco'] += 1
@@ -1614,7 +1631,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.8 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.9 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1944,6 +1961,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             st.warning(
                                 f"{resumo_classificacao['banco_nao_identificado']} lançamentos "
                                 "não tiveram o banco identificado e permaneceram sem classificação."
+                            )
+                        if resumo_classificacao['parciais_completados']:
+                            st.caption(
+                                f"{resumo_classificacao['parciais_completados']} linhas já "
+                                "possuíam uma conta; somente a célula vazia foi completada."
                             )
                         if resumo_classificacao['automaticos']:
                             st.success(
