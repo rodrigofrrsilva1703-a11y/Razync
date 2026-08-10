@@ -156,6 +156,19 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     # histórico sejam confundidos com o banco emissor do extrato.
     nome = normalizar_texto(str(filename_str)).upper()
     cabecalho = normalizar_texto(str(texto_conteudo)[:6000]).upper()
+    digitos_nome = re.sub(r'\D', '', str(filename_str))
+    digitos_cabecalho = re.sub(r'\D', '', str(texto_conteudo)[:6000])
+
+    # As empresas também nomeiam os extratos apenas com agência/conta. Essa
+    # identificação não depende do mês ou do ano presentes no nome do arquivo.
+    contas_nova_geracao = [
+        ('995495', 'BANCO ITAU'),
+        ('4519906', 'BANCO BRADESCO'),
+        ('6739471', 'BANCO FIBRA'),
+    ]
+    for conta, banco in contas_nova_geracao:
+        if conta in digitos_nome:
+            return banco
 
     bancos = [
         (['ITAU'], 'BANCO ITAU'),
@@ -174,6 +187,9 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
             return banco
     for termos, banco in bancos:
         if any(termo in cabecalho for termo in termos):
+            return banco
+    for conta, banco in contas_nova_geracao:
+        if conta in digitos_cabecalho:
             return banco
     if '58.616.418' in str(texto_conteudo)[:6000]: return 'BANCO FIBRA'
     if re.search(r'\b0?341\b', cabecalho): return 'BANCO ITAU'
@@ -880,11 +896,11 @@ def identificar_chave_banco_empresa(valor):
     """Identifica os bancos da Nova Geração por descrição, aba ou conta."""
     texto = normalizar_texto(texto_celula_seguro(valor))
     digitos = re.sub(r'\D', '', texto_celula_seguro(valor))
-    if 'itau' in texto or digitos == '995495':
+    if 'itau' in texto or '995495' in digitos:
         return 'itau'
-    if 'bradesco' in texto or digitos == '4519906':
+    if 'bradesco' in texto or '4519906' in digitos:
         return 'bradesco'
-    if 'fibra' in texto or digitos == '6739471':
+    if 'fibra' in texto or '6739471' in digitos:
         return 'fibra'
     return ''
 
@@ -1174,7 +1190,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.2 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.3 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1684,6 +1700,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             pd.DataFrame(lancamentos_arquivo), data_inicial, data_final
                         )
                         if df_arquivo.empty:
+                            continue
+                        # Prioriza banco/conta no nome do arquivo. Isso cobre
+                        # extratos como Extrato_1514_995495_SP-05-2026.pdf,
+                        # mesmo quando o PDF não imprime o nome do banco.
+                        chave_pelo_nome = identificar_chave_banco_empresa(
+                            extrato_conferencia.name
+                        )
+                        if chave_pelo_nome in extratos_por_banco:
+                            extratos_por_banco[chave_pelo_nome].extend(
+                                df_arquivo.to_dict('records')
+                            )
                             continue
                         chaves_arquivo = df_arquivo['DESCRIÇÃO'].apply(
                             identificar_chave_banco_empresa
