@@ -1099,14 +1099,18 @@ def aplicar_classificacoes_automaticas(df, banco, base_classificacoes):
             resultado.at[indice, '_CLASSIFICAÇÃO'] = 'Revisar padrão novo'
     return resultado
 
-def classificar_planilha_final(file_bytes, filename, base_classificacoes):
+def classificar_planilha_final(
+    file_bytes, filename, base_classificacoes, contas_bancarias=None
+):
     """Preenche Débito/Crédito somente na planilha final já conciliada."""
     from openpyxl import load_workbook
 
     if not filename.lower().endswith('.xlsx'):
         raise ValueError('A planilha final deve estar no formato .xlsx.')
 
-    contas_bancarias = {'itau': '508', 'bradesco': '9', 'fibra': '506'}
+    contas_bancarias = contas_bancarias or {
+        'itau': '508', 'bradesco': '9', 'fibra': '506'
+    }
     candidatos_por_banco = {}
     periodos_por_banco = {}
     for item in base_classificacoes:
@@ -1401,6 +1405,16 @@ def processar_nova_geracao_fibra(file_bytes):
         file_bytes, 'Fibra', '673947-1', 'BANCO FIBRA'
     )
 
+def processar_nova_geracao_filial_itau(file_bytes):
+    return processar_nova_geracao_banco(
+        file_bytes, 'Itaú', '98002-6', 'BANCO ITAÚ'
+    )
+
+def processar_nova_geracao_filial_bradesco(file_bytes):
+    return processar_nova_geracao_banco(
+        file_bytes, 'Bradesco', '3084-8', 'BANCO BRADESCO'
+    )
+
 def filtrar_dataframe_periodo(df, data_inicial, data_final):
     """Mantém somente os lançamentos entre as datas informadas, inclusive."""
     if df is None or df.empty:
@@ -1417,9 +1431,9 @@ def identificar_chave_banco_empresa(valor):
     """Identifica os bancos da Nova Geração por descrição, aba ou conta."""
     texto = normalizar_texto(texto_celula_seguro(valor))
     digitos = re.sub(r'\D', '', texto_celula_seguro(valor))
-    if 'itau' in texto or '995495' in digitos:
+    if 'itau' in texto or any(conta in digitos for conta in ['995495', '980026']):
         return 'itau'
-    if 'bradesco' in texto or '4519906' in digitos:
+    if 'bradesco' in texto or any(conta in digitos for conta in ['4519906', '30848']):
         return 'bradesco'
     if 'fibra' in texto or '6739471' in digitos:
         return 'fibra'
@@ -1711,7 +1725,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v12.0 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v12.1 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1926,6 +1940,52 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         st.markdown("---")
         st.markdown("### Nova Geração")
+        estabelecimento_nova = st.radio(
+            "Área da empresa",
+            ["Matriz", "Filial"],
+            horizontal=True,
+            key="org_estabelecimento_nova_geracao",
+            help="Escolha a empresa antes de organizar ou classificar a planilha final."
+        )
+        chave_estabelecimento = normalizar_texto(estabelecimento_nova)
+        if chave_estabelecimento == 'filial':
+            contas_dominio_estabelecimento = {'itau': '515', 'bradesco': '514'}
+            configuracoes_bancos = {
+                "Itaú - Conta 98002-6": {
+                    "nome": "Itaú", "conta": "98002-6", "slug": "itau",
+                    "processador": processar_nova_geracao_filial_itau
+                },
+                "Bradesco - Conta 3084-8": {
+                    "nome": "Bradesco", "conta": "3084-8", "slug": "bradesco",
+                    "processador": processar_nova_geracao_filial_bradesco
+                }
+            }
+            st.caption(
+                "Filial selecionada — Itaú 98002-6 usa a conta 515 e "
+                "Bradesco 3084-8 usa a conta 514 na classificação."
+            )
+        else:
+            contas_dominio_estabelecimento = {
+                'itau': '508', 'bradesco': '9', 'fibra': '506'
+            }
+            configuracoes_bancos = {
+                "Itaú - Conta 99549-5": {
+                    "nome": "Itaú", "conta": "99549-5", "slug": "itau",
+                    "processador": processar_nova_geracao_itau
+                },
+                "Bradesco - Conta 451990-6": {
+                    "nome": "Bradesco", "conta": "451990-6", "slug": "bradesco",
+                    "processador": processar_nova_geracao_bradesco
+                },
+                "Fibra - Conta 673947-1": {
+                    "nome": "Fibra", "conta": "673947-1", "slug": "fibra",
+                    "processador": processar_nova_geracao_fibra
+                }
+            }
+            st.caption(
+                "Matriz selecionada — Itaú usa a conta 508, Bradesco a conta 9 "
+                "e Fibra a conta 506 na classificação."
+            )
         url_base_classificacao, chave_base_classificacao, senha_admin_classificacao = (
             obter_config_classificacao_online()
         )
@@ -1953,7 +2013,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
             st.caption(
                 "Importe planilhas já classificadas. Pode enviar arquivos separados, uma planilha "
-                "com vários bancos ou arquivos ZIP. Reimportar o mesmo conteúdo não cria duplicidades."
+                "com vários bancos ou arquivos ZIP. Reimportar o mesmo conteúdo não cria duplicidades. "
+                "A base de fornecedores é compartilhada entre Matriz e Filial, portanto as planilhas "
+                "antigas da Matriz não precisam ser enviadas novamente."
             )
             arquivos_aprendizado = st.file_uploader(
                 "Planilhas classificadas para ensinar o sistema",
@@ -1999,7 +2061,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             planilha_final_classificacao = st.file_uploader(
                 "Planilha final com os saldos conferidos",
                 type=['xlsx'],
-                key='org_planilha_final_classificacao_nova'
+                key=f'org_planilha_final_classificacao_nova_{chave_estabelecimento}'
             )
             if planilha_final_classificacao:
                 if erro_base_classificacoes:
@@ -2014,7 +2076,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         arquivo_classificado, resumo_classificacao = classificar_planilha_final(
                             planilha_final_classificacao.getvalue(),
                             planilha_final_classificacao.name,
-                            base_classificacoes
+                            base_classificacoes,
+                            contas_dominio_estabelecimento
                         )
                         c_auto, c_banco, c_antecipado, c_conflito = st.columns(4)
                         with c_auto:
@@ -2072,7 +2135,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                 "application/vnd.openxmlformats-officedocument."
                                 "spreadsheetml.sheet"
                             ),
-                            key='org_download_planilha_final_classificada_nova',
+                            key=(
+                                'org_download_planilha_final_classificada_nova_'
+                                + chave_estabelecimento
+                            ),
                             use_container_width=True
                         )
                     except Exception as erro_classificacao_final:
@@ -2081,25 +2147,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             f"{erro_classificacao_final}"
                         )
 
-        configuracoes_bancos = {
-            "Itaú - Conta 99549-5": {
-                "nome": "Itaú", "conta": "99549-5", "slug": "itau",
-                "processador": processar_nova_geracao_itau
-            },
-            "Bradesco - Conta 451990-6": {
-                "nome": "Bradesco", "conta": "451990-6", "slug": "bradesco",
-                "processador": processar_nova_geracao_bradesco
-            },
-            "Fibra - Conta 673947-1": {
-                "nome": "Fibra", "conta": "673947-1", "slug": "fibra",
-                "processador": processar_nova_geracao_fibra
-            }
-        }
+        banco_padrao = next(iter(configuracoes_bancos))
         bancos_empresa = st.multiselect(
             "Bancos",
             list(configuracoes_bancos.keys()),
-            default=["Itaú - Conta 99549-5"],
-            key="org_banco_nova_geracao"
+            default=[banco_padrao],
+            key=f"org_banco_nova_geracao_{chave_estabelecimento}"
         )
         if not bancos_empresa:
             st.info("Selecione pelo menos um banco para continuar.")
@@ -2112,9 +2165,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
         )
         arquivo_empresa = st.file_uploader(
-            "Envie a planilha bancária da Nova Geração",
+            f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
             type=["xlsx", "xls"],
-            key="org_upload_nova_geracao_multibanco"
+            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
         )
 
         if arquivo_empresa:
@@ -2139,7 +2192,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 data_minima = datas_disponiveis['DATA'].min().date()
                 data_maxima = datas_disponiveis['DATA'].max().date()
                 chave_periodo = (
-                    f"org_periodo_nova_{data_minima.isoformat()}_{data_maxima.isoformat()}_"
+                    f"org_periodo_nova_{chave_estabelecimento}_"
+                    f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
                     + "_".join(config['slug'] for config in configs_selecionadas)
                 )
                 st.markdown("### Período dos lançamentos")
@@ -2238,12 +2292,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     "Baixar Modelo Domínio com abas por banco (.XLSX)",
                     data=arquivo_final,
                     file_name=(
-                        f"Nova_Geracao_{nome_saida_banco}_"
+                        f"Nova_Geracao_{estabelecimento_nova}_{nome_saida_banco}_"
                         f"{data_inicial.strftime('%d%m%Y')}_a_{data_final.strftime('%d%m%Y')}_"
                         "Modelo_Dominio.xlsx"
                     ),
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_org_nova_multibanco",
+                    key=f"dl_org_nova_multibanco_{chave_estabelecimento}",
                     use_container_width=True
                 )
 
@@ -2258,7 +2312,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 conferir_todos_bancos = st.checkbox(
                     "Conferir todos os bancos disponíveis",
                     value=False,
-                    key=f"org_conferir_todos_nova_{chave_grupo_conferencia}",
+                    key=(
+                        f"org_conferir_todos_nova_{chave_estabelecimento}_"
+                        f"{chave_grupo_conferencia}"
+                    ),
                     disabled=len(nomes_disponiveis_conferencia) == 1
                 )
                 if conferir_todos_bancos:
@@ -2269,7 +2326,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         "Bancos que serão conferidos",
                         nomes_disponiveis_conferencia,
                         default=nomes_disponiveis_conferencia[:1],
-                        key=f"org_bancos_conferencia_nova_{chave_grupo_conferencia}",
+                        key=(
+                            f"org_bancos_conferencia_nova_{chave_estabelecimento}_"
+                            f"{chave_grupo_conferencia}"
+                        ),
                         help="Selecione um ou vários bancos disponíveis."
                     )
                 if not bancos_conferencia:
@@ -2285,9 +2345,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 planilha_atualizada_conferencia = st.file_uploader(
                     "Planilha organizada atualizada para conferência (opcional)",
                     type=["xlsx", "xls"],
-                    key="org_planilha_atualizada_conferencia_nova",
+                    key=(
+                        "org_planilha_atualizada_conferencia_nova_"
+                        + chave_estabelecimento
+                    ),
                     help=(
-                        "Você pode anexar a planilha final com os três bancos. "
+                        "Você pode anexar a planilha final com um ou vários bancos. "
                         "O sistema separará somente os bancos escolhidos acima."
                     )
                 )
@@ -2358,7 +2421,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     type=["pdf", "ofx", "csv", "xlsx", "xls"],
                     accept_multiple_files=True,
                     key=(
-                        "org_extratos_conferencia_nova_"
+                        f"org_extratos_conferencia_nova_{chave_estabelecimento}_"
                         + "_".join(config['slug'] for config in configs_conferencia)
                     )
                 )
