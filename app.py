@@ -1036,6 +1036,120 @@ def aplicar_classificacoes_automaticas(df, banco, base_classificacoes):
             resultado.at[indice, '_CLASSIFICAÇÃO'] = 'Revisar padrão novo'
     return resultado
 
+def classificar_planilha_final(file_bytes, filename, base_classificacoes):
+    """Preenche Débito/Crédito somente na planilha final já conciliada."""
+    from openpyxl import load_workbook
+
+    if not filename.lower().endswith('.xlsx'):
+        raise ValueError('A planilha final deve estar no formato .xlsx.')
+
+    candidatos_por_banco = {}
+    periodos_por_banco = {}
+    for item in base_classificacoes:
+        banco = item.get('banco', '')
+        assinatura = item.get('assinatura', '')
+        par = (
+            texto_celula_seguro(item.get('debito')),
+            texto_celula_seguro(item.get('credito'))
+        )
+        if banco not in {'itau', 'bradesco', 'fibra'} or not assinatura or not all(par):
+            continue
+        candidatos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).add(par)
+        periodos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).update(
+            item.get('periodos') or []
+        )
+
+    mapas_seguros = {}
+    for banco, candidatos in candidatos_por_banco.items():
+        mapas_seguros[banco] = {
+            assinatura: next(iter(pares))
+            for assinatura, pares in candidatos.items()
+            if len(pares) == 1 and len(
+                periodos_por_banco.get(banco, {}).get(assinatura, set())
+            ) >= 3
+        }
+
+    def valor_conta_excel(conta):
+        texto = texto_celula_seguro(conta)
+        if texto.isdigit() and (texto == '0' or not texto.startswith('0')):
+            return int(texto)
+        return texto
+
+    wb = load_workbook(io.BytesIO(file_bytes))
+    resumo = {
+        'automaticos': 0,
+        'ja_preenchidos': 0,
+        'conflitos': 0,
+        'padroes_novos': 0,
+        'banco_nao_identificado': 0,
+        'abas_processadas': 0,
+    }
+    banco_arquivo = identificar_chave_banco_empresa(filename)
+
+    for ws in wb.worksheets:
+        if 'retir' in normalizar_texto(ws.title):
+            continue
+        linha_cabecalho = None
+        mapa_colunas = {}
+        for numero_linha in range(1, min(ws.max_row, 30) + 1):
+            mapa_teste = {
+                normalizar_texto(texto_celula_seguro(ws.cell(numero_linha, coluna).value)).strip(): coluna
+                for coluna in range(1, ws.max_column + 1)
+            }
+            if all(nome in mapa_teste for nome in ['historico', 'debito', 'credito']):
+                linha_cabecalho = numero_linha
+                mapa_colunas = mapa_teste
+                break
+        if linha_cabecalho is None:
+            continue
+
+        resumo['abas_processadas'] += 1
+        col_hist = mapa_colunas['historico']
+        col_debito = mapa_colunas['debito']
+        col_credito = mapa_colunas['credito']
+        col_descricao = mapa_colunas.get('descricao')
+        banco_aba = identificar_chave_banco_empresa(ws.title) or banco_arquivo
+
+        for numero_linha in range(linha_cabecalho + 1, ws.max_row + 1):
+            historico = texto_celula_seguro(ws.cell(numero_linha, col_hist).value)
+            if not historico:
+                continue
+            debito_atual = texto_celula_seguro(ws.cell(numero_linha, col_debito).value)
+            credito_atual = texto_celula_seguro(ws.cell(numero_linha, col_credito).value)
+            if debito_atual or credito_atual:
+                resumo['ja_preenchidos'] += 1
+                continue
+
+            banco_linha = (
+                identificar_chave_banco_empresa(ws.cell(numero_linha, col_descricao).value)
+                if col_descricao is not None else ''
+            ) or banco_aba
+            if banco_linha not in {'itau', 'bradesco', 'fibra'}:
+                resumo['banco_nao_identificado'] += 1
+                continue
+
+            assinatura = criar_assinatura_classificacao(historico)
+            candidatos = candidatos_por_banco.get(banco_linha, {}).get(assinatura, set())
+            par_seguro = mapas_seguros.get(banco_linha, {}).get(assinatura)
+            if par_seguro:
+                debito, credito = par_seguro
+                ws.cell(numero_linha, col_debito).value = valor_conta_excel(debito)
+                ws.cell(numero_linha, col_credito).value = valor_conta_excel(credito)
+                resumo['automaticos'] += 1
+            elif len(candidatos) > 1:
+                resumo['conflitos'] += 1
+            else:
+                resumo['padroes_novos'] += 1
+
+    if resumo['abas_processadas'] == 0:
+        raise ValueError(
+            'Nenhuma aba com as colunas HISTÓRICO, DÉBITO e CRÉDITO foi encontrada.'
+        )
+
+    saida = io.BytesIO()
+    wb.save(saida)
+    return saida.getvalue(), resumo
+
 def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao_banco):
     """Localiza uma conta na planilha consolidada e transforma seus lançamentos."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -1474,7 +1588,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.6 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.7 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1753,6 +1867,78 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     except Exception as erro_importacao:
                         st.error(f"Não foi possível atualizar a base: {erro_importacao}")
 
+            st.markdown("---")
+            st.markdown("#### Classificar planilha final conciliada")
+            st.caption(
+                "Anexe somente a planilha final, depois que a conferência bancária estiver "
+                "concluída e os saldos estiverem batendo. O arquivo original não será alterado."
+            )
+            planilha_final_classificacao = st.file_uploader(
+                "Planilha final com os saldos conferidos",
+                type=['xlsx'],
+                key='org_planilha_final_classificacao_nova'
+            )
+            if planilha_final_classificacao:
+                if erro_base_classificacoes:
+                    st.error("A base online precisa estar conectada antes da classificação.")
+                elif not base_classificacoes:
+                    st.warning(
+                        "A base ainda não possui padrões. Importe primeiro as planilhas dos "
+                        "meses já classificados."
+                    )
+                else:
+                    try:
+                        arquivo_classificado, resumo_classificacao = classificar_planilha_final(
+                            planilha_final_classificacao.getvalue(),
+                            planilha_final_classificacao.name,
+                            base_classificacoes
+                        )
+                        c_auto, c_pendente, c_conflito = st.columns(3)
+                        with c_auto:
+                            st.metric(
+                                "Classificados automaticamente",
+                                resumo_classificacao['automaticos']
+                            )
+                        with c_pendente:
+                            st.metric(
+                                "Permaneceram em branco",
+                                resumo_classificacao['padroes_novos']
+                                + resumo_classificacao['banco_nao_identificado']
+                            )
+                        with c_conflito:
+                            st.metric(
+                                "Conflitos para revisão",
+                                resumo_classificacao['conflitos']
+                            )
+                        if resumo_classificacao['automaticos']:
+                            st.success(
+                                "Classificação concluída. As abas, os valores e a formatação "
+                                "da planilha final foram preservados."
+                            )
+                        else:
+                            st.info(
+                                "Nenhum padrão seguro foi encontrado para preenchimento automático."
+                            )
+                        nome_base_saida = os.path.splitext(
+                            planilha_final_classificacao.name
+                        )[0]
+                        st.download_button(
+                            "Baixar planilha final classificada",
+                            data=arquivo_classificado,
+                            file_name=f"{nome_base_saida}_Classificada.xlsx",
+                            mime=(
+                                "application/vnd.openxmlformats-officedocument."
+                                "spreadsheetml.sheet"
+                            ),
+                            key='org_download_planilha_final_classificada_nova',
+                            use_container_width=True
+                        )
+                    except Exception as erro_classificacao_final:
+                        st.error(
+                            "Não foi possível classificar a planilha final: "
+                            f"{erro_classificacao_final}"
+                        )
+
         configuracoes_bancos = {
             "Itaú - Conta 99549-5": {
                 "nome": "Itaú", "conta": "99549-5", "slug": "itau",
@@ -1838,30 +2024,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
                 modelos_por_banco, retirados_por_banco = [], []
                 dados_exportacao_por_banco = {}
-                total_classificados_automaticamente = 0
-                total_pendentes_classificacao = 0
-                total_conflitos_classificacao = 0
                 for config, df_banco_completo, df_banco_retirados_completo in dados_processados:
                     df_banco = filtrar_dataframe_periodo(
                         df_banco_completo, data_inicial, data_final
-                    )
-                    if base_classificacoes and not df_banco.empty:
-                        df_banco = aplicar_classificacoes_automaticas(
-                            df_banco, config['slug'], base_classificacoes
-                        )
-                    else:
-                        df_banco = df_banco.copy()
-                        df_banco['_CLASSIFICAÇÃO'] = 'Pendente'
-                    total_classificados_automaticamente += int(
-                        df_banco['_CLASSIFICAÇÃO'].eq('Automática').sum()
-                    )
-                    total_pendentes_classificacao += int(
-                        df_banco['_CLASSIFICAÇÃO'].isin(
-                            ['Pendente', 'Revisar padrão novo']
-                        ).sum()
-                    )
-                    total_conflitos_classificacao += int(
-                        df_banco['_CLASSIFICAÇÃO'].eq('Revisar conflito').sum()
                     )
                     df_banco_retirados = filtrar_dataframe_periodo(
                         df_banco_retirados_completo, data_inicial, data_final
@@ -1908,12 +2073,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 with m4:
                     cor_saldo = "#3fb950" if saldo_liquido >= 0 else "#f85149"
                     st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo líquido</div><div class="metric-value" style="color: {cor_saldo};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
-
-                st.caption(
-                    f"Classificação automática: {total_classificados_automaticamente} | "
-                    f"Pendentes: {total_pendentes_classificacao} | "
-                    f"Conflitos para revisão: {total_conflitos_classificacao}"
-                )
 
                 tab_principal, tab_retirados = st.tabs(["Modelo principal", "Lançamentos retirados"])
                 with tab_principal:
