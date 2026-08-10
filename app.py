@@ -7,6 +7,13 @@ import io
 import os
 import tempfile
 import unicodedata
+import json
+import hashlib
+import hmac
+import zipfile
+import urllib.request
+import urllib.parse
+import urllib.error
 from datetime import datetime
 from pypdf import PdfReader
 import traceback
@@ -752,6 +759,258 @@ def identificar_estorno_de_baixa(*campos):
     pos_baixa = [i for i, token in enumerate(tokens) if token.startswith('baix')]
     return any(abs(i - j) <= 6 for i in pos_estorno for j in pos_baixa)
 
+def criar_assinatura_classificacao(historico):
+    """Remove documentos variáveis e preserva natureza, empresa e observação útil."""
+    texto = normalizar_texto(texto_celula_seguro(historico))
+    texto = re.sub(r'\b(?:pagar|pagamento)\b', 'pago', texto)
+    texto = re.sub(r'\b(?:receber|recebimento)\b', 'recebido', texto)
+    natureza = (
+        'pago' if re.search(r'\bpago\b', texto)
+        else 'recebido' if re.search(r'\brecebido\b', texto)
+        else 'outro'
+    )
+    empresa_match = re.search(r'empresa\s*:\s*(.*?)(?:\s+obs\s*:|$)', texto)
+    empresa = empresa_match.group(1) if empresa_match else texto
+    empresa = re.sub(r'[^a-z0-9]+', ' ', empresa)
+    tokens_empresa = [
+        token for token in empresa.split()
+        if not (any(c.isdigit() for c in token) and len(token) >= 3)
+    ]
+    empresa = ' '.join(tokens_empresa).strip()
+
+    observacao = ''
+    observacao_match = re.search(r'\s+obs\s*:\s*(.*)$', texto)
+    if observacao_match:
+        observacao_bruta = re.sub(r'[^a-z0-9]+', ' ', observacao_match.group(1))
+        # Números, documentos, parcelas e datas mudam a cada mês. Palavras como
+        # BANCO FIBRA, TRANSFERENCIA ou DEVOLUCAO alteram a classificação e ficam.
+        tokens_observacao = [
+            token for token in observacao_bruta.split()
+            if token.isalpha() and token not in {'doc', 'documento'}
+        ]
+        observacao = ' '.join(tokens_observacao).strip()
+
+    partes = [natureza, empresa]
+    if observacao:
+        partes.append(observacao)
+    return '|'.join(partes) if empresa else ''
+
+def obter_config_classificacao_online():
+    """Obtém somente no servidor as credenciais guardadas em st.secrets."""
+    try:
+        secao = st.secrets.get('supabase', {})
+        url = secao.get('url', '') or st.secrets.get('SUPABASE_URL', '')
+        chave = secao.get('service_key', '') or st.secrets.get('SUPABASE_SERVICE_KEY', '')
+        senha = secao.get('admin_password', '') or st.secrets.get(
+            'CLASSIFICATION_ADMIN_PASSWORD', ''
+        )
+        return str(url).strip(), str(chave).strip(), str(senha)
+    except Exception:
+        return '', '', ''
+
+def requisicao_classificacao_online(caminho, metodo='GET', dados=None, prefer=''):
+    url_base, chave, _ = obter_config_classificacao_online()
+    if not url_base or not chave:
+        raise RuntimeError('A base online de classificações ainda não foi configurada.')
+    corpo = json.dumps(dados, ensure_ascii=False).encode('utf-8') if dados is not None else None
+    cabecalhos = {
+        'apikey': chave,
+        'Authorization': f'Bearer {chave}',
+        'Content-Type': 'application/json',
+    }
+    if prefer:
+        cabecalhos['Prefer'] = prefer
+    requisicao = urllib.request.Request(
+        f"{url_base.rstrip('/')}/rest/v1/{caminho}",
+        data=corpo,
+        headers=cabecalhos,
+        method=metodo
+    )
+    try:
+        with urllib.request.urlopen(requisicao, timeout=30) as resposta:
+            conteudo = resposta.read().decode('utf-8')
+            return json.loads(conteudo) if conteudo else []
+    except urllib.error.HTTPError as erro:
+        detalhe = erro.read().decode('utf-8', errors='ignore')
+        raise RuntimeError(f"Falha na base online ({erro.code}): {detalhe[:300]}") from erro
+    except urllib.error.URLError as erro:
+        raise RuntimeError(f"Não foi possível acessar a base online: {erro.reason}") from erro
+
+def carregar_classificacoes_online(empresa='nova_geracao'):
+    registros, deslocamento, limite = [], 0, 1000
+    while True:
+        consulta = (
+            'classificacoes_bancarias?empresa=eq.'
+            + urllib.parse.quote(empresa)
+            + '&select=id,empresa,banco,assinatura,debito,credito,ocorrencias,periodos,exemplo_historico'
+            + f'&limit={limite}&offset={deslocamento}'
+        )
+        lote = requisicao_classificacao_online(consulta)
+        registros.extend(lote)
+        if len(lote) < limite:
+            break
+        deslocamento += limite
+    return registros
+
+def salvar_classificacoes_online(registros):
+    if not registros:
+        return 0
+    existentes = {item['id']: item for item in carregar_classificacoes_online()}
+    for registro in registros:
+        anterior = existentes.get(registro['id'], {})
+        registro['ocorrencias'] = max(
+            int(registro.get('ocorrencias') or 1), int(anterior.get('ocorrencias') or 0)
+        )
+        registro['periodos'] = sorted(set(
+            (registro.get('periodos') or []) + (anterior.get('periodos') or [])
+        ))
+    for inicio in range(0, len(registros), 500):
+        requisicao_classificacao_online(
+            'classificacoes_bancarias?on_conflict=id',
+            metodo='POST',
+            dados=registros[inicio:inicio + 500],
+            prefer='resolution=merge-duplicates,return=minimal'
+        )
+    return len(registros)
+
+def ler_planilha_classificada(file_bytes, filename):
+    """Lê planilha com um ou vários bancos e extrai Débito/Crédito já revisados."""
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    registros = []
+    banco_arquivo = identificar_chave_banco_empresa(filename)
+    for nome_aba in xls.sheet_names:
+        bruto = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
+        indice_cabecalho = None
+        for indice in range(min(30, len(bruto))):
+            nomes = [normalizar_texto(texto_celula_seguro(v)).strip() for v in bruto.iloc[indice]]
+            if all(nome in nomes for nome in ['data', 'valor', 'debito', 'credito']) and (
+                'historico' in nomes
+            ):
+                indice_cabecalho = indice
+                break
+        if indice_cabecalho is None:
+            continue
+        cabecalhos = [texto_celula_seguro(v) for v in bruto.iloc[indice_cabecalho]]
+        df = bruto.iloc[indice_cabecalho + 1:].copy()
+        df.columns = cabecalhos
+        mapa = {normalizar_texto(str(c)).strip(): c for c in df.columns}
+        col_hist = mapa.get('historico')
+        col_data = mapa.get('data')
+        col_debito = mapa.get('debito')
+        col_credito = mapa.get('credito')
+        col_descricao = mapa.get('descricao')
+        if col_hist is None or col_debito is None or col_credito is None:
+            continue
+        banco_aba = identificar_chave_banco_empresa(nome_aba)
+        for _, linha in df.iterrows():
+            historico = texto_celula_seguro(linha[col_hist])
+            debito = texto_celula_seguro(linha[col_debito])
+            credito = texto_celula_seguro(linha[col_credito])
+            if not historico or not debito or not credito:
+                continue
+            banco_linha = (
+                identificar_chave_banco_empresa(linha[col_descricao])
+                if col_descricao is not None else ''
+            ) or banco_aba or banco_arquivo
+            assinatura = criar_assinatura_classificacao(historico)
+            if banco_linha not in {'itau', 'bradesco', 'fibra'} or not assinatura:
+                continue
+            data_lancamento = (
+                pd.to_datetime(linha[col_data], dayfirst=True, errors='coerce')
+                if col_data is not None else pd.NaT
+            )
+            periodo = (
+                data_lancamento.strftime('%Y-%m') if not pd.isna(data_lancamento)
+                else normalizar_texto(filename)
+            )
+            identificador = hashlib.sha256(
+                f"nova_geracao|{banco_linha}|{assinatura}|{debito}|{credito}".encode('utf-8')
+            ).hexdigest()
+            registros.append({
+                'id': identificador,
+                'empresa': 'nova_geracao',
+                'banco': banco_linha,
+                'assinatura': assinatura,
+                'debito': debito,
+                'credito': credito,
+                'ocorrencias': 1,
+                'periodos': [periodo],
+                'exemplo_historico': historico[:500]
+            })
+    return registros
+
+def importar_arquivos_classificados(arquivos):
+    """Aceita XLSX individual, vários XLSX ou ZIP contendo planilhas."""
+    registros = []
+    for arquivo in arquivos:
+        conteudo = arquivo.getvalue()
+        nome = arquivo.name
+        if nome.lower().endswith('.zip'):
+            with zipfile.ZipFile(io.BytesIO(conteudo)) as pacote:
+                membros = [
+                    membro for membro in pacote.infolist()
+                    if not membro.is_dir() and membro.filename.lower().endswith(('.xlsx', '.xls'))
+                ]
+                if sum(membro.file_size for membro in membros) > 60 * 1024 * 1024:
+                    raise ValueError('O conteúdo descompactado ultrapassa o limite de 60 MB.')
+                for membro in membros:
+                    if membro.file_size > 20 * 1024 * 1024:
+                        raise ValueError(f'A planilha {membro.filename} ultrapassa 20 MB.')
+                    registros.extend(ler_planilha_classificada(
+                        pacote.read(membro), os.path.basename(membro.filename)
+                    ))
+        else:
+            registros.extend(ler_planilha_classificada(conteudo, nome))
+
+    agrupados = {}
+    for registro in registros:
+        chave = registro['id']
+        if chave not in agrupados:
+            agrupados[chave] = registro
+        else:
+            agrupados[chave]['ocorrencias'] += 1
+            agrupados[chave]['periodos'] = sorted(set(
+                agrupados[chave]['periodos'] + registro['periodos']
+            ))
+    return list(agrupados.values())
+
+def aplicar_classificacoes_automaticas(df, banco, base_classificacoes):
+    """Preenche apenas padrões repetidos e com uma única classificação conhecida."""
+    resultado = df.copy()
+    resultado['_CLASSIFICAÇÃO'] = 'Pendente'
+    candidatos = {}
+    periodos_por_assinatura = {}
+    for item in base_classificacoes:
+        if item.get('banco') != banco:
+            continue
+        assinatura = item.get('assinatura', '')
+        par = (texto_celula_seguro(item.get('debito')), texto_celula_seguro(item.get('credito')))
+        if assinatura and all(par):
+            candidatos.setdefault(assinatura, set()).add(par)
+            periodos_por_assinatura.setdefault(assinatura, set()).update(
+                item.get('periodos') or []
+            )
+    mapa_seguro = {
+        assinatura: next(iter(pares))
+        for assinatura, pares in candidatos.items()
+        if len(pares) == 1 and len(periodos_por_assinatura.get(assinatura, set())) >= 3
+    }
+    for indice, linha in resultado.iterrows():
+        if texto_celula_seguro(linha.get('DÉBITO')) or texto_celula_seguro(linha.get('CRÉDITO')):
+            resultado.at[indice, '_CLASSIFICAÇÃO'] = 'Já preenchido'
+            continue
+        assinatura = criar_assinatura_classificacao(linha.get('HISTÓRICO', ''))
+        if assinatura in mapa_seguro:
+            debito, credito = mapa_seguro[assinatura]
+            resultado.at[indice, 'DÉBITO'] = debito
+            resultado.at[indice, 'CRÉDITO'] = credito
+            resultado.at[indice, '_CLASSIFICAÇÃO'] = 'Automática'
+        elif assinatura in candidatos and len(candidatos[assinatura]) > 1:
+            resultado.at[indice, '_CLASSIFICAÇÃO'] = 'Revisar conflito'
+        elif assinatura in candidatos:
+            resultado.at[indice, '_CLASSIFICAÇÃO'] = 'Revisar padrão novo'
+    return resultado
+
 def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao_banco):
     """Localiza uma conta na planilha consolidada e transforma seus lançamentos."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -1190,7 +1449,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.3 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.4 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1405,6 +1664,68 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         st.markdown("---")
         st.markdown("### Nova Geração")
+        url_base_classificacao, chave_base_classificacao, senha_admin_classificacao = (
+            obter_config_classificacao_online()
+        )
+        base_classificacoes = []
+        erro_base_classificacoes = ''
+        if url_base_classificacao and chave_base_classificacao:
+            try:
+                base_classificacoes = carregar_classificacoes_online()
+            except Exception as erro_base:
+                erro_base_classificacoes = str(erro_base)
+
+        with st.expander("Base inteligente de Débito e Crédito"):
+            if erro_base_classificacoes:
+                st.error(erro_base_classificacoes)
+            elif url_base_classificacao and chave_base_classificacao:
+                st.success(
+                    f"Base online conectada: {len(base_classificacoes)} padrões disponíveis."
+                )
+            else:
+                st.warning(
+                    "A base online ainda não foi configurada nos Secrets do Streamlit. "
+                    "A organização continuará funcionando, mas sem preencher Débito e Crédito."
+                )
+            st.caption(
+                "Importe planilhas já classificadas. Pode enviar arquivos separados, uma planilha "
+                "com vários bancos ou arquivos ZIP. Reimportar o mesmo conteúdo não cria duplicidades."
+            )
+            arquivos_aprendizado = st.file_uploader(
+                "Planilhas classificadas para ensinar o sistema",
+                type=['xlsx', 'xls', 'zip'],
+                accept_multiple_files=True,
+                key='org_base_classificada_nova'
+            )
+            senha_aprendizado = st.text_input(
+                "Senha administrativa para atualizar a base",
+                type='password',
+                key='org_senha_base_classificada_nova'
+            )
+            if st.button(
+                "Importar classificações",
+                key='org_importar_base_classificada_nova',
+                use_container_width=True
+            ):
+                if not url_base_classificacao or not chave_base_classificacao:
+                    st.error("Configure primeiro a conexão da base online nos Secrets do Streamlit.")
+                elif not senha_admin_classificacao:
+                    st.error("Configure a senha administrativa nos Secrets do Streamlit.")
+                elif not hmac.compare_digest(senha_aprendizado, senha_admin_classificacao):
+                    st.error("Senha administrativa incorreta.")
+                elif not arquivos_aprendizado:
+                    st.warning("Envie pelo menos uma planilha classificada ou arquivo ZIP.")
+                else:
+                    try:
+                        novos_registros = importar_arquivos_classificados(arquivos_aprendizado)
+                        quantidade_salva = salvar_classificacoes_online(novos_registros)
+                        st.success(
+                            f"Base atualizada com {quantidade_salva} padrões de classificação."
+                        )
+                        st.rerun()
+                    except Exception as erro_importacao:
+                        st.error(f"Não foi possível atualizar a base: {erro_importacao}")
+
         configuracoes_bancos = {
             "Itaú - Conta 99549-5": {
                 "nome": "Itaú", "conta": "99549-5", "slug": "itau",
@@ -1490,9 +1811,30 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
                 modelos_por_banco, retirados_por_banco = [], []
                 dados_exportacao_por_banco = {}
+                total_classificados_automaticamente = 0
+                total_pendentes_classificacao = 0
+                total_conflitos_classificacao = 0
                 for config, df_banco_completo, df_banco_retirados_completo in dados_processados:
                     df_banco = filtrar_dataframe_periodo(
                         df_banco_completo, data_inicial, data_final
+                    )
+                    if base_classificacoes and not df_banco.empty:
+                        df_banco = aplicar_classificacoes_automaticas(
+                            df_banco, config['slug'], base_classificacoes
+                        )
+                    else:
+                        df_banco = df_banco.copy()
+                        df_banco['_CLASSIFICAÇÃO'] = 'Pendente'
+                    total_classificados_automaticamente += int(
+                        df_banco['_CLASSIFICAÇÃO'].eq('Automática').sum()
+                    )
+                    total_pendentes_classificacao += int(
+                        df_banco['_CLASSIFICAÇÃO'].isin(
+                            ['Pendente', 'Revisar padrão novo']
+                        ).sum()
+                    )
+                    total_conflitos_classificacao += int(
+                        df_banco['_CLASSIFICAÇÃO'].eq('Revisar conflito').sum()
                     )
                     df_banco_retirados = filtrar_dataframe_periodo(
                         df_banco_retirados_completo, data_inicial, data_final
@@ -1539,6 +1881,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 with m4:
                     cor_saldo = "#3fb950" if saldo_liquido >= 0 else "#f85149"
                     st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo líquido</div><div class="metric-value" style="color: {cor_saldo};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
+
+                st.caption(
+                    f"Classificação automática: {total_classificados_automaticamente} | "
+                    f"Pendentes: {total_pendentes_classificacao} | "
+                    f"Conflitos para revisão: {total_conflitos_classificacao}"
+                )
 
                 tab_principal, tab_retirados = st.tabs(["Modelo principal", "Lançamentos retirados"])
                 with tab_principal:
