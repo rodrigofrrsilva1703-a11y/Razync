@@ -11,6 +11,7 @@ import json
 import hashlib
 import hmac
 import zipfile
+import difflib
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -795,6 +796,68 @@ def criar_assinatura_classificacao(historico):
         partes.append(observacao)
     return '|'.join(partes) if empresa else ''
 
+def decompor_assinatura_classificacao(assinatura):
+    partes = str(assinatura or '').split('|')
+    natureza = partes[0] if partes else ''
+    empresa = partes[1] if len(partes) > 1 else ''
+    observacao = '|'.join(partes[2:]) if len(partes) > 2 else ''
+    return natureza, empresa, observacao
+
+def normalizar_nome_empresa_classificacao(nome):
+    """Retira diferenças societárias sem apagar palavras relevantes da empresa."""
+    texto = normalizar_texto(texto_celula_seguro(nome))
+    tokens = re.findall(r'[a-z0-9]+', texto)
+    termos_societarios = {
+        'ltda', 'limitada', 'eireli', 'epp', 'me', 'sa', 'sociedade', 'anonima'
+    }
+    tokens = [token for token in tokens if token not in termos_societarios]
+    return ' '.join(tokens)
+
+def calcular_similaridade_nome_empresa(nome_a, nome_b):
+    a = normalizar_nome_empresa_classificacao(nome_a)
+    b = normalizar_nome_empresa_classificacao(nome_b)
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    razao_caracteres = difflib.SequenceMatcher(None, a, b).ratio()
+    tokens_a, tokens_b = set(a.split()), set(b.split())
+    uniao = tokens_a | tokens_b
+    razao_tokens = len(tokens_a & tokens_b) / len(uniao) if uniao else 0.0
+    combinada = (razao_caracteres * 0.75) + (razao_tokens * 0.25)
+    return max(razao_caracteres, combinada)
+
+def encontrar_conta_por_nome_similar(assinatura, mapa_seguro):
+    """Retorna conta somente quando a aproximação possui margem de segurança."""
+    natureza_alvo, empresa_alvo, observacao_alvo = decompor_assinatura_classificacao(
+        assinatura
+    )
+    empresa_alvo_limpa = normalizar_nome_empresa_classificacao(empresa_alvo)
+    if natureza_alvo not in {'pago', 'recebido'} or len(empresa_alvo_limpa) < 6:
+        return None, 0.0
+
+    melhor_por_conta = {}
+    for assinatura_base, conta in mapa_seguro.items():
+        natureza_base, empresa_base, observacao_base = decompor_assinatura_classificacao(
+            assinatura_base
+        )
+        if natureza_base != natureza_alvo or observacao_base != observacao_alvo:
+            continue
+        similaridade = calcular_similaridade_nome_empresa(empresa_alvo, empresa_base)
+        if similaridade > melhor_por_conta.get(conta, 0.0):
+            melhor_por_conta[conta] = similaridade
+
+    resultados = sorted(
+        melhor_por_conta.items(), key=lambda item: item[1], reverse=True
+    )
+    if not resultados or resultados[0][1] < 0.90:
+        return None, resultados[0][1] if resultados else 0.0
+    melhor_conta, melhor_nota = resultados[0]
+    segunda_nota = resultados[1][1] if len(resultados) > 1 else 0.0
+    if segunda_nota >= 0.90 and (melhor_nota - segunda_nota) < 0.05:
+        return None, melhor_nota
+    return melhor_conta, melhor_nota
+
 def obter_config_classificacao_online():
     """Obtém somente no servidor as credenciais guardadas em st.secrets."""
     try:
@@ -1086,6 +1149,7 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
         'automaticos': 0,
         'somente_banco': 0,
         'antecipados': 0,
+        'por_nome_empresa': 0,
         'ja_preenchidos': 0,
         'parciais_completados': 0,
         'conflitos': 0,
@@ -1094,6 +1158,7 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
         'abas_processadas': 0,
     }
     banco_arquivo = identificar_chave_banco_empresa(filename)
+    cache_similaridade = {}
 
     for ws in wb.worksheets:
         if 'retir' in normalizar_texto(ws.title):
@@ -1181,8 +1246,23 @@ def classificar_planilha_final(file_bytes, filename, base_classificacoes):
                 resumo['conflitos'] += 1
                 resumo['somente_banco'] += 1
             else:
-                resumo['padroes_novos'] += 1
-                resumo['somente_banco'] += 1
+                chave_cache = (banco_linha, assinatura)
+                if chave_cache not in cache_similaridade:
+                    cache_similaridade[chave_cache] = encontrar_conta_por_nome_similar(
+                        assinatura, mapas_seguros.get(banco_linha, {})
+                    )
+                conta_similar, _ = cache_similaridade[chave_cache]
+                if not candidatos and conta_similar:
+                    ws.cell(numero_linha, coluna_contrapartida).value = valor_conta_excel(
+                        conta_similar
+                    )
+                    resumo['automaticos'] += 1
+                    resumo['por_nome_empresa'] += 1
+                    if linha_estava_parcial:
+                        resumo['parciais_completados'] += 1
+                else:
+                    resumo['padroes_novos'] += 1
+                    resumo['somente_banco'] += 1
 
     if resumo['abas_processadas'] == 0:
         raise ValueError(
@@ -1631,7 +1711,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.9 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v12.0 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1966,6 +2046,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             st.caption(
                                 f"{resumo_classificacao['parciais_completados']} linhas já "
                                 "possuíam uma conta; somente a célula vazia foi completada."
+                            )
+                        if resumo_classificacao['por_nome_empresa']:
+                            st.caption(
+                                f"{resumo_classificacao['por_nome_empresa']} lançamentos foram "
+                                "classificados pela semelhança segura do nome da empresa."
                             )
                         if resumo_classificacao['automaticos']:
                             st.success(
