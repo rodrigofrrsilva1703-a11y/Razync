@@ -804,14 +804,27 @@ def obter_config_classificacao_online():
         senha = secao.get('admin_password', '') or st.secrets.get(
             'CLASSIFICATION_ADMIN_PASSWORD', ''
         )
-        return str(url).strip(), str(chave).strip(), str(senha)
+        url = str(url).strip()
+        chave = str(chave).strip()
+        senha = str(senha)
+        placeholders_url = {'URL_DO_PROJETO_SUPABASE', 'SUA_URL_SUPABASE', 'SUPABASE_URL'}
+        placeholders_chave = {
+            'SERVICE_ROLE_KEY', 'SUA_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'
+        }
+        if url.upper() in placeholders_url or not url.startswith(('https://', 'http://')):
+            url = ''
+        if chave.upper() in placeholders_chave:
+            chave = ''
+        return url, chave, senha
     except Exception:
         return '', '', ''
 
 def requisicao_classificacao_online(caminho, metodo='GET', dados=None, prefer=''):
     url_base, chave, _ = obter_config_classificacao_online()
     if not url_base or not chave:
-        raise RuntimeError('A base online de classificações ainda não foi configurada.')
+        raise RuntimeError(
+            'A base online ainda não foi configurada com a URL e a chave reais do Supabase.'
+        )
     corpo = json.dumps(dados, ensure_ascii=False).encode('utf-8') if dados is not None else None
     cabecalhos = {
         'apikey': chave,
@@ -1449,7 +1462,7 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.4 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v11.5 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -1684,7 +1697,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
             else:
                 st.warning(
-                    "A base online ainda não foi configurada nos Secrets do Streamlit. "
+                    "A base online ainda não foi configurada com os valores reais nos Secrets "
+                    "do Streamlit. Substitua URL_DO_PROJETO_SUPABASE e SERVICE_ROLE_KEY pelos "
+                    "dados do seu projeto Supabase. "
                     "A organização continuará funcionando, mas sem preencher Débito e Crédito."
                 )
             st.caption(
