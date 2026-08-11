@@ -22,7 +22,7 @@ import traceback
 # Configuração da página Web
 st.set_page_config(
     page_title="Plataforma Contábil Pro", 
-    page_icon="🤖", 
+    page_icon="📊", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -33,34 +33,28 @@ st.set_page_config(
 st.markdown("""
     <style>
         :root {
-            --bg: #070b14;
-            --surface: rgba(15, 23, 42, .82);
-            --surface-strong: #111a2e;
-            --border: rgba(148, 163, 184, .16);
-            --border-strong: rgba(99, 102, 241, .38);
-            --text: #f8fafc;
-            --muted: #94a3b8;
-            --primary: #6366f1;
-            --primary-2: #8b5cf6;
-            --cyan: #22d3ee;
-            --success: #34d399;
-            --danger: #fb7185;
+            --bg: #0d1117;
+            --surface: #161b22;
+            --surface-strong: #1c2128;
+            --border: #30363d;
+            --border-strong: #484f58;
+            --text: #f0f3f6;
+            --muted: #8b949e;
+            --primary: #2f81f7;
+            --primary-2: #2f81f7;
+            --cyan: #2f81f7;
+            --success: #3fb950;
+            --danger: #f85149;
         }
         html, body, [class*="css"] { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-        .stApp {
-            background:
-                radial-gradient(circle at 82% 0%, rgba(99, 102, 241, .13), transparent 31rem),
-                radial-gradient(circle at 20% 100%, rgba(34, 211, 238, .07), transparent 28rem),
-                var(--bg);
-            color: var(--text);
-        }
-        .block-container { padding: 2.25rem 2.4rem 4rem; max-width: 1480px; }
-        h1 { letter-spacing: -0.04em !important; font-size: clamp(2rem, 4vw, 3.1rem) !important; }
-        h2, h3 { letter-spacing: -0.025em !important; }
+        .stApp { background: var(--bg); color: var(--text); }
+        .block-container { padding: 2rem 2.25rem 4rem; max-width: 1400px; }
+        h1 { letter-spacing: -0.025em !important; font-size: clamp(1.9rem, 3vw, 2.6rem) !important; }
+        h2, h3 { letter-spacing: -0.015em !important; }
         hr { border-color: var(--border) !important; margin: 1.7rem 0 !important; }
 
         section[data-testid="stSidebar"] {
-            background: rgba(8, 13, 24, .96);
+            background: #010409;
             border-right: 1px solid var(--border);
             min-width: 270px !important;
         }
@@ -71,11 +65,11 @@ st.markdown("""
             margin-bottom: 14px;
         }
         .brand-mark {
-            width: 42px; height: 42px; border-radius: 13px;
+            width: 38px; height: 38px; border-radius: 8px;
             display: inline-flex; align-items: center; justify-content: center;
             color: white; font-weight: 800; font-size: 17px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-2));
-            box-shadow: 0 12px 35px rgba(99, 102, 241, .28);
+            background: var(--primary);
+            box-shadow: none;
             margin-bottom: 12px;
         }
         .brand-name { color: var(--text); font-size: 16px; font-weight: 750; margin: 0; }
@@ -84,25 +78,24 @@ st.markdown("""
 
         .stButton > button, .stDownloadButton > button {
             width: 100% !important; min-height: 42px;
-            border-radius: 11px !important; font-weight: 650 !important;
+            border-radius: 6px !important; font-weight: 600 !important;
             padding: .58rem 1rem !important;
             border: 1px solid var(--border) !important;
-            background: rgba(30, 41, 59, .62) !important;
-            color: #dbeafe !important;
-            transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
-            box-shadow: 0 1px 0 rgba(255,255,255,.03) inset !important;
+            background: #21262d !important;
+            color: #c9d1d9 !important;
+            transition: border-color .15s ease, background .15s ease;
+            box-shadow: none !important;
         }
         .stButton > button:hover, .stDownloadButton > button:hover {
-            transform: translateY(-1px);
-            background: rgba(51, 65, 85, .78) !important;
-            border-color: rgba(129, 140, 248, .55) !important;
+            background: #30363d !important;
+            border-color: #6e7681 !important;
             color: white !important;
-            box-shadow: 0 10px 28px rgba(2, 6, 23, .22) !important;
+            box-shadow: none !important;
         }
         button[kind="primary"] {
-            background: linear-gradient(135deg, var(--primary), var(--primary-2)) !important;
-            border-color: transparent !important; color: white !important;
-            box-shadow: 0 10px 28px rgba(99, 102, 241, .25) !important;
+            background: var(--primary) !important;
+            border-color: #58a6ff !important; color: white !important;
+            box-shadow: none !important;
         }
         section[data-testid="stSidebar"] .stButton > button {
             justify-content: flex-start !important; min-height: 44px;
@@ -110,72 +103,68 @@ st.markdown("""
             color: #94a3b8 !important; padding-left: 13px !important;
         }
         section[data-testid="stSidebar"] .stButton > button:hover {
-            background: rgba(99, 102, 241, .10) !important;
-            border-color: rgba(99, 102, 241, .20) !important; color: #e0e7ff !important;
+            background: #161b22 !important;
+            border-color: #30363d !important; color: #f0f6fc !important;
         }
         section[data-testid="stSidebar"] button[kind="primary"] {
-            background: linear-gradient(90deg, rgba(99,102,241,.22), rgba(139,92,246,.10)) !important;
-            border-color: rgba(129,140,248,.28) !important;
+            background: #21262d !important;
+            border-color: #484f58 !important;
             color: white !important; box-shadow: none !important;
         }
 
         .hero-shell {
-            position: relative; overflow: hidden;
-            padding: clamp(28px, 5vw, 58px);
-            border: 1px solid var(--border-strong); border-radius: 24px;
-            background: linear-gradient(135deg, rgba(17, 26, 46, .96), rgba(15, 23, 42, .78));
-            box-shadow: 0 26px 70px rgba(2, 6, 23, .35);
-            margin-bottom: 32px;
+            padding: 28px 30px;
+            border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface);
+            box-shadow: none;
+            margin-bottom: 28px;
         }
         .hero-shell:after {
-            content: ""; position: absolute; width: 330px; height: 330px;
-            right: -110px; top: -150px; border-radius: 999px;
-            background: radial-gradient(circle, rgba(99,102,241,.36), rgba(99,102,241,0) 67%);
-            pointer-events: none;
+            display: none;
         }
-        .eyebrow { color: #a5b4fc; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 12px; }
-        .hero-title { max-width: 820px; color: white; font-size: clamp(2.1rem, 5vw, 4rem); line-height: 1.02; letter-spacing: -.055em; font-weight: 820; margin: 0 0 16px; }
-        .hero-title span { background: linear-gradient(90deg, #a5b4fc, #67e8f9); -webkit-background-clip: text; color: transparent; }
-        .hero-subtitle { max-width: 740px; color: #aab7cc; font-size: 15px; line-height: 1.7; margin: 0; }
-        .hero-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+        .eyebrow { color: #8b949e; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 9px; }
+        .hero-title { max-width: 820px; color: white; font-size: clamp(1.8rem, 3vw, 2.35rem); line-height: 1.15; letter-spacing: -.025em; font-weight: 700; margin: 0 0 11px; }
+        .hero-title span { color: white; }
+        .hero-subtitle { max-width: 800px; color: #8b949e; font-size: 14px; line-height: 1.6; margin: 0; }
+        .hero-badges { display: none; }
         .hero-badge { padding: 7px 11px; border-radius: 999px; border: 1px solid var(--border); background: rgba(15,23,42,.65); color: #cbd5e1; font-size: 11px; font-weight: 650; }
 
         .page-header { margin: 4px 0 22px; }
-        .page-kicker { color: #818cf8; font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; margin-bottom: 7px; }
-        .page-title { color: white; font-size: clamp(1.8rem, 3.5vw, 2.65rem); line-height: 1.08; font-weight: 800; letter-spacing: -.04em; margin: 0 0 9px; }
+        .page-kicker { color: #8b949e; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
+        .page-title { color: white; font-size: clamp(1.65rem, 3vw, 2.25rem); line-height: 1.12; font-weight: 700; letter-spacing: -.025em; margin: 0 0 8px; }
         .page-subtitle { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0; max-width: 880px; }
 
         .tool-card {
-            position: relative; background: linear-gradient(145deg, rgba(17,26,46,.95), rgba(11,18,32,.88));
-            border: 1px solid var(--border); padding: 25px; border-radius: 18px;
-            min-height: 206px; display: flex; flex-direction: column; align-items: flex-start;
-            transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+            position: relative; background: var(--surface);
+            border: 1px solid var(--border); padding: 22px; border-radius: 8px;
+            min-height: 182px; display: flex; flex-direction: column; align-items: flex-start;
+            transition: border-color .15s ease;
         }
-        .tool-card:hover { transform: translateY(-3px); border-color: var(--border-strong); box-shadow: 0 22px 50px rgba(2,6,23,.28); }
-        .tool-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px; background: linear-gradient(135deg, rgba(99,102,241,.22), rgba(34,211,238,.11)); border: 1px solid rgba(129,140,248,.25); margin-bottom: 22px; }
-        .tool-tag { position: absolute; right: 17px; top: 17px; color: #818cf8; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-        .tool-title { color: white; font-size: 17px; font-weight: 750; margin: 0 0 8px; }
+        .tool-card:hover { border-color: var(--border-strong); box-shadow: none; }
+        .tool-icon { width: 38px; height: 38px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 17px; background: #21262d; border: 1px solid #30363d; margin-bottom: 18px; }
+        .tool-tag { position: absolute; right: 15px; top: 15px; color: #6e7681; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .tool-title { color: white; font-size: 16px; font-weight: 650; margin: 0 0 7px; }
         .tool-description { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0; text-align: left; }
 
         .workflow-strip { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 22px; }
-        .workflow-step { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border-radius: 10px; background: rgba(15,23,42,.72); border: 1px solid var(--border); color: #a8b4c7; font-size: 11px; font-weight: 650; }
-        .workflow-step b { width: 20px; height: 20px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: white; background: rgba(99,102,241,.32); font-size: 10px; }
+        .workflow-step { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 6px; background: #161b22; border: 1px solid var(--border); color: #8b949e; font-size: 11px; font-weight: 600; }
+        .workflow-step b { width: 18px; height: 18px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; color: #c9d1d9; background: #30363d; font-size: 9px; }
 
-        .metric-card { background: linear-gradient(145deg, rgba(17,26,46,.96), rgba(12,19,34,.88)); border: 1px solid var(--border); padding: 18px 16px; border-radius: 15px; text-align: left; min-height: 92px; box-shadow: 0 10px 30px rgba(2,6,23,.13); }
+        .metric-card { background: var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: 8px; text-align: left; min-height: 84px; box-shadow: none; }
         .metric-title { font-size: 10px; color: #8290a5; text-transform: uppercase; font-weight: 800; margin-bottom: 8px; letter-spacing: .08em; }
         .metric-value { font-size: 20px; color: var(--text); font-weight: 780; letter-spacing: -.02em; }
 
-        div[data-testid="stFileUploader"] { padding: 16px; border: 1px dashed rgba(129,140,248,.35); border-radius: 16px; background: rgba(15,23,42,.48); }
-        div[data-testid="stFileUploaderDropzone"] { background: rgba(15,23,42,.48); border: none; border-radius: 12px; }
+        div[data-testid="stFileUploader"] { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: #161b22; }
+        div[data-testid="stFileUploaderDropzone"] { background: #0d1117; border: 1px dashed #484f58; border-radius: 6px; }
         div[data-baseweb="select"] > div, .stTextInput input, .stDateInput input, .stNumberInput input {
-            background: rgba(15,23,42,.72) !important; border-color: var(--border) !important; border-radius: 10px !important;
+            background: #0d1117 !important; border-color: var(--border) !important; border-radius: 6px !important;
         }
         div[data-baseweb="tab-list"] { gap: 7px; border-bottom: 1px solid var(--border); }
-        button[data-baseweb="tab"] { border-radius: 10px 10px 0 0; padding: 10px 15px; color: var(--muted); }
-        button[data-baseweb="tab"][aria-selected="true"] { color: white; background: rgba(99,102,241,.12); }
-        div[data-testid="stExpander"] { border: 1px solid var(--border); border-radius: 14px; background: rgba(15,23,42,.46); overflow: hidden; }
-        div[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-        div[data-testid="stAlert"] { border-radius: 13px; border: 1px solid var(--border); }
+        button[data-baseweb="tab"] { border-radius: 4px 4px 0 0; padding: 9px 14px; color: var(--muted); }
+        button[data-baseweb="tab"][aria-selected="true"] { color: white; background: #21262d; }
+        div[data-testid="stExpander"] { border: 1px solid var(--border); border-radius: 8px; background: #161b22; overflow: hidden; }
+        div[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        div[data-testid="stAlert"] { border-radius: 8px; border: 1px solid var(--border); }
         .alerta-dominio { background: rgba(127,29,29,.22); border: 1px solid rgba(248,113,113,.25); border-left: 4px solid var(--danger); padding: 16px; border-radius: 13px; margin-bottom: 20px; }
         .alerta-dominio h4 { margin-top: 0; color: #fda4af; font-size: 15px; }
         .alerta-dominio p { margin-bottom: 0; color: #cbd5e1; font-size: 13px; }
@@ -185,7 +174,7 @@ st.markdown("""
 
         @media (max-width: 760px) {
             .block-container { padding: 1.25rem 1rem 3rem; }
-            .hero-shell { padding: 27px 22px; border-radius: 19px; }
+            .hero-shell { padding: 22px; border-radius: 8px; }
             .tool-card { min-height: 180px; }
             .metric-value { font-size: 17px; }
         }
@@ -1910,7 +1899,7 @@ st.sidebar.markdown(
         border-radius:12px;background:rgba(15,23,42,.4);">
         <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
         <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 13.0</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 13.1</div>
     </div>""",
     unsafe_allow_html=True
 )
@@ -1921,9 +1910,9 @@ st.sidebar.markdown(
 if st.session_state['pagina_ativa'] == 'home':
     st.markdown(
         """<div class="hero-shell">
-            <div class="eyebrow">Plataforma contábil integrada</div>
-            <h1 class="hero-title">Menos trabalho manual.<br><span>Mais controle dos lançamentos.</span></h1>
-            <p class="hero-subtitle">Converta extratos, organize planilhas de clientes e confira divergências em um único ambiente, com fluxos claros e arquivos prontos para a Domínio.</p>
+            <div class="eyebrow">Plataforma Contábil Pro</div>
+            <h1 class="hero-title">Central de operações contábeis</h1>
+            <p class="hero-subtitle">Conversão de extratos, organização de planilhas e conferência de lançamentos em um único ambiente.</p>
             <div class="hero-badges">
                 <span class="hero-badge">Conversão inteligente</span>
                 <span class="hero-badge">Conferência diária</span>
@@ -1933,28 +1922,28 @@ if st.session_state['pagina_ativa'] == 'home':
         </div>""",
         unsafe_allow_html=True
     )
-    st.markdown("<div class='page-kicker'>Escolha o fluxo de trabalho</div>", unsafe_allow_html=True)
-    st.markdown("<p class='page-subtitle' style='margin-bottom:18px;'>Cada ferramenta conduz você desde o envio do arquivo até o resultado final.</p>", unsafe_allow_html=True)
+    st.markdown("<div class='page-kicker'>Ferramentas</div>", unsafe_allow_html=True)
+    st.markdown("<p class='page-subtitle' style='margin-bottom:18px;'>Selecione a operação que deseja realizar.</p>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
     
     with col_t1:
         st.markdown("""<div class="tool-card"><span class="tool-tag">Universal</span><div class="tool-icon">⇄</div><p class="tool-title">Conversor de Extratos</p><p class="tool-description">Transforme PDF, OFX, Excel ou CSV em um arquivo padronizado e pronto para importar na Domínio.</p></div>""", unsafe_allow_html=True)
         st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.button("Abrir conversor  →", use_container_width=True, key="btn_abrir_extratos", type="primary"):
+        if st.button("Acessar conversor", use_container_width=True, key="btn_abrir_extratos", type="primary"):
             mudar_pagina('extratos')
             st.rerun()
             
     with col_t2:
         st.markdown("""<div class="tool-card"><span class="tool-tag">Conferência</span><div class="tool-icon">✓</div><p class="tool-title">Conciliação com Razão</p><p class="tool-description">Compare extrato e razão, acompanhe totais diários e identifique rapidamente os períodos divergentes.</p></div>""", unsafe_allow_html=True)
         st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.button("Abrir conciliação  →", use_container_width=True, key="btn_abrir_razao", type="primary"):
+        if st.button("Acessar conciliação", use_container_width=True, key="btn_abrir_razao", type="primary"):
             mudar_pagina('razao')
             st.rerun()
         
     with col_t3:
         st.markdown("""<div class="tool-card"><span class="tool-tag">Por empresa</span><div class="tool-icon">▦</div><p class="tool-title">Organizador de Planilhas</p><p class="tool-description">Aplique regras específicas de cada cliente, classifique contas e faça a conferência dos bancos.</p></div>""", unsafe_allow_html=True)
         st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.button("Abrir organizador  →", use_container_width=True, key="btn_abrir_organizador", type="primary"):
+        if st.button("Acessar organizador", use_container_width=True, key="btn_abrir_organizador", type="primary"):
             mudar_pagina('organizador')
             st.rerun()
 
