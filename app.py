@@ -41,6 +41,9 @@ st.markdown("""
         section[data-testid="stSidebar"] { background-color: #0d1117; border-right: 1px solid #30363d; }
         .tool-card { background-color: #161b22; border: 1px solid #30363d; padding: 24px 20px; border-radius: 8px; text-align: center; height: 160px; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: border-color 0.2s ease; }
         .tool-card:hover { border-color: #8b949e; }
+        a.tool-card { text-decoration: none !important; color: inherit !important; cursor: pointer; }
+        a.tool-card:hover { background-color: #1c2128; border-color: #8b949e; transform: translateY(-2px); }
+        a.tool-card:focus-visible { outline: 2px solid #58a6ff; outline-offset: 3px; }
         .alerta-dominio { background-color: #3d1c1c; border-left: 5px solid #f85149; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
         .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
         .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
@@ -1711,6 +1714,14 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
 if 'pagina_ativa' not in st.session_state: st.session_state['pagina_ativa'] = 'home'
+
+# Permite que os cards da tela inicial naveguem pela própria URL.
+pagina_solicitada = st.query_params.get('pagina')
+paginas_validas = {'home', 'extratos', 'razao', 'organizador'}
+if pagina_solicitada in paginas_validas:
+    st.session_state['pagina_ativa'] = pagina_solicitada
+    st.query_params.clear()
+
 def mudar_pagina(nome_pagina): st.session_state['pagina_ativa'] = nome_pagina
 
 # ==============================================================================
@@ -1735,27 +1746,24 @@ if st.session_state['pagina_ativa'] == 'home':
     st.caption("Selecione uma ferramenta abaixo para começar.")
     st.markdown("<br>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
-    
+
     with col_t1:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">📊</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conversor de Extratos</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar", use_container_width=True, key="btn_abrir_extratos"):
-            mudar_pagina('extratos')
-            st.rerun()
-            
+        st.markdown(
+            """<a class="tool-card" href="?pagina=extratos" target="_self" aria-label="Abrir Conversor de Extratos"><p style="font-size: 20px; margin-bottom: 8px;">📊</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conversor de Extratos</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p></a>""",
+            unsafe_allow_html=True
+        )
+
     with col_t2:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🔍</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Análise automatizada, rolagem de saldos e auditoria de divergências.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar", use_container_width=True, key="btn_abrir_razao"):
-            mudar_pagina('razao')
-            st.rerun()
-        
+        st.markdown(
+            """<a class="tool-card" href="?pagina=razao" target="_self" aria-label="Abrir Conciliação com Razão"><p style="font-size: 20px; margin-bottom: 8px;">🔍</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Análise automatizada, rolagem de saldos e auditoria de divergências.</p></a>""",
+            unsafe_allow_html=True
+        )
+
     with col_t3:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🗂️</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Organizador de Planilhas</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta planilhas específicas de empresas para o Modelo Domínio.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar", use_container_width=True, key="btn_abrir_organizador"):
-            mudar_pagina('organizador')
-            st.rerun()
+        st.markdown(
+            """<a class="tool-card" href="?pagina=organizador" target="_self" aria-label="Abrir Organizador de Planilhas"><p style="font-size: 20px; margin-bottom: 8px;">🗂️</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Organizador de Planilhas</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta planilhas específicas de empresas para o Modelo Domínio.</p></a>""",
+            unsafe_allow_html=True
+        )
 
 # ==============================================================================
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
