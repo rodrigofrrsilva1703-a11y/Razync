@@ -2081,10 +2081,8 @@ def processar_mapa_autokraft(file_bytes, filename=''):
             nome_bloco = normalizar_texto(texto_celula_seguro(linha.iloc[0])).strip()
             if nome_bloco == 'itau':
                 banco_atual = 'Itaú'
-                continue
-            if nome_bloco == 'daycoval':
+            elif nome_bloco == 'daycoval':
                 banco_atual = 'Daycoval'
-                continue
 
             historico_credito = texto_celula_seguro(linha.iloc[2])
             historico_debito = texto_celula_seguro(linha.iloc[4])
@@ -2157,7 +2155,7 @@ def filtrar_dataframe_periodo(df, data_inicial, data_final):
     return df.loc[mascara].copy().reset_index(drop=True)
 
 def identificar_chave_banco_empresa(valor):
-    """Identifica os bancos da Nova Geração por descrição, aba ou conta."""
+    """Identifica os bancos conhecidos por descrição, aba, arquivo ou conta."""
     texto = normalizar_texto(texto_celula_seguro(valor))
     digitos = re.sub(r'\D', '', texto_celula_seguro(valor))
     if 'itau' in texto or any(conta in digitos for conta in ['995495', '980026']):
@@ -2166,10 +2164,15 @@ def identificar_chave_banco_empresa(valor):
         return 'bradesco'
     if 'fibra' in texto or '6739471' in digitos:
         return 'fibra'
+    if 'daycoval' in texto:
+        return 'daycoval'
     return ''
 
 def nome_banco_por_chave(chave):
-    return {'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra'}.get(chave, chave)
+    return {
+        'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra',
+        'daycoval': 'Daycoval'
+    }.get(chave, chave)
 
 def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
     """Lê a planilha final e retorna somente o banco escolhido para conferência."""
@@ -2230,7 +2233,8 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
             descricao = texto_celula_seguro(linha[col_desc]) if col_desc is not None else ''
             if not descricao:
                 descricao = {
-                    'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO', 'fibra': 'BANCO FIBRA'
+                    'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO',
+                    'fibra': 'BANCO FIBRA', 'daycoval': 'BANCO DAYCOVAL'
                 }[banco_alvo]
             historico_valor = linha[col_hist]
             historico = (
@@ -2435,6 +2439,231 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
     )
 
     return diario, faltando_planilha, a_mais_planilha, ignorados
+
+def renderizar_conferencia_autokraft():
+    """Exibe a conferência independente da planilha final do Grupo Autokraft."""
+    st.markdown("---")
+    st.markdown("### Conferência com o extrato bancário")
+    st.caption(
+        "Envie a planilha final organizada e os extratos do Itaú, do Daycoval "
+        "ou dos dois bancos. Cada banco terá seu próprio relatório diário."
+    )
+
+    configs = [
+        {'nome': 'Itaú', 'slug': 'itau'},
+        {'nome': 'Daycoval', 'slug': 'daycoval'}
+    ]
+    conferir_todos = st.checkbox(
+        "Conferir os dois bancos",
+        value=False,
+        key="autokraft_conferir_todos"
+    )
+    if conferir_todos:
+        bancos_escolhidos = ['Itaú', 'Daycoval']
+        st.caption("Serão apresentados relatórios separados para Itaú e Daycoval.")
+    else:
+        bancos_escolhidos = st.multiselect(
+            "Bancos que serão conferidos",
+            ['Itaú', 'Daycoval'],
+            default=['Itaú'],
+            key="autokraft_bancos_conferencia"
+        )
+
+    if not bancos_escolhidos:
+        st.info("Selecione pelo menos um banco para realizar a conferência.")
+        return
+    configs_escolhidas = [
+        config for config in configs if config['nome'] in bancos_escolhidos
+    ]
+
+    coluna_planilha, coluna_extratos = st.columns(2)
+    with coluna_planilha:
+        planilha_final = st.file_uploader(
+            "Planilha final organizada",
+            type=['xlsx', 'xls'],
+            key="autokraft_planilha_final_conferencia",
+            help="Pode ser o arquivo baixado pelo organizador com uma ou duas abas bancárias."
+        )
+    with coluna_extratos:
+        extratos = st.file_uploader(
+            "Extrato(s) bancário(s)",
+            type=['pdf', 'ofx', 'csv', 'xlsx', 'xls'],
+            accept_multiple_files=True,
+            key=(
+                "autokraft_extratos_conferencia_"
+                + "_".join(config['slug'] for config in configs_escolhidas)
+            ),
+            help="Envie os extratos correspondentes ao mesmo período da planilha final."
+        )
+
+    if not planilha_final:
+        st.info(
+            "Envie a planilha final organizada para identificar o período e liberar a comparação."
+        )
+        return
+
+    try:
+        dados_planilha = {}
+        bancos_detectados = set()
+        datas_planilha = []
+        for config in configs_escolhidas:
+            df_modelo, df_retirados, bancos_arquivo = ler_planilha_organizada_conferencia(
+                planilha_final.getvalue(), config['slug']
+            )
+            dados_planilha[config['slug']] = {
+                'modelo': df_modelo,
+                'retirados': df_retirados
+            }
+            bancos_detectados.update(bancos_arquivo)
+            if not df_modelo.empty:
+                datas_validas = pd.to_datetime(
+                    df_modelo['DATA'], dayfirst=True, errors='coerce'
+                ).dropna()
+                datas_planilha.extend(datas_validas.dt.date.tolist())
+
+        if not datas_planilha:
+            st.warning("A planilha final não possui datas válidas nos bancos selecionados.")
+            return
+
+        data_minima = min(datas_planilha)
+        data_maxima = max(datas_planilha)
+        periodo = st.date_input(
+            "Período da conferência",
+            value=(data_minima, data_maxima),
+            min_value=data_minima,
+            max_value=data_maxima,
+            format="DD/MM/YYYY",
+            key="autokraft_periodo_conferencia"
+        )
+        if not isinstance(periodo, (tuple, list)) or len(periodo) != 2:
+            st.info("Selecione também a data final para concluir o período.")
+            return
+        data_inicial, data_final = periodo
+
+        dados_filtrados = {}
+        for config in configs_escolhidas:
+            chave = config['slug']
+            dados_filtrados[chave] = {
+                'modelo': filtrar_dataframe_periodo(
+                    dados_planilha[chave]['modelo'], data_inicial, data_final
+                ),
+                'retirados': filtrar_dataframe_periodo(
+                    dados_planilha[chave]['retirados'], data_inicial, data_final
+                )
+            }
+
+        bancos_texto = ", ".join(sorted(bancos_detectados)) or "não identificados"
+        st.success(
+            f"Planilha carregada. Bancos identificados: {bancos_texto}. "
+            f"Período: {data_inicial.strftime('%d/%m/%Y')} até "
+            f"{data_final.strftime('%d/%m/%Y')}."
+        )
+        if not extratos:
+            st.info("Agora envie pelo menos um extrato para gerar os relatórios.")
+            return
+
+        extratos_por_banco = {
+            config['slug']: [] for config in configs_escolhidas
+        }
+        arquivos_nao_identificados = []
+        for arquivo_extrato in extratos:
+            lancamentos = executar_com_loading(
+                f"Lendo {arquivo_extrato.name}...",
+                processar_extrato_conferencia_empresa,
+                arquivo_extrato.getvalue(),
+                arquivo_extrato.name
+            )
+            df_extrato = filtrar_dataframe_periodo(
+                pd.DataFrame(lancamentos), data_inicial, data_final
+            )
+            if df_extrato.empty:
+                continue
+
+            chave_nome = identificar_chave_banco_empresa(arquivo_extrato.name)
+            if chave_nome in extratos_por_banco:
+                extratos_por_banco[chave_nome].extend(df_extrato.to_dict('records'))
+                continue
+
+            chaves_linhas = df_extrato['DESCRIÇÃO'].apply(identificar_chave_banco_empresa)
+            chaves_reconhecidas = {
+                chave for chave in chaves_linhas.unique().tolist()
+                if chave in extratos_por_banco
+            }
+            if not chaves_reconhecidas:
+                if len(configs_escolhidas) == 1:
+                    chave_unica = configs_escolhidas[0]['slug']
+                    extratos_por_banco[chave_unica].extend(df_extrato.to_dict('records'))
+                else:
+                    arquivos_nao_identificados.append(arquivo_extrato.name)
+                continue
+
+            for chave in chaves_reconhecidas:
+                df_banco = df_extrato[chaves_linhas.eq(chave)]
+                extratos_por_banco[chave].extend(df_banco.to_dict('records'))
+
+        if arquivos_nao_identificados:
+            st.warning(
+                "Não foi possível identificar o banco destes arquivos: "
+                + ", ".join(arquivos_nao_identificados)
+            )
+        if not any(extratos_por_banco.values()):
+            st.warning(
+                "Nenhum lançamento dos extratos foi identificado dentro do período selecionado."
+            )
+            return
+
+        abas_relatorio = st.tabs([config['nome'] for config in configs_escolhidas])
+        for aba_relatorio, config in zip(abas_relatorio, configs_escolhidas):
+            with aba_relatorio:
+                chave = config['slug']
+                nome_banco = config['nome']
+                df_modelo = dados_filtrados[chave]['modelo']
+                df_extrato = pd.DataFrame(extratos_por_banco[chave])
+                st.markdown(f"#### Relatório — {nome_banco}")
+                if df_modelo.empty:
+                    st.warning(f"Não há lançamentos do {nome_banco} na planilha para o período.")
+                    continue
+                if df_extrato.empty:
+                    st.warning(f"Nenhum extrato do {nome_banco} foi identificado para o período.")
+                    continue
+
+                diario, _, _, _ = executar_com_loading(
+                    f"Conferindo os movimentos do {nome_banco}...",
+                    conciliar_empresa_com_extrato,
+                    df_modelo,
+                    df_extrato,
+                    dados_filtrados[chave]['retirados']
+                )
+                if diario.empty:
+                    st.warning("Não existem datas válidas para realizar a conferência.")
+                    continue
+
+                dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())
+                dias_divergentes = int((diario['STATUS'] == '❌ Divergente').sum())
+                metrica_1, metrica_2 = st.columns(2)
+                with metrica_1:
+                    st.metric("Dias batendo", dias_batendo)
+                with metrica_2:
+                    st.metric("Dias divergentes", dias_divergentes)
+
+                if dias_divergentes == 0:
+                    st.success("Conferência concluída: todos os dias estão batendo.")
+                else:
+                    st.warning("Foram encontradas diferenças nos totais diários.")
+
+                exibicao = diario.copy()
+                exibicao['DATA'] = exibicao['DATA'].dt.strftime('%d/%m/%Y')
+                exibicao = formatar_dataframe_moeda_br(
+                    exibicao,
+                    [
+                        'TOTAL EXTRATO', 'TOTAL PLANILHA', 'DIFERENÇA DO DIA',
+                        'ACUMULADO EXTRATO', 'ACUMULADO PLANILHA',
+                        'DIFERENÇA ACUMULADA'
+                    ]
+                )
+                st.dataframe(exibicao, use_container_width=True, height=360)
+    except Exception as erro:
+        st.error(f"Não foi possível realizar a conferência: {erro}")
 
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
@@ -2859,6 +3088,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             )
                 except Exception as erro_autokraft:
                     st.error(f"Não foi possível processar o mapa Autokraft: {erro_autokraft}")
+
+            renderizar_conferencia_autokraft()
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         st.markdown("---")
