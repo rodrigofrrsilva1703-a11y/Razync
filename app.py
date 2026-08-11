@@ -67,6 +67,14 @@ st.markdown("""
             white-space: pre-line !important;
             margin: 0 !important;
         }
+        .st-key-home_card_extratos button strong,
+        .st-key-home_card_razao button strong,
+        .st-key-home_card_organizador button strong {
+            font-size: 18px !important;
+            line-height: 1.3 !important;
+            font-weight: 700 !important;
+            color: #f0f6fc !important;
+        }
         .st-key-home_card_extratos button:hover,
         .st-key-home_card_razao button:hover,
         .st-key-home_card_organizador button:hover {
