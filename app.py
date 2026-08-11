@@ -1465,7 +1465,12 @@ def obter_config_classificacao_online():
     try:
         secao = st.secrets.get('supabase', {})
         url = secao.get('url', '') or st.secrets.get('SUPABASE_URL', '')
-        chave = secao.get('service_key', '') or st.secrets.get('SUPABASE_SERVICE_KEY', '')
+        chave = (
+            secao.get('secret_key', '')
+            or secao.get('service_key', '')
+            or st.secrets.get('SUPABASE_SECRET_KEY', '')
+            or st.secrets.get('SUPABASE_SERVICE_KEY', '')
+        )
         senha = secao.get('admin_password', '') or st.secrets.get(
             'CLASSIFICATION_ADMIN_PASSWORD', ''
         )
@@ -1474,6 +1479,7 @@ def obter_config_classificacao_online():
         senha = str(senha)
         placeholders_url = {'URL_DO_PROJETO_SUPABASE', 'SUA_URL_SUPABASE', 'SUPABASE_URL'}
         placeholders_chave = {
+            'SECRET_KEY', 'SUA_SECRET_KEY', 'SUPABASE_SECRET_KEY',
             'SERVICE_ROLE_KEY', 'SUA_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'
         }
         if url.upper() in placeholders_url or not url.startswith(('https://', 'http://')):
