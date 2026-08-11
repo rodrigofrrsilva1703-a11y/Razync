@@ -2393,6 +2393,7 @@ if st.session_state.pop('animar_transicao', False):
 if st.session_state['pagina_ativa'] == 'home':
     col_marca_logo, col_marca_texto = st.columns([0.7, 9.3])
     with col_marca_logo:
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         st.image("assets/razync-icon.png", width=68)
     with col_marca_texto:
         st.markdown('<div class="hc-brand-title">Razync</div>', unsafe_allow_html=True)
