@@ -32,25 +32,119 @@ st.set_page_config(
 # ==============================================================================
 st.markdown("""
     <style>
+        :root {
+            --hc-bg: #0b0f13;
+            --hc-surface: #111820;
+            --hc-surface-hover: #16212b;
+            --hc-border: #27333e;
+            --hc-border-strong: #3b4b59;
+            --hc-text: #f4f7fa;
+            --hc-muted: #94a4b3;
+            --hc-accent: #13b9e8;
+            --hc-accent-soft: rgba(19, 185, 232, 0.12);
+        }
+
+        .stApp { background-color: var(--hc-bg); color: var(--hc-text); }
         .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 100%; }
-        .stButton>button { width: 100% !important; border-radius: 6px !important; font-weight: 500 !important; padding: 0.45rem 1rem !important; border: 1px solid #30363d !important; background-color: #21262d !important; color: #c9d1d9 !important; transition: all 0.2s ease; box-shadow: none !important; }
-        .stButton>button:hover { background-color: #30363d !important; border-color: #8b949e !important; color: #ffffff !important; }
-        .metric-card { background-color: #161b22; border: 1px solid #30363d; padding: 14px; border-radius: 8px; text-align: center; }
-        .metric-title { font-size: 11px; color: #8b949e; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; letter-spacing: 0.5px; }
-        .metric-value { font-size: 18px; color: #f0f6fc; font-weight: 700; }
-        section[data-testid="stSidebar"] { background-color: #0d1117; border-right: 1px solid #30363d; }
-        .tool-card { background-color: #161b22; border: 1px solid #30363d; padding: 24px 20px; border-radius: 8px; text-align: center; height: 160px; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: border-color 0.2s ease; }
-        .tool-card:hover { border-color: #8b949e; }
-        /* Cards nativos da tela inicial: um único widget e apenas um rerun. */
+        h1, h2, h3, h4 { color: var(--hc-text) !important; letter-spacing: -0.02em; }
+        hr { border-color: var(--hc-border) !important; }
+
+        .stButton > button {
+            width: 100% !important;
+            border-radius: 7px !important;
+            font-weight: 500 !important;
+            padding: 0.48rem 1rem !important;
+            border: 1px solid var(--hc-border) !important;
+            background-color: var(--hc-surface) !important;
+            color: #d9e2ea !important;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+            box-shadow: none !important;
+        }
+        .stButton > button:hover {
+            background-color: var(--hc-surface-hover) !important;
+            border-color: var(--hc-accent) !important;
+            color: #ffffff !important;
+        }
+        .stButton > button:focus-visible {
+            outline: 2px solid var(--hc-accent) !important;
+            outline-offset: 2px !important;
+        }
+
+        .metric-card {
+            background-color: var(--hc-surface);
+            border: 1px solid var(--hc-border);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .metric-title {
+            font-size: 11px;
+            color: var(--hc-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+            letter-spacing: 0.5px;
+        }
+        .metric-value { font-size: 18px; color: var(--hc-text); font-weight: 700; }
+
+        section[data-testid="stSidebar"] {
+            background-color: #0e141a;
+            border-right: 1px solid var(--hc-border);
+        }
+        section[data-testid="stSidebar"] .stButton > button {
+            text-align: left !important;
+            justify-content: flex-start !important;
+            background-color: transparent !important;
+            border-color: transparent !important;
+        }
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            background-color: var(--hc-accent-soft) !important;
+            border-color: rgba(19, 185, 232, 0.35) !important;
+        }
+
+        .hc-brand-title {
+            color: var(--hc-text);
+            font-size: 30px;
+            line-height: 1.15;
+            font-weight: 750;
+            letter-spacing: -0.035em;
+            margin-top: 5px;
+        }
+        .hc-brand-subtitle {
+            color: var(--hc-muted);
+            font-size: 13px;
+            line-height: 1.5;
+            margin-top: 6px;
+        }
+
+        .tool-card {
+            background-color: var(--hc-surface);
+            border: 1px solid var(--hc-border);
+            padding: 24px 20px;
+            border-radius: 8px;
+            text-align: center;
+            height: 160px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: border-color 0.15s ease, background-color 0.15s ease;
+        }
+        .tool-card:hover {
+            border-color: var(--hc-accent);
+            background-color: var(--hc-surface-hover);
+        }
+
         .st-key-home_card_extratos button,
         .st-key-home_card_razao button,
         .st-key-home_card_organizador button {
-            min-height: 160px !important;
+            min-height: 166px !important;
             padding: 24px 20px !important;
-            background-color: #161b22 !important;
-            border: 1px solid #30363d !important;
-            border-radius: 8px !important;
-            color: #c9d1d9 !important;
+            background-color: var(--hc-surface) !important;
+            border: 1px solid var(--hc-border) !important;
+            border-top: 2px solid rgba(19, 185, 232, 0.72) !important;
+            border-radius: 9px !important;
+            color: var(--hc-muted) !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -73,29 +167,50 @@ st.markdown("""
             font-size: 18px !important;
             line-height: 1.3 !important;
             font-weight: 700 !important;
-            color: #f0f6fc !important;
+            color: var(--hc-text) !important;
         }
         .st-key-home_card_extratos button:hover,
         .st-key-home_card_razao button:hover,
         .st-key-home_card_organizador button:hover {
-            background-color: #1c2128 !important;
-            border-color: #8b949e !important;
-            color: #f0f6fc !important;
+            background-color: var(--hc-surface-hover) !important;
+            border-color: var(--hc-accent) !important;
+            color: #b9c7d3 !important;
             transform: translateY(-2px);
         }
-        .st-key-home_card_extratos button:focus-visible,
-        .st-key-home_card_razao button:focus-visible,
-        .st-key-home_card_organizador button:focus-visible {
-            outline: 2px solid #58a6ff !important;
-            outline-offset: 3px !important;
+
+        [data-testid="stFileUploaderDropzone"] {
+            background-color: var(--hc-surface) !important;
+            border: 1px dashed var(--hc-border-strong) !important;
+            border-radius: 8px !important;
         }
-        .alerta-dominio { background-color: #3d1c1c; border-left: 5px solid #f85149; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
-        .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
-        .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
-        .aviso-banner { background-color: #161b22; border: 1px solid #30363d; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; }
-        .aviso-banner p { margin: 0; color: #c9d1d9; font-size: 14px; }
-        
-        /* Alinhamento perfeito entre date_input e text_input */
+        [data-testid="stFileUploaderDropzone"]:hover {
+            border-color: var(--hc-accent) !important;
+            background-color: var(--hc-surface-hover) !important;
+        }
+        [data-testid="stDataFrame"] {
+            border: 1px solid var(--hc-border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .alerta-dominio {
+            background-color: #2b1719;
+            border-left: 4px solid #f05d66;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .alerta-dominio h4 { margin-top: 0; color: #ff7b83; font-size: 16px; }
+        .alerta-dominio p { margin-bottom: 0; color: #d7dde3; font-size: 14px; }
+        .aviso-banner {
+            background-color: var(--hc-surface);
+            border: 1px solid var(--hc-border);
+            padding: 12px 16px;
+            border-radius: 7px;
+            margin-bottom: 20px;
+        }
+        .aviso-banner p { margin: 0; color: #c5d0da; font-size: 14px; }
+
         .stTextInput { margin-top: -2px; }
     </style>
 """, unsafe_allow_html=True)
@@ -1764,8 +1879,9 @@ def mudar_pagina(nome_pagina): st.session_state['pagina_ativa'] = nome_pagina
 # ==============================================================================
 # BARRA LATERAL DARK MINIMALISTA
 # ==============================================================================
-st.sidebar.markdown("<p style='font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 0px;'>Hub Contábil</p>", unsafe_allow_html=True)
-st.sidebar.markdown("<p style='font-size: 11px; color: #8b949e; margin-top: 2px;'>Domínio Systems</p>", unsafe_allow_html=True)
+st.sidebar.image("assets/hc-icon.png", width=58)
+st.sidebar.markdown("<p style='font-size: 15px; font-weight: 700; color: #f4f7fa; margin: 8px 0 0;'>Hub Contábil</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 11px; color: #94a4b3; margin-top: 3px;'>Operações bancárias</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
 if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_pagina('home')
@@ -1773,15 +1889,22 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v12.1 · Clear View</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #6f8190; text-align: center;'>Hub Contábil · Operações bancárias</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
-    st.title("Hub Contábil")
-    st.caption("Centralize a organização, conversão e conferência dos seus lançamentos bancários.")
-    st.markdown("<br>", unsafe_allow_html=True)
+    col_marca_logo, col_marca_texto = st.columns([0.7, 9.3])
+    with col_marca_logo:
+        st.image("assets/hc-icon.png", width=68)
+    with col_marca_texto:
+        st.markdown('<div class="hc-brand-title">Hub Contábil</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="hc-brand-subtitle">Organização, conversão e conferência de lançamentos bancários em um só lugar.</div>',
+            unsafe_allow_html=True
+        )
+    st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
 
     with col_t1:
