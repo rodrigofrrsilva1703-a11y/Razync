@@ -28,29 +28,186 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS DARK MODE
+# DESIGN SYSTEM — INTERFACE MODERNA E RESPONSIVA
 # ==============================================================================
 st.markdown("""
     <style>
-        .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 100%; }
-        .stButton>button { width: 100% !important; border-radius: 6px !important; font-weight: 500 !important; padding: 0.45rem 1rem !important; border: 1px solid #30363d !important; background-color: #21262d !important; color: #c9d1d9 !important; transition: all 0.2s ease; box-shadow: none !important; }
-        .stButton>button:hover { background-color: #30363d !important; border-color: #8b949e !important; color: #ffffff !important; }
-        .metric-card { background-color: #161b22; border: 1px solid #30363d; padding: 14px; border-radius: 8px; text-align: center; }
-        .metric-title { font-size: 11px; color: #8b949e; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; letter-spacing: 0.5px; }
-        .metric-value { font-size: 18px; color: #f0f6fc; font-weight: 700; }
-        section[data-testid="stSidebar"] { background-color: #0d1117; border-right: 1px solid #30363d; }
-        .tool-card { background-color: #161b22; border: 1px solid #30363d; padding: 24px 20px; border-radius: 8px; text-align: center; height: 160px; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: border-color 0.2s ease; }
-        .tool-card:hover { border-color: #8b949e; }
-        .alerta-dominio { background-color: #3d1c1c; border-left: 5px solid #f85149; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
-        .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
-        .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
-        .aviso-banner { background-color: #161b22; border: 1px solid #30363d; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; }
-        .aviso-banner p { margin: 0; color: #c9d1d9; font-size: 14px; }
-        
-        /* Alinhamento perfeito entre date_input e text_input */
+        :root {
+            --bg: #070b14;
+            --surface: rgba(15, 23, 42, .82);
+            --surface-strong: #111a2e;
+            --border: rgba(148, 163, 184, .16);
+            --border-strong: rgba(99, 102, 241, .38);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --primary: #6366f1;
+            --primary-2: #8b5cf6;
+            --cyan: #22d3ee;
+            --success: #34d399;
+            --danger: #fb7185;
+        }
+        html, body, [class*="css"] { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .stApp {
+            background:
+                radial-gradient(circle at 82% 0%, rgba(99, 102, 241, .13), transparent 31rem),
+                radial-gradient(circle at 20% 100%, rgba(34, 211, 238, .07), transparent 28rem),
+                var(--bg);
+            color: var(--text);
+        }
+        .block-container { padding: 2.25rem 2.4rem 4rem; max-width: 1480px; }
+        h1 { letter-spacing: -0.04em !important; font-size: clamp(2rem, 4vw, 3.1rem) !important; }
+        h2, h3 { letter-spacing: -0.025em !important; }
+        hr { border-color: var(--border) !important; margin: 1.7rem 0 !important; }
+
+        section[data-testid="stSidebar"] {
+            background: rgba(8, 13, 24, .96);
+            border-right: 1px solid var(--border);
+            min-width: 270px !important;
+        }
+        section[data-testid="stSidebar"] .block-container { padding: 1.35rem 1rem 2rem !important; }
+        .sidebar-brand {
+            padding: 14px 14px 18px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 14px;
+        }
+        .brand-mark {
+            width: 42px; height: 42px; border-radius: 13px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: white; font-weight: 800; font-size: 17px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            box-shadow: 0 12px 35px rgba(99, 102, 241, .28);
+            margin-bottom: 12px;
+        }
+        .brand-name { color: var(--text); font-size: 16px; font-weight: 750; margin: 0; }
+        .brand-subtitle { color: var(--muted); font-size: 11px; margin: 3px 0 0; }
+        .sidebar-section { color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; padding: 12px 9px 7px; }
+
+        .stButton > button, .stDownloadButton > button {
+            width: 100% !important; min-height: 42px;
+            border-radius: 11px !important; font-weight: 650 !important;
+            padding: .58rem 1rem !important;
+            border: 1px solid var(--border) !important;
+            background: rgba(30, 41, 59, .62) !important;
+            color: #dbeafe !important;
+            transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+            box-shadow: 0 1px 0 rgba(255,255,255,.03) inset !important;
+        }
+        .stButton > button:hover, .stDownloadButton > button:hover {
+            transform: translateY(-1px);
+            background: rgba(51, 65, 85, .78) !important;
+            border-color: rgba(129, 140, 248, .55) !important;
+            color: white !important;
+            box-shadow: 0 10px 28px rgba(2, 6, 23, .22) !important;
+        }
+        button[kind="primary"] {
+            background: linear-gradient(135deg, var(--primary), var(--primary-2)) !important;
+            border-color: transparent !important; color: white !important;
+            box-shadow: 0 10px 28px rgba(99, 102, 241, .25) !important;
+        }
+        section[data-testid="stSidebar"] .stButton > button {
+            justify-content: flex-start !important; min-height: 44px;
+            background: transparent !important; border-color: transparent !important;
+            color: #94a3b8 !important; padding-left: 13px !important;
+        }
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            background: rgba(99, 102, 241, .10) !important;
+            border-color: rgba(99, 102, 241, .20) !important; color: #e0e7ff !important;
+        }
+        section[data-testid="stSidebar"] button[kind="primary"] {
+            background: linear-gradient(90deg, rgba(99,102,241,.22), rgba(139,92,246,.10)) !important;
+            border-color: rgba(129,140,248,.28) !important;
+            color: white !important; box-shadow: none !important;
+        }
+
+        .hero-shell {
+            position: relative; overflow: hidden;
+            padding: clamp(28px, 5vw, 58px);
+            border: 1px solid var(--border-strong); border-radius: 24px;
+            background: linear-gradient(135deg, rgba(17, 26, 46, .96), rgba(15, 23, 42, .78));
+            box-shadow: 0 26px 70px rgba(2, 6, 23, .35);
+            margin-bottom: 32px;
+        }
+        .hero-shell:after {
+            content: ""; position: absolute; width: 330px; height: 330px;
+            right: -110px; top: -150px; border-radius: 999px;
+            background: radial-gradient(circle, rgba(99,102,241,.36), rgba(99,102,241,0) 67%);
+            pointer-events: none;
+        }
+        .eyebrow { color: #a5b4fc; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 12px; }
+        .hero-title { max-width: 820px; color: white; font-size: clamp(2.1rem, 5vw, 4rem); line-height: 1.02; letter-spacing: -.055em; font-weight: 820; margin: 0 0 16px; }
+        .hero-title span { background: linear-gradient(90deg, #a5b4fc, #67e8f9); -webkit-background-clip: text; color: transparent; }
+        .hero-subtitle { max-width: 740px; color: #aab7cc; font-size: 15px; line-height: 1.7; margin: 0; }
+        .hero-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+        .hero-badge { padding: 7px 11px; border-radius: 999px; border: 1px solid var(--border); background: rgba(15,23,42,.65); color: #cbd5e1; font-size: 11px; font-weight: 650; }
+
+        .page-header { margin: 4px 0 22px; }
+        .page-kicker { color: #818cf8; font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; margin-bottom: 7px; }
+        .page-title { color: white; font-size: clamp(1.8rem, 3.5vw, 2.65rem); line-height: 1.08; font-weight: 800; letter-spacing: -.04em; margin: 0 0 9px; }
+        .page-subtitle { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0; max-width: 880px; }
+
+        .tool-card {
+            position: relative; background: linear-gradient(145deg, rgba(17,26,46,.95), rgba(11,18,32,.88));
+            border: 1px solid var(--border); padding: 25px; border-radius: 18px;
+            min-height: 206px; display: flex; flex-direction: column; align-items: flex-start;
+            transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+        }
+        .tool-card:hover { transform: translateY(-3px); border-color: var(--border-strong); box-shadow: 0 22px 50px rgba(2,6,23,.28); }
+        .tool-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px; background: linear-gradient(135deg, rgba(99,102,241,.22), rgba(34,211,238,.11)); border: 1px solid rgba(129,140,248,.25); margin-bottom: 22px; }
+        .tool-tag { position: absolute; right: 17px; top: 17px; color: #818cf8; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+        .tool-title { color: white; font-size: 17px; font-weight: 750; margin: 0 0 8px; }
+        .tool-description { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0; text-align: left; }
+
+        .workflow-strip { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 22px; }
+        .workflow-step { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border-radius: 10px; background: rgba(15,23,42,.72); border: 1px solid var(--border); color: #a8b4c7; font-size: 11px; font-weight: 650; }
+        .workflow-step b { width: 20px; height: 20px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: white; background: rgba(99,102,241,.32); font-size: 10px; }
+
+        .metric-card { background: linear-gradient(145deg, rgba(17,26,46,.96), rgba(12,19,34,.88)); border: 1px solid var(--border); padding: 18px 16px; border-radius: 15px; text-align: left; min-height: 92px; box-shadow: 0 10px 30px rgba(2,6,23,.13); }
+        .metric-title { font-size: 10px; color: #8290a5; text-transform: uppercase; font-weight: 800; margin-bottom: 8px; letter-spacing: .08em; }
+        .metric-value { font-size: 20px; color: var(--text); font-weight: 780; letter-spacing: -.02em; }
+
+        div[data-testid="stFileUploader"] { padding: 16px; border: 1px dashed rgba(129,140,248,.35); border-radius: 16px; background: rgba(15,23,42,.48); }
+        div[data-testid="stFileUploaderDropzone"] { background: rgba(15,23,42,.48); border: none; border-radius: 12px; }
+        div[data-baseweb="select"] > div, .stTextInput input, .stDateInput input, .stNumberInput input {
+            background: rgba(15,23,42,.72) !important; border-color: var(--border) !important; border-radius: 10px !important;
+        }
+        div[data-baseweb="tab-list"] { gap: 7px; border-bottom: 1px solid var(--border); }
+        button[data-baseweb="tab"] { border-radius: 10px 10px 0 0; padding: 10px 15px; color: var(--muted); }
+        button[data-baseweb="tab"][aria-selected="true"] { color: white; background: rgba(99,102,241,.12); }
+        div[data-testid="stExpander"] { border: 1px solid var(--border); border-radius: 14px; background: rgba(15,23,42,.46); overflow: hidden; }
+        div[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+        div[data-testid="stAlert"] { border-radius: 13px; border: 1px solid var(--border); }
+        .alerta-dominio { background: rgba(127,29,29,.22); border: 1px solid rgba(248,113,113,.25); border-left: 4px solid var(--danger); padding: 16px; border-radius: 13px; margin-bottom: 20px; }
+        .alerta-dominio h4 { margin-top: 0; color: #fda4af; font-size: 15px; }
+        .alerta-dominio p { margin-bottom: 0; color: #cbd5e1; font-size: 13px; }
+        .aviso-banner { background: rgba(30,41,59,.52); border: 1px solid var(--border); padding: 14px 16px; border-radius: 13px; margin-bottom: 20px; }
+        .aviso-banner p { margin: 0; color: #cbd5e1; font-size: 13px; }
         .stTextInput { margin-top: -2px; }
+
+        @media (max-width: 760px) {
+            .block-container { padding: 1.25rem 1rem 3rem; }
+            .hero-shell { padding: 27px 22px; border-radius: 19px; }
+            .tool-card { min-height: 180px; }
+            .metric-value { font-size: 17px; }
+        }
     </style>
 """, unsafe_allow_html=True)
+
+def renderizar_cabecalho_pagina(rotulo, titulo, subtitulo):
+    st.markdown(
+        f'''<div class="page-header">
+            <div class="page-kicker">{rotulo}</div>
+            <div class="page-title">{titulo}</div>
+            <p class="page-subtitle">{subtitulo}</p>
+        </div>''',
+        unsafe_allow_html=True
+    )
+
+def renderizar_etapas(etapas):
+    itens = ''.join(
+        f'<span class="workflow-step"><b>{indice}</b>{texto}</span>'
+        for indice, texto in enumerate(etapas, start=1)
+    )
+    st.markdown(f'<div class="workflow-strip">{itens}</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # FUNÇÕES DE LIMPEZA E FORMATAÇÃO (MECÂNICAS)
@@ -1714,46 +1871,90 @@ if 'pagina_ativa' not in st.session_state: st.session_state['pagina_ativa'] = 'h
 def mudar_pagina(nome_pagina): st.session_state['pagina_ativa'] = nome_pagina
 
 # ==============================================================================
-# BARRA LATERAL DARK MINIMALISTA
+# BARRA LATERAL
 # ==============================================================================
-st.sidebar.markdown("<p style='font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 0px;'>Hub Contábil</p>", unsafe_allow_html=True)
-st.sidebar.markdown("<p style='font-size: 11px; color: #8b949e; margin-top: 2px;'>Domínio Systems</p>", unsafe_allow_html=True)
-st.sidebar.markdown("---")
+st.sidebar.markdown(
+    """<div class="sidebar-brand">
+        <div class="brand-mark">CP</div>
+        <p class="brand-name">Contábil Pro</p>
+        <p class="brand-subtitle">Automação e conferência bancária</p>
+    </div>
+    <div class="sidebar-section">Navegação</div>""",
+    unsafe_allow_html=True
+)
 
-if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_pagina('home')
-if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
-if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
-if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
-st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v12.1 · Clear View</p>", unsafe_allow_html=True)
+pagina_atual = st.session_state['pagina_ativa']
+if st.sidebar.button(
+    "⌂  Visão geral", use_container_width=True, key="sb_home",
+    type="primary" if pagina_atual == 'home' else "secondary"
+):
+    mudar_pagina('home'); st.rerun()
+if st.sidebar.button(
+    "⇄  Conversor de extratos", use_container_width=True, key="sb_extratos",
+    type="primary" if pagina_atual == 'extratos' else "secondary"
+):
+    mudar_pagina('extratos'); st.rerun()
+if st.sidebar.button(
+    "✓  Conciliação com razão", use_container_width=True, key="sb_razao",
+    type="primary" if pagina_atual == 'razao' else "secondary"
+):
+    mudar_pagina('razao'); st.rerun()
+if st.sidebar.button(
+    "▦  Organizador de planilhas", use_container_width=True, key="sb_organizador",
+    type="primary" if pagina_atual == 'organizador' else "secondary"
+):
+    mudar_pagina('organizador'); st.rerun()
+
+st.sidebar.markdown(
+    """<div style="margin:24px 9px 0;padding:13px;border:1px solid rgba(148,163,184,.13);
+        border-radius:12px;background:rgba(15,23,42,.4);">
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
+        <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 13.0</div>
+    </div>""",
+    unsafe_allow_html=True
+)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
-    st.title("Início")
-    st.caption("Selecione uma ferramenta abaixo para começar.")
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        """<div class="hero-shell">
+            <div class="eyebrow">Plataforma contábil integrada</div>
+            <h1 class="hero-title">Menos trabalho manual.<br><span>Mais controle dos lançamentos.</span></h1>
+            <p class="hero-subtitle">Converta extratos, organize planilhas de clientes e confira divergências em um único ambiente, com fluxos claros e arquivos prontos para a Domínio.</p>
+            <div class="hero-badges">
+                <span class="hero-badge">Conversão inteligente</span>
+                <span class="hero-badge">Conferência diária</span>
+                <span class="hero-badge">Classificação automática</span>
+                <span class="hero-badge">Matriz e filial</span>
+            </div>
+        </div>""",
+        unsafe_allow_html=True
+    )
+    st.markdown("<div class='page-kicker'>Escolha o fluxo de trabalho</div>", unsafe_allow_html=True)
+    st.markdown("<p class='page-subtitle' style='margin-bottom:18px;'>Cada ferramenta conduz você desde o envio do arquivo até o resultado final.</p>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
     
     with col_t1:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">📊</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conversor de Extratos</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar", use_container_width=True, key="btn_abrir_extratos"):
+        st.markdown("""<div class="tool-card"><span class="tool-tag">Universal</span><div class="tool-icon">⇄</div><p class="tool-title">Conversor de Extratos</p><p class="tool-description">Transforme PDF, OFX, Excel ou CSV em um arquivo padronizado e pronto para importar na Domínio.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        if st.button("Abrir conversor  →", use_container_width=True, key="btn_abrir_extratos", type="primary"):
             mudar_pagina('extratos')
             st.rerun()
             
     with col_t2:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🔍</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Análise automatizada, rolagem de saldos e auditoria de divergências.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar", use_container_width=True, key="btn_abrir_razao"):
+        st.markdown("""<div class="tool-card"><span class="tool-tag">Conferência</span><div class="tool-icon">✓</div><p class="tool-title">Conciliação com Razão</p><p class="tool-description">Compare extrato e razão, acompanhe totais diários e identifique rapidamente os períodos divergentes.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        if st.button("Abrir conciliação  →", use_container_width=True, key="btn_abrir_razao", type="primary"):
             mudar_pagina('razao')
             st.rerun()
         
     with col_t3:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🗂️</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Organizador de Planilhas</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta planilhas específicas de empresas para o Modelo Domínio.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar", use_container_width=True, key="btn_abrir_organizador"):
+        st.markdown("""<div class="tool-card"><span class="tool-tag">Por empresa</span><div class="tool-icon">▦</div><p class="tool-title">Organizador de Planilhas</p><p class="tool-description">Aplique regras específicas de cada cliente, classifique contas e faça a conferência dos bancos.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        if st.button("Abrir organizador  →", use_container_width=True, key="btn_abrir_organizador", type="primary"):
             mudar_pagina('organizador')
             st.rerun()
 
@@ -1767,11 +1968,15 @@ elif st.session_state['pagina_ativa'] == 'extratos':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home"):
             mudar_pagina('home')
             st.rerun()
-    with col_tit: st.title("Conversor de Extratos Bancários")
-    st.caption("Faça o upload dos arquivos para gerar os layouts compatíveis com a Domínio.")
-    st.markdown("---")
+    with col_tit:
+        renderizar_cabecalho_pagina(
+            "Conversão universal",
+            "Conversor de Extratos Bancários",
+            "Envie um ou vários arquivos, confira os lançamentos reconhecidos e exporte no formato da Domínio."
+        )
+    renderizar_etapas(["Enviar extratos", "Definir período", "Conferir lançamentos", "Baixar arquivo"])
 
-    arquivos = st.file_uploader("Selecione os extratos (PDF, OFX, CSV, Excel)", type=["pdf", "ofx", "csv", "xlsx", "xls"], accept_multiple_files=True)
+    arquivos = st.file_uploader("1. Selecione os extratos (PDF, OFX, CSV ou Excel)", type=["pdf", "ofx", "csv", "xlsx", "xls"], accept_multiple_files=True)
 
     if arquivos:
         try:
@@ -1917,29 +2122,35 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_org"):
             mudar_pagina('home')
             st.rerun()
-    with col_tit: st.title("Organizador de Planilhas")
-    st.caption("Selecione a empresa e aplique as regras específicas para gerar o Modelo Domínio.")
-    st.markdown("---")
+    with col_tit:
+        renderizar_cabecalho_pagina(
+            "Fluxos personalizados",
+            "Organizador de Planilhas",
+            "Escolha a empresa e siga as etapas para organizar, classificar e conferir os lançamentos bancários."
+        )
+    renderizar_etapas(["Empresa", "Estabelecimento", "Planilha e bancos", "Período", "Download", "Conferência"])
 
     if 'empresa_organizador' not in st.session_state:
         st.session_state['empresa_organizador'] = None
 
-    st.markdown("##### Selecione a empresa")
+    st.markdown("#### 1. Selecione a empresa")
+    st.caption("As regras de leitura e organização são aplicadas de acordo com a empresa escolhida.")
     col_emp1, col_emp2 = st.columns(2)
     with col_emp1:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Nova Geração</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Organização dos movimentos bancários da matriz.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Selecionar Nova Geração", use_container_width=True, key="org_nova_geracao"):
+        st.markdown("""<div class="tool-card"><span class="tool-tag">Disponível</span><div class="tool-icon">NG</div><p class="tool-title">Nova Geração</p><p class="tool-description">Organização de lançamentos da Matriz e da Filial, com Itaú, Bradesco e Fibra conforme cada estabelecimento.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        if st.button("Selecionar Nova Geração  →", use_container_width=True, key="org_nova_geracao", type="primary"):
             st.session_state['empresa_organizador'] = 'nova_geracao'
             st.rerun()
     with col_emp2:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Segunda Empresa</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">As regras serão configuradas na próxima etapa.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        st.markdown("""<div class="tool-card"><span class="tool-tag">Em breve</span><div class="tool-icon">＋</div><p class="tool-title">Nova empresa</p><p class="tool-description">Espaço reservado para adicionar outro cliente com regras próprias de leitura e organização.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
         st.button("Em breve", use_container_width=True, disabled=True, key="org_empresa_2")
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         st.markdown("---")
-        st.markdown("### Nova Geração")
+        st.markdown("#### 2. Nova Geração — selecione o estabelecimento")
+        st.caption("A conta bancária usada na classificação muda automaticamente entre Matriz e Filial.")
         estabelecimento_nova = st.radio(
             "Área da empresa",
             ["Matriz", "Filial"],
@@ -2149,7 +2360,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         banco_padrao = next(iter(configuracoes_bancos))
         bancos_empresa = st.multiselect(
-            "Bancos",
+            "3. Selecione os bancos que deseja organizar",
             list(configuracoes_bancos.keys()),
             default=[banco_padrao],
             key=f"org_banco_nova_geracao_{chave_estabelecimento}"
@@ -2165,7 +2376,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
         )
         arquivo_empresa = st.file_uploader(
-            f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
+            f"4. Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
             type=["xlsx", "xls"],
             key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
         )
@@ -2196,7 +2407,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
                     + "_".join(config['slug'] for config in configs_selecionadas)
                 )
-                st.markdown("### Período dos lançamentos")
+                st.markdown("#### 5. Período dos lançamentos")
                 periodo_selecionado = st.date_input(
                     "Selecione a data inicial e a data final",
                     value=(data_minima, data_maxima),
@@ -2302,7 +2513,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
 
                 st.markdown("---")
-                st.markdown("### Conferência com o extrato bancário")
+                st.markdown("#### 6. Conferência com o extrato bancário")
                 nomes_disponiveis_conferencia = [
                     config['nome'] for config in configs_selecionadas
                 ]
@@ -2557,12 +2768,16 @@ elif st.session_state['pagina_ativa'] == 'razao':
     with col_voltar:
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_razao"): mudar_pagina('home'); st.rerun()
-    with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
-    
-    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas do Extrato com o Razão da Domínio.")
+    with col_tit:
+        renderizar_cabecalho_pagina(
+            "Auditoria de movimentos",
+            "Conciliação: Extrato x Razão",
+            "Compare entradas e saídas diariamente e encontre rapidamente datas com diferença."
+        )
+    renderizar_etapas(["Enviar extrato", "Enviar razão", "Analisar diferenças", "Exportar conferência"])
     st.markdown("""<div class="aviso-banner"><p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p></div>""", unsafe_allow_html=True)
 
-    st.markdown("##### 📁 Arquivos de Importação")
+    st.markdown("#### 1. Arquivos para comparação")
     col_up1, col_up2 = st.columns(2)
     with col_up1: arq_extrato = st.file_uploader("1º - Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
     with col_up2: arq_razao = st.file_uploader("2º - Envie o Razão exportado (CSV ou XLSX)", type=["csv", "xlsx", "xls"], key="up_razao")
