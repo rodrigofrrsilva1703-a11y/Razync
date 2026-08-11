@@ -2755,6 +2755,8 @@ def mudar_pagina(nome_pagina):
     """Troca a ferramenta e anima somente o primeiro render da nova tela."""
     pagina_anterior = st.session_state.get('pagina_ativa')
     if pagina_anterior == nome_pagina:
+        if nome_pagina == 'organizador':
+            st.session_state['empresa_organizador'] = None
         return
     # Sempre inicia o Organizador pela escolha da empresa. A seleção permanece
     # apenas durante o trabalho atual e não reaparece ao entrar novamente.
@@ -3003,37 +3005,53 @@ elif st.session_state['pagina_ativa'] == 'extratos':
 # TELA 3: ORGANIZADOR DE PLANILHAS POR EMPRESA
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'organizador':
+    if 'empresa_organizador' not in st.session_state:
+        st.session_state['empresa_organizador'] = None
+    empresa_organizador = st.session_state['empresa_organizador']
+
     col_voltar, col_tit = st.columns([1.2, 8.8])
     with col_voltar:
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-        if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_org"):
+        if empresa_organizador:
+            if st.button(
+                "← Empresas", use_container_width=True, key="btn_voltar_empresas_org"
+            ):
+                st.session_state['empresa_organizador'] = None
+                st.rerun()
+        elif st.button("← Voltar", use_container_width=True, key="btn_voltar_home_org"):
             mudar_pagina('home')
             st.rerun()
-    with col_tit: st.title("Organizador de Planilhas")
-    st.caption("Selecione a empresa e aplique as regras específicas para gerar o Modelo Domínio.")
+    with col_tit:
+        st.title({
+            'nova_geracao': 'Nova Geração',
+            'autokraft': 'Grupo Autokraft'
+        }.get(empresa_organizador, 'Organizador de Planilhas'))
+    st.caption({
+        'nova_geracao': 'Organize, confira e classifique os movimentos da Nova Geração.',
+        'autokraft': 'Organize os mapas diários e confira os extratos do Grupo Autokraft.'
+    }.get(
+        empresa_organizador,
+        'Selecione uma empresa para abrir sua área de trabalho exclusiva.'
+    ))
     st.markdown("---")
 
-    if 'empresa_organizador' not in st.session_state:
-        st.session_state['empresa_organizador'] = None
-
-    st.markdown("##### Selecione a empresa")
-    col_emp1, col_emp2 = st.columns(2)
-    with col_emp1:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Nova Geração</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Organização dos movimentos bancários da matriz.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Selecionar Nova Geração", use_container_width=True, key="org_nova_geracao"):
-            st.session_state['empresa_organizador'] = 'nova_geracao'
-            st.rerun()
-    with col_emp2:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏭</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Grupo Autokraft</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Mapas diários dos bancos Itaú e Daycoval.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Selecionar Grupo Autokraft", use_container_width=True, key="org_autokraft"):
-            st.session_state['empresa_organizador'] = 'autokraft'
-            st.rerun()
+    if empresa_organizador is None:
+        st.markdown("##### Empresas disponíveis")
+        col_emp1, col_emp2 = st.columns(2)
+        with col_emp1:
+            st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Nova Geração</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Organização, conferência e classificação dos movimentos bancários.</p></div>""", unsafe_allow_html=True)
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            if st.button("Abrir Nova Geração", use_container_width=True, key="org_nova_geracao"):
+                st.session_state['empresa_organizador'] = 'nova_geracao'
+                st.rerun()
+        with col_emp2:
+            st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏭</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Grupo Autokraft</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Mapas diários e conferência dos bancos Itaú e Daycoval.</p></div>""", unsafe_allow_html=True)
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            if st.button("Abrir Grupo Autokraft", use_container_width=True, key="org_autokraft"):
+                st.session_state['empresa_organizador'] = 'autokraft'
+                st.rerun()
 
     if st.session_state['empresa_organizador'] == 'autokraft':
-        st.markdown("---")
-        st.markdown("### Grupo Autokraft")
         empresa_autokraft = st.selectbox(
             "Empresa",
             [
@@ -3170,8 +3188,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             renderizar_conferencia_autokraft()
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
-        st.markdown("---")
-        st.markdown("### Nova Geração")
         estabelecimento_nova = st.radio(
             "Área da empresa",
             ["Matriz", "Filial"],
