@@ -217,6 +217,56 @@ st.markdown("""
 
         .stTextInput { margin-top: -2px; }
 
+        .hc-classification-summary {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin: 18px 0 16px;
+        }
+        .hc-classification-card {
+            position: relative;
+            overflow: hidden;
+            min-height: 112px;
+            padding: 20px 22px;
+            border: 1px solid var(--hc-border);
+            border-radius: 9px;
+            background: linear-gradient(135deg, rgba(19, 185, 232, 0.055), var(--hc-surface) 58%);
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+        }
+        .hc-classification-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 3px;
+            background: var(--hc-accent);
+        }
+        .hc-classification-card.is-532 {
+            background: linear-gradient(135deg, rgba(217, 164, 65, 0.06), var(--hc-surface) 58%);
+        }
+        .hc-classification-card.is-532::before {
+            background: #d9a441;
+        }
+        .hc-classification-label {
+            color: var(--hc-muted);
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+        .hc-classification-value {
+            margin-top: 8px;
+            color: var(--hc-text);
+            font-size: 32px;
+            line-height: 1;
+            font-weight: 720;
+            letter-spacing: -0.035em;
+        }
+        @media (max-width: 680px) {
+            .hc-classification-summary {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* Transição curta entre as ferramentas. O marcador só existe no
            primeiro render após uma mudança real de página. */
         @keyframes hc-page-enter {
@@ -2622,51 +2672,23 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             base_classificacoes,
                             contas_dominio_estabelecimento
                         )
-                        c_auto, c_banco, c_antecipado, c_conflito = st.columns(4)
-                        with c_auto:
-                            st.metric(
-                                "Classificados automaticamente",
-                                resumo_classificacao['automaticos']
-                            )
-                        with c_banco:
-                            st.metric(
-                                "Somente conta bancária",
-                                resumo_classificacao['somente_banco']
-                            )
-                        with c_antecipado:
-                            st.metric(
-                                "Antecipados — conta 532",
-                                resumo_classificacao['antecipados']
-                            )
-                        with c_conflito:
-                            st.metric(
-                                "Conflitos para revisão",
-                                resumo_classificacao['conflitos']
-                            )
-                        if resumo_classificacao['banco_nao_identificado']:
-                            st.warning(
-                                f"{resumo_classificacao['banco_nao_identificado']} lançamentos "
-                                "não tiveram o banco identificado e permaneceram sem classificação."
-                            )
-                        if resumo_classificacao['parciais_completados']:
-                            st.caption(
-                                f"{resumo_classificacao['parciais_completados']} linhas já "
-                                "possuíam uma conta; somente a célula vazia foi completada."
-                            )
-                        if resumo_classificacao['por_nome_empresa']:
-                            st.caption(
-                                f"{resumo_classificacao['por_nome_empresa']} lançamentos foram "
-                                "classificados pela semelhança segura do nome da empresa."
-                            )
-                        if resumo_classificacao['automaticos']:
-                            st.success(
-                                "Classificação concluída. As abas, os valores e a formatação "
-                                "da planilha final foram preservados."
-                            )
-                        else:
-                            st.info(
-                                "Nenhum padrão seguro foi encontrado para preenchimento automático."
-                            )
+                        total_classificados = f"{int(resumo_classificacao['automaticos']):,}".replace(',', '.')
+                        total_conta_532 = f"{int(resumo_classificacao['antecipados']):,}".replace(',', '.')
+                        st.markdown(
+                            f"""
+                            <div class="hc-classification-summary">
+                                <div class="hc-classification-card">
+                                    <div class="hc-classification-label">Contas classificadas</div>
+                                    <div class="hc-classification-value">{total_classificados}</div>
+                                </div>
+                                <div class="hc-classification-card is-532">
+                                    <div class="hc-classification-label">Conta 532</div>
+                                    <div class="hc-classification-value">{total_conta_532}</div>
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
                         nome_base_saida = os.path.splitext(
                             planilha_final_classificacao.name
                         )[0]
