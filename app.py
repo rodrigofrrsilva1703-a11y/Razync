@@ -33,18 +33,20 @@ st.set_page_config(
 st.markdown("""
     <style>
         :root {
-            --bg: #0d1117;
-            --surface: #161b22;
-            --surface-strong: #1c2128;
-            --border: #30363d;
-            --border-strong: #484f58;
-            --text: #f0f3f6;
-            --muted: #8b949e;
-            --primary: #2f81f7;
-            --primary-2: #2f81f7;
-            --cyan: #2f81f7;
-            --success: #3fb950;
-            --danger: #f85149;
+            --bg: #050505;
+            --surface: #0d0f12;
+            --surface-strong: #12151a;
+            --border: #242930;
+            --border-strong: #3b424d;
+            --text: #f5f7fa;
+            --muted: #8d96a3;
+            --primary: #4f8cff;
+            --primary-2: #78a7ff;
+            --teal: #2dd4bf;
+            --amber: #fbbf24;
+            --violet: #a78bfa;
+            --success: #2dd4bf;
+            --danger: #fb7185;
         }
         html, body, [class*="css"] { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
         .stApp { background: var(--bg); color: var(--text); }
@@ -54,7 +56,7 @@ st.markdown("""
         hr { border-color: var(--border) !important; margin: 1.7rem 0 !important; }
 
         section[data-testid="stSidebar"] {
-            background: #010409;
+            background: #000000;
             border-right: 1px solid var(--border);
             min-width: 270px !important;
         }
@@ -68,7 +70,9 @@ st.markdown("""
             width: 38px; height: 38px; border-radius: 8px;
             display: inline-flex; align-items: center; justify-content: center;
             color: white; font-weight: 800; font-size: 17px;
-            background: var(--primary);
+            background: #111827;
+            border: 1px solid #263247;
+            color: #78a7ff;
             box-shadow: none;
             margin-bottom: 12px;
         }
@@ -81,14 +85,14 @@ st.markdown("""
             border-radius: 6px !important; font-weight: 600 !important;
             padding: .58rem 1rem !important;
             border: 1px solid var(--border) !important;
-            background: #21262d !important;
+            background: #111318 !important;
             color: #c9d1d9 !important;
             transition: border-color .15s ease, background .15s ease;
             box-shadow: none !important;
         }
         .stButton > button:hover, .stDownloadButton > button:hover {
-            background: #30363d !important;
-            border-color: #6e7681 !important;
+            background: #191d23 !important;
+            border-color: #454d59 !important;
             color: white !important;
             box-shadow: none !important;
         }
@@ -103,18 +107,18 @@ st.markdown("""
             color: #94a3b8 !important; padding-left: 13px !important;
         }
         section[data-testid="stSidebar"] .stButton > button:hover {
-            background: #161b22 !important;
-            border-color: #30363d !important; color: #f0f6fc !important;
+            background: #0d0f12 !important;
+            border-color: #242930 !important; color: #f5f7fa !important;
         }
         section[data-testid="stSidebar"] button[kind="primary"] {
-            background: #21262d !important;
-            border-color: #484f58 !important;
+            background: #111827 !important;
+            border-color: #263c61 !important;
             color: white !important; box-shadow: none !important;
         }
 
         .hero-shell {
             padding: 28px 30px;
-            border: 1px solid var(--border); border-radius: 8px;
+            border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px;
             background: var(--surface);
             box-shadow: none;
             margin-bottom: 28px;
@@ -140,8 +144,11 @@ st.markdown("""
             min-height: 182px; display: flex; flex-direction: column; align-items: flex-start;
             transition: border-color .15s ease;
         }
+        .tool-card:before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--primary); border-radius: 8px 8px 0 0; }
+        .tool-card.accent-teal:before { background: var(--teal); }
+        .tool-card.accent-violet:before { background: var(--violet); }
         .tool-card:hover { border-color: var(--border-strong); box-shadow: none; }
-        .tool-icon { width: 38px; height: 38px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 17px; background: #21262d; border: 1px solid #30363d; margin-bottom: 18px; }
+        .tool-icon { width: 38px; height: 38px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 17px; background: #111318; border: 1px solid #272d35; color: #78a7ff; margin-bottom: 18px; }
         .tool-tag { position: absolute; right: 15px; top: 15px; color: #6e7681; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
         .tool-title { color: white; font-size: 16px; font-weight: 650; margin: 0 0 7px; }
         .tool-description { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0; text-align: left; }
@@ -150,15 +157,26 @@ st.markdown("""
         .workflow-step { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 6px; background: #161b22; border: 1px solid var(--border); color: #8b949e; font-size: 11px; font-weight: 600; }
         .workflow-step b { width: 18px; height: 18px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; color: #c9d1d9; background: #30363d; font-size: 9px; }
 
-        .metric-card { background: var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: 8px; text-align: left; min-height: 84px; box-shadow: none; }
+        .metric-card { background: var(--surface); border: 1px solid var(--border); border-top: 2px solid #303844; padding: 16px; border-radius: 8px; text-align: left; min-height: 84px; box-shadow: none; }
         .metric-title { font-size: 10px; color: #8290a5; text-transform: uppercase; font-weight: 800; margin-bottom: 8px; letter-spacing: .08em; }
         .metric-value { font-size: 20px; color: var(--text); font-weight: 780; letter-spacing: -.02em; }
 
+        .upload-guide { display: flex; align-items: center; gap: 14px; padding: 15px 17px; margin: 8px 0 10px; background: #0d0f12; border: 1px solid #242930; border-radius: 8px; }
+        .upload-guide-icon { width: 42px; height: 42px; flex: 0 0 42px; display: flex; align-items: center; justify-content: center; border-radius: 7px; background: rgba(45,212,191,.08); border: 1px solid rgba(45,212,191,.22); color: var(--teal); font-size: 19px; font-weight: 700; }
+        .upload-guide-content { min-width: 0; flex: 1; }
+        .upload-guide-title { color: #f5f7fa; font-size: 14px; font-weight: 650; margin-bottom: 3px; }
+        .upload-guide-text { color: #7f8996; font-size: 11px; line-height: 1.45; }
+        .upload-formats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+        .upload-format { padding: 2px 7px; border-radius: 4px; background: #15181d; border: 1px solid #292f38; color: #aab2bd; font-size: 9px; font-weight: 700; letter-spacing: .04em; }
         div[data-testid="stFileUploader"] { padding: 0; border: none; background: transparent; }
-        div[data-testid="stFileUploaderDropzone"] { background: #161b22; border: 1px dashed #484f58; border-radius: 6px; }
-        span[data-baseweb="tag"] { background: #21262d !important; color: #c9d1d9 !important; border: 1px solid #30363d !important; }
+        div[data-testid="stFileUploaderDropzone"] { min-height: 128px; display: flex; align-items: center; background: #08090b; border: 1px dashed #343b45; border-radius: 8px; transition: border-color .15s ease, background .15s ease; }
+        div[data-testid="stFileUploaderDropzone"]:hover { background: #0b0d10; border-color: var(--teal); }
+        div[data-testid="stFileUploaderDropzone"] button { background: var(--teal) !important; border-color: var(--teal) !important; color: #04110f !important; font-weight: 750 !important; }
+        div[data-testid="stFileUploaderDropzoneInstructions"] { color: #aab2bd !important; }
+        div[data-testid="stFileUploaderFile"] { background: #0d0f12; border: 1px solid #242930; border-radius: 7px; padding: 8px 10px; }
+        span[data-baseweb="tag"] { background: #15181d !important; color: #c9d1d9 !important; border: 1px solid #2b313a !important; }
         div[data-baseweb="select"] > div, .stTextInput input, .stDateInput input, .stNumberInput input {
-            background: #0d1117 !important; border-color: var(--border) !important; border-radius: 6px !important;
+            background: #08090b !important; border-color: var(--border) !important; border-radius: 6px !important;
         }
         div[data-baseweb="tab-list"] { gap: 7px; border-bottom: 1px solid var(--border); }
         button[data-baseweb="tab"] { border-radius: 4px 4px 0 0; padding: 9px 14px; color: var(--muted); }
@@ -198,6 +216,23 @@ def renderizar_etapas(etapas):
         for indice, texto in enumerate(etapas, start=1)
     )
     st.markdown(f'<div class="workflow-strip">{itens}</div>', unsafe_allow_html=True)
+
+def renderizar_area_upload(titulo, descricao, formatos):
+    etiquetas = ''.join(
+        f'<span class="upload-format">{formato.upper()}</span>'
+        for formato in formatos
+    )
+    st.markdown(
+        f'''<div class="upload-guide">
+            <div class="upload-guide-icon">↑</div>
+            <div class="upload-guide-content">
+                <div class="upload-guide-title">{titulo}</div>
+                <div class="upload-guide-text">{descricao}</div>
+                <div class="upload-formats">{etiquetas}</div>
+            </div>
+        </div>''',
+        unsafe_allow_html=True
+    )
 
 # ==============================================================================
 # FUNÇÕES DE LIMPEZA E FORMATAÇÃO (MECÂNICAS)
@@ -1900,7 +1935,7 @@ st.sidebar.markdown(
         border-radius:12px;background:rgba(15,23,42,.4);">
         <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
         <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 13.2</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 14.0</div>
     </div>""",
     unsafe_allow_html=True
 )
@@ -1935,14 +1970,14 @@ if st.session_state['pagina_ativa'] == 'home':
             st.rerun()
             
     with col_t2:
-        st.markdown("""<div class="tool-card"><span class="tool-tag">Conferência</span><div class="tool-icon">✓</div><p class="tool-title">Conciliação com Razão</p><p class="tool-description">Compare extrato e razão, acompanhe totais diários e identifique rapidamente os períodos divergentes.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="tool-card accent-teal"><span class="tool-tag">Conferência</span><div class="tool-icon">✓</div><p class="tool-title">Conciliação com Razão</p><p class="tool-description">Compare extrato e razão, acompanhe totais diários e identifique rapidamente os períodos divergentes.</p></div>""", unsafe_allow_html=True)
         st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
         if st.button("Acessar conciliação", use_container_width=True, key="btn_abrir_razao", type="primary"):
             mudar_pagina('razao')
             st.rerun()
         
     with col_t3:
-        st.markdown("""<div class="tool-card"><span class="tool-tag">Por empresa</span><div class="tool-icon">▦</div><p class="tool-title">Organizador de Planilhas</p><p class="tool-description">Aplique regras específicas de cada cliente, classifique contas e faça a conferência dos bancos.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="tool-card accent-violet"><span class="tool-tag">Por empresa</span><div class="tool-icon">▦</div><p class="tool-title">Organizador de Planilhas</p><p class="tool-description">Aplique regras específicas de cada cliente, classifique contas e faça a conferência dos bancos.</p></div>""", unsafe_allow_html=True)
         st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
         if st.button("Acessar organizador", use_container_width=True, key="btn_abrir_organizador", type="primary"):
             mudar_pagina('organizador')
@@ -1966,7 +2001,15 @@ elif st.session_state['pagina_ativa'] == 'extratos':
         )
     renderizar_etapas(["Enviar extratos", "Definir período", "Conferir lançamentos", "Baixar arquivo"])
 
-    arquivos = st.file_uploader("1. Selecione os extratos (PDF, OFX, CSV ou Excel)", type=["pdf", "ofx", "csv", "xlsx", "xls"], accept_multiple_files=True)
+    renderizar_area_upload(
+        "Enviar extratos bancários",
+        "Arraste os arquivos para a área abaixo ou clique no botão para selecionar. É possível enviar vários extratos de uma vez.",
+        ["PDF", "OFX", "CSV", "XLSX", "XLS"]
+    )
+    arquivos = st.file_uploader(
+        "Enviar extratos bancários", type=["pdf", "ofx", "csv", "xlsx", "xls"],
+        accept_multiple_files=True, label_visibility="collapsed"
+    )
 
     if arquivos:
         try:
@@ -2126,7 +2169,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.caption("As regras de leitura e organização são aplicadas de acordo com a empresa escolhida.")
         col_emp1, col_emp2 = st.columns(2)
         with col_emp1:
-            st.markdown("""<div class="tool-card"><span class="tool-tag">Disponível</span><div class="tool-icon">NG</div><p class="tool-title">Nova Geração</p><p class="tool-description">Organização de lançamentos da Matriz e da Filial, com Itaú, Bradesco e Fibra conforme cada estabelecimento.</p></div>""", unsafe_allow_html=True)
+            st.markdown("""<div class="tool-card accent-teal"><span class="tool-tag">Disponível</span><div class="tool-icon">NG</div><p class="tool-title">Nova Geração</p><p class="tool-description">Organização de lançamentos da Matriz e da Filial, com Itaú, Bradesco e Fibra conforme cada estabelecimento.</p></div>""", unsafe_allow_html=True)
             st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
             if st.button("Selecionar Nova Geração", use_container_width=True, key="org_nova_geracao", type="primary"):
                 st.session_state['empresa_organizador'] = 'nova_geracao'
@@ -2198,11 +2241,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             st.stop()
 
         configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
+        renderizar_area_upload(
+            "Planilha bancária consolidada",
+            f"Envie o arquivo da Nova Geração — {estabelecimento_nova}. O sistema localizará somente os bancos selecionados acima.",
+            ["XLSX", "XLS"]
+        )
         arquivo_empresa = st.file_uploader(
             "Planilha bancária consolidada",
             type=["xlsx", "xls"],
             key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}",
-            help="Envie a planilha da Matriz ou da Filial. As contas selecionadas serão localizadas automaticamente."
+            help="Envie a planilha da Matriz ou da Filial. As contas selecionadas serão localizadas automaticamente.",
+            label_visibility="collapsed"
         )
 
         url_base_classificacao, chave_base_classificacao, senha_admin_classificacao = (
@@ -2236,11 +2285,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 "A base de fornecedores é compartilhada entre Matriz e Filial, portanto as planilhas "
                 "antigas da Matriz não precisam ser enviadas novamente."
             )
+            renderizar_area_upload(
+                "Atualizar a base inteligente",
+                "Envie planilhas que já possuem Débito e Crédito classificados para ensinar novos padrões ao sistema.",
+                ["XLSX", "XLS", "ZIP"]
+            )
             arquivos_aprendizado = st.file_uploader(
                 "Planilhas classificadas para ensinar o sistema",
                 type=['xlsx', 'xls', 'zip'],
                 accept_multiple_files=True,
-                key='org_base_classificada_nova'
+                key='org_base_classificada_nova',
+                label_visibility="collapsed"
             )
             senha_aprendizado = st.text_input(
                 "Senha administrativa para atualizar a base",
@@ -2277,10 +2332,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 "Anexe somente a planilha final, depois que a conferência bancária estiver "
                 "concluída e os saldos estiverem batendo. O arquivo original não será alterado."
             )
+            renderizar_area_upload(
+                "Planilha final conferida",
+                "Selecione a planilha com os saldos já conciliados. As contas existentes serão preservadas.",
+                ["XLSX"]
+            )
             planilha_final_classificacao = st.file_uploader(
                 "Planilha final com os saldos conferidos",
                 type=['xlsx'],
-                key=f'org_planilha_final_classificacao_nova_{chave_estabelecimento}'
+                key=f'org_planilha_final_classificacao_nova_{chave_estabelecimento}',
+                label_visibility="collapsed"
             )
             if planilha_final_classificacao:
                 if erro_base_classificacoes:
@@ -2538,6 +2599,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 ]
                 dados_conferencia_por_banco = {}
 
+                renderizar_area_upload(
+                    "Planilha corrigida para nova conferência — opcional",
+                    "Caso tenha corrigido contas ou valores, envie a nova versão. Se não enviar, será usada a planilha organizada acima.",
+                    ["XLSX", "XLS"]
+                )
                 planilha_atualizada_conferencia = st.file_uploader(
                     "Planilha organizada atualizada para conferência (opcional)",
                     type=["xlsx", "xls"],
@@ -2548,7 +2614,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     help=(
                         "Você pode anexar a planilha final com um ou vários bancos. "
                         "O sistema separará somente os bancos escolhidos acima."
-                    )
+                    ),
+                    label_visibility="collapsed"
                 )
                 if planilha_atualizada_conferencia:
                     try:
@@ -2608,9 +2675,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             if not df_retirados.empty else df_retirados.copy()
                         }
 
-                st.caption(
-                    "Anexe os extratos correspondentes aos bancos escolhidos. "
-                    "Será criado um relatório diário separado para cada banco."
+                renderizar_area_upload(
+                    "Extratos para conferência",
+                    "Envie os extratos dos bancos escolhidos. Cada banco receberá um relatório diário separado.",
+                    ["PDF", "OFX", "CSV", "XLSX", "XLS"]
                 )
                 extratos_conferencia = st.file_uploader(
                     "Envie o(s) extrato(s) bancário(s) para conferência",
@@ -2619,7 +2687,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     key=(
                         f"org_extratos_conferencia_nova_{chave_estabelecimento}_"
                         + "_".join(config['slug'] for config in configs_conferencia)
-                    )
+                    ),
+                    label_visibility="collapsed"
                 )
 
                 if extratos_conferencia:
@@ -2764,8 +2833,26 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
     st.markdown("#### 1. Arquivos para comparação")
     col_up1, col_up2 = st.columns(2)
-    with col_up1: arq_extrato = st.file_uploader("1º - Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
-    with col_up2: arq_razao = st.file_uploader("2º - Envie o Razão exportado (CSV ou XLSX)", type=["csv", "xlsx", "xls"], key="up_razao")
+    with col_up1:
+        renderizar_area_upload(
+            "Extrato bancário",
+            "Envie o extrato correspondente ao período que será analisado.",
+            ["PDF", "OFX", "CSV", "XLSX", "XLS"]
+        )
+        arq_extrato = st.file_uploader(
+            "Extrato bancário", type=["pdf", "ofx", "csv", "xlsx", "xls"],
+            key="up_extrato", label_visibility="collapsed"
+        )
+    with col_up2:
+        renderizar_area_upload(
+            "Razão da Domínio",
+            "Envie o razão do mesmo período, preferencialmente em CSV ou XLSX.",
+            ["CSV", "XLSX", "XLS"]
+        )
+        arq_razao = st.file_uploader(
+            "Razão da Domínio", type=["csv", "xlsx", "xls"],
+            key="up_razao", label_visibility="collapsed"
+        )
 
     if arq_extrato and arq_razao:
         try:
