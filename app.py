@@ -217,88 +217,57 @@ st.markdown("""
 
         .stTextInput { margin-top: -2px; }
 
-        .hc-classification-summary {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-            margin: 18px 0 16px;
-        }
-        .hc-classification-card {
-            position: relative;
-            overflow: hidden;
-            min-height: 112px;
-            padding: 20px 22px;
-            border: 1px solid var(--hc-border);
-            border-radius: 9px;
-            background: linear-gradient(135deg, rgba(19, 185, 232, 0.055), var(--hc-surface) 58%);
-            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
-        }
-        .hc-classification-card::before {
-            content: "";
-            position: absolute;
-            inset: 0 auto 0 0;
-            width: 3px;
-            background: var(--hc-accent);
-        }
-        .hc-classification-card.is-532 {
-            background: linear-gradient(135deg, rgba(217, 164, 65, 0.06), var(--hc-surface) 58%);
-        }
-        .hc-classification-card.is-532::before {
-            background: #d9a441;
-        }
-        .hc-classification-label {
-            color: var(--hc-muted);
-            font-size: 11px;
-            font-weight: 650;
-            letter-spacing: 0.07em;
-            text-transform: uppercase;
-        }
-        .hc-classification-value {
-            margin-top: 8px;
-            color: var(--hc-text);
-            font-size: 32px;
-            line-height: 1;
-            font-weight: 720;
-            letter-spacing: -0.035em;
-        }
-        @media (max-width: 680px) {
-            .hc-classification-summary {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Transição curta entre as ferramentas. O marcador só existe no
-           primeiro render após uma mudança real de página. */
+        /* A animação ocorre somente no primeiro render após trocar de tela. */
         @keyframes hc-page-enter {
             0% {
                 opacity: 0;
-                transform: translateY(10px);
+                transform: translate3d(0, 16px, 0) scale(0.992);
+                filter: blur(2px);
             }
-            55% {
-                opacity: 0.92;
+            62% {
+                opacity: 1;
+                filter: blur(0);
             }
             100% {
                 opacity: 1;
-                transform: translateY(0);
+                transform: translate3d(0, 0, 0) scale(1);
+                filter: blur(0);
             }
         }
         .hc-page-transition-marker {
             display: none !important;
         }
         .block-container:has(.hc-page-transition-marker) {
-            animation: hc-page-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
-            transform-origin: top center;
-            will-change: opacity, transform;
+            animation: hc-page-enter 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+            transform-origin: 50% 18%;
+            backface-visibility: hidden;
+            will-change: opacity, transform, filter;
+        }
+
+        /* Microinterações discretas deixam os controles mais responsivos. */
+        [data-baseweb="tab"],
+        [data-testid="stExpander"],
+        [data-testid="stFileUploaderDropzone"],
+        [data-testid="stDataFrame"] {
+            transition: border-color 180ms ease, background-color 180ms ease,
+                        color 180ms ease, box-shadow 220ms ease !important;
+        }
+        [data-baseweb="tab"]:hover {
+            color: var(--hc-text) !important;
         }
         .stButton > button:active {
-            transform: scale(0.988) !important;
-            transition-duration: 60ms !important;
+            transform: translateY(1px) scale(0.986) !important;
+            transition-duration: 80ms !important;
         }
         @media (prefers-reduced-motion: reduce) {
             .block-container:has(.hc-page-transition-marker) {
                 animation: none !important;
+                filter: none !important;
             }
-            .stButton > button {
+            .stButton > button,
+            [data-baseweb="tab"],
+            [data-testid="stExpander"],
+            [data-testid="stFileUploaderDropzone"] {
                 transition-duration: 0.01ms !important;
             }
         }
@@ -2672,23 +2641,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             base_classificacoes,
                             contas_dominio_estabelecimento
                         )
-                        total_classificados = f"{int(resumo_classificacao['automaticos']):,}".replace(',', '.')
-                        total_conta_532 = f"{int(resumo_classificacao['antecipados']):,}".replace(',', '.')
-                        st.markdown(
-                            f"""
-                            <div class="hc-classification-summary">
-                                <div class="hc-classification-card">
-                                    <div class="hc-classification-label">Contas classificadas</div>
-                                    <div class="hc-classification-value">{total_classificados}</div>
-                                </div>
-                                <div class="hc-classification-card is-532">
-                                    <div class="hc-classification-label">Conta 532</div>
-                                    <div class="hc-classification-value">{total_conta_532}</div>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                        coluna_classificados, coluna_532 = st.columns(2)
+                        with coluna_classificados:
+                            st.metric(
+                                "Classificados automaticamente",
+                                f"{int(resumo_classificacao['automaticos']):,}".replace(',', '.')
+                            )
+                        with coluna_532:
+                            st.metric(
+                                "Antecipados — conta 532",
+                                f"{int(resumo_classificacao['antecipados']):,}".replace(',', '.')
+                            )
                         nome_base_saida = os.path.splitext(
                             planilha_final_classificacao.name
                         )[0]
