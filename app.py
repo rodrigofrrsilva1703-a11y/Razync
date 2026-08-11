@@ -187,6 +187,53 @@ st.markdown("""
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22) !important;
         }
 
+        /* Cards de empresas: preto azulado e completamente clicáveis. */
+        .st-key-org_empresa_card_nova button,
+        .st-key-org_empresa_card_autokraft button {
+            width: 100% !important;
+            height: 156px !important;
+            min-height: 156px !important;
+            padding: 20px 22px !important;
+            cursor: pointer !important;
+            background: linear-gradient(145deg, #05090e 0%, #07131f 56%, #0a1d2d 100%) !important;
+            border: 1px solid #17364f !important;
+            border-left: 3px solid #147eaf !important;
+            border-radius: 10px !important;
+            color: #91a9bb !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: pre-line !important;
+            line-height: 1.55 !important;
+            font-size: 12px !important;
+            font-weight: 400 !important;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24) !important;
+            transition: transform 160ms ease, border-color 160ms ease,
+                        background 180ms ease, box-shadow 180ms ease !important;
+        }
+        .st-key-org_empresa_card_nova button p,
+        .st-key-org_empresa_card_autokraft button p {
+            white-space: pre-line !important;
+            margin: 0 !important;
+        }
+        .st-key-org_empresa_card_nova button strong,
+        .st-key-org_empresa_card_autokraft button strong {
+            color: #f2f8fc !important;
+            font-size: 18px !important;
+            line-height: 1.3 !important;
+            font-weight: 700 !important;
+        }
+        .st-key-org_empresa_card_nova button:hover,
+        .st-key-org_empresa_card_autokraft button:hover {
+            background: linear-gradient(145deg, #071019 0%, #0a1c2c 52%, #0d2a40 100%) !important;
+            border-color: #2398cf !important;
+            border-left-color: #28b6e8 !important;
+            color: #bfd1de !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 15px 34px rgba(0, 79, 122, 0.22) !important;
+        }
+
         [data-testid="stFileUploaderDropzone"] {
             background-color: var(--hc-surface) !important;
             border: 1px dashed var(--hc-border-strong) !important;
@@ -3023,11 +3070,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             st.rerun()
     with col_tit:
         st.title({
-            'nova_geracao': 'Nova Geração',
+            'nova_geracao': '266 - Nova Geração',
             'autokraft': 'Grupo Autokraft'
         }.get(empresa_organizador, 'Organizador de Planilhas'))
     st.caption({
-        'nova_geracao': 'Organize, confira e classifique os movimentos da Nova Geração.',
+        'nova_geracao': 'Organize, confira e classifique os movimentos da 266 - Nova Geração.',
         'autokraft': 'Organize os mapas diários e confira os extratos do Grupo Autokraft.'
     }.get(
         empresa_organizador,
@@ -3039,15 +3086,21 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.markdown("##### Empresas disponíveis")
         col_emp1, col_emp2 = st.columns(2)
         with col_emp1:
-            st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Nova Geração</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Organização, conferência e classificação dos movimentos bancários.</p></div>""", unsafe_allow_html=True)
-            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-            if st.button("Abrir Nova Geração", use_container_width=True, key="org_nova_geracao"):
+            if st.button(
+                "🏢\n\n**266 - Nova Geração**\n\n"
+                "Organização, conferência e classificação dos movimentos bancários.",
+                use_container_width=True,
+                key="org_empresa_card_nova"
+            ):
                 st.session_state['empresa_organizador'] = 'nova_geracao'
                 st.rerun()
         with col_emp2:
-            st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏭</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Grupo Autokraft</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Mapas diários e conferência dos bancos Itaú e Daycoval.</p></div>""", unsafe_allow_html=True)
-            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-            if st.button("Abrir Grupo Autokraft", use_container_width=True, key="org_autokraft"):
+            if st.button(
+                "🏭\n\n**Grupo Autokraft**\n\n"
+                "Mapas diários e conferência dos bancos Itaú e Daycoval.",
+                use_container_width=True,
+                key="org_empresa_card_autokraft"
+            ):
                 st.session_state['empresa_organizador'] = 'autokraft'
                 st.rerun()
 
@@ -3397,7 +3450,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
             )
             arquivo_empresa = st.file_uploader(
-                f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
+                f"Envie a planilha bancária da 266 - Nova Geração — {estabelecimento_nova}",
                 type=["xlsx", "xls"],
                 key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
             )
