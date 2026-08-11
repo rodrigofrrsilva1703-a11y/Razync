@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import openpyxl
 import re
+import struct
 import calendar
 import io
 import os
@@ -824,90 +825,268 @@ def gerar_txt_dominio(df):
         linhas_txt.append(f"{row['DATA']};{row['DÉBITO'] if pd.notna(row['DÉBITO']) else ''};{row['CRÉDITO'] if pd.notna(row['CRÉDITO']) else ''};{float(row['VALOR']):.2f};{hist_limpo}\n")
     return "".join(linhas_txt)
 
+def recuperar_xls_biff_irregular(file_bytes):
+    """
+    Recupera relatórios .xls antigos cujo contêiner OLE está legível, mas os
+    endereços internos das planilhas estão inconsistentes. A correção ocorre
+    somente em memória; o arquivo enviado pelo usuário não é alterado.
+    """
+    try:
+        from xlrd.compdoc import CompDoc
+
+        documento = CompDoc(file_bytes, ignore_workbook_corruption=True)
+        fluxo_workbook = documento.get_named_stream('Workbook')
+        if not fluxo_workbook:
+            fluxo_workbook = documento.get_named_stream('Book')
+        if not fluxo_workbook:
+            return None
+
+        fluxo = bytearray(fluxo_workbook)
+        registros_abas = []
+        posicao = 0
+        fim_dos_globais = None
+
+        # Localiza os registros BOUNDSHEET no bloco global do BIFF.
+        while posicao + 4 <= len(fluxo):
+            codigo, tamanho = struct.unpack_from('<HH', fluxo, posicao)
+            fim_registro = posicao + 4 + tamanho
+            if fim_registro > len(fluxo):
+                break
+            if codigo == 0x0085 and tamanho >= 4:
+                registros_abas.append(posicao)
+            posicao = fim_registro
+            if codigo == 0x000A:
+                fim_dos_globais = posicao
+                break
+
+        if not registros_abas or fim_dos_globais is None:
+            return None
+
+        # Procura os BOFs reais das planilhas, gráficos ou macros.
+        inicios_reais = []
+        cursor = fim_dos_globais
+        while True:
+            indice = fluxo.find(b'\x09\x08', cursor)
+            if indice < 0:
+                break
+            if indice + 8 <= len(fluxo):
+                tamanho = struct.unpack_from('<H', fluxo, indice + 2)[0]
+                if tamanho >= 4 and indice + 4 + tamanho <= len(fluxo):
+                    versao, tipo_fluxo = struct.unpack_from('<HH', fluxo, indice + 4)
+                    if versao in (0x0500, 0x0600) and tipo_fluxo in (0x0010, 0x0020, 0x0040):
+                        inicios_reais.append(indice)
+            cursor = indice + 2
+
+        if len(inicios_reais) < len(registros_abas):
+            return None
+
+        for registro_aba, inicio_real in zip(registros_abas, inicios_reais):
+            struct.pack_into('<I', fluxo, registro_aba + 4, inicio_real)
+
+        arquivo_recuperado = io.BytesIO(bytes(fluxo))
+        xls = pd.ExcelFile(arquivo_recuperado, engine='xlrd')
+        for nome_aba in xls.sheet_names:
+            df_temp = pd.read_excel(
+                xls, sheet_name=nome_aba, dtype=str, header=None
+            )
+            if df_temp is not None and not df_temp.empty and df_temp.shape[1] > 1:
+                return df_temp
+    except Exception:
+        return None
+
+    return None
+
+
 def processar_razao_dominio(file_bytes, filename):
     df = None
     ext = os.path.splitext(filename)[1].lower()
-    
+
     try:
         if ext == '.xlsx':
             xls = pd.ExcelFile(io.BytesIO(file_bytes))
             for sheet in xls.sheet_names:
-                df_temp = pd.read_excel(xls, sheet_name=sheet, dtype=str, header=None)
+                df_temp = pd.read_excel(
+                    xls, sheet_name=sheet, dtype=str, header=None
+                )
                 if df_temp is not None and not df_temp.empty and df_temp.shape[1] > 1:
                     df = df_temp
                     break
         elif ext == '.xls':
-            try: df = pd.read_excel(io.BytesIO(file_bytes), dtype=str, header=None, engine='xlrd')
-            except Exception as e:
-                if "Expected BOF record" in str(e) or "corrupt" in str(e).lower():
-                    st.session_state['erro_bof_xls'] = True
-                    return None
-                try: df = pd.read_html(io.BytesIO(file_bytes), header=None)[0].astype(str)
+            try:
+                df = pd.read_excel(
+                    io.BytesIO(file_bytes),
+                    dtype=str,
+                    header=None,
+                    engine='xlrd'
+                )
+            except Exception:
+                # Alguns relatórios com extensão XLS são tabelas HTML.
+                try:
+                    tabelas = pd.read_html(io.BytesIO(file_bytes), header=None)
+                    if tabelas:
+                        df = tabelas[0].astype(str)
                 except Exception:
-                    st.session_state['erro_bof_xls'] = True
-                    return None
+                    df = None
+
+                # Relatórios binários antigos da Domínio podem conter os dados
+                # intactos, mas apontadores BIFF incorretos. Recuperamos tudo
+                # em memória para evitar conversões manuais.
+                if df is None or df.empty:
+                    df = recuperar_xls_biff_irregular(file_bytes)
+                    if df is not None and not df.empty:
+                        st.session_state['razao_xls_recuperado'] = True
+                    else:
+                        st.session_state['erro_bof_xls'] = True
+                        return None
         else:
             for enc in ['utf-8', 'latin1', 'cp1252']:
                 for sep in [';', '\t', '|', ',']:
                     try:
-                        df = pd.read_csv(io.BytesIO(file_bytes), sep=sep, encoding=enc, dtype=str, header=None, on_bad_lines='skip')
-                        if df.shape[1] > 1: break
-                    except: continue
-                if df is not None and df.shape[1] > 1: break
-    except Exception: return None
-    
-    if df is None or df.empty: return None
-    
+                        df = pd.read_csv(
+                            io.BytesIO(file_bytes),
+                            sep=sep,
+                            encoding=enc,
+                            dtype=str,
+                            header=None,
+                            on_bad_lines='skip'
+                        )
+                        if df.shape[1] > 1:
+                            break
+                    except Exception:
+                        continue
+                if df is not None and df.shape[1] > 1:
+                    break
+    except Exception:
+        return None
+
+    if df is None or df.empty:
+        return None
+
     header_row_idx = 0
     for idx, row in df.iterrows():
-        row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).upper()
-        if ('DATA' in row_str or 'DT' in row_str) and ('VALOR' in row_str or 'DEBITO' in row_str or 'DÉBITO' in row_str or 'CREDITO' in row_str or 'CRÉDITO' in row_str):
+        row_str = " ".join(
+            [str(v) for v in row.values if pd.notna(v)]
+        ).upper()
+        possui_data = 'DATA' in row_str or re.search(r'\bDT\b', row_str)
+        possui_valor = any(
+            termo in row_str
+            for termo in ['VALOR', 'DEBITO', 'DÉBITO', 'CREDITO', 'CRÉDITO']
+        )
+        if possui_data and possui_valor:
             header_row_idx = idx
             break
-            
+
     if header_row_idx > 0:
-        df.columns = [str(v).strip().upper() for v in df.iloc[header_row_idx].values]
-        df = df.iloc[header_row_idx+1:].copy()
+        df.columns = [
+            str(v).strip().upper() for v in df.iloc[header_row_idx].values
+        ]
+        df = df.iloc[header_row_idx + 1:].copy()
     else:
         df.columns = [str(v).strip().upper() for v in df.iloc[0].values]
         df = df.iloc[1:].copy()
-        
-    df.columns = [re.sub(r'[^\w\s]', '', c) for c in df.columns]
+
+    df.columns = [re.sub(r'[^\w\s]', '', coluna) for coluna in df.columns]
     cols = list(df.columns)
-    
-    col_data = next((c for c in cols if any(p in c for p in ['DATA', 'DT'])), None)
-    col_deb = next((c for c in cols if any(p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DEB'])), None)
-    col_cred = next((c for c in cols if any(p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRE'])), None)
-    col_val = next((c for c in cols if any(p in c for p in ['VALOR', 'VL'])), None)
-    col_hist = next((c for c in cols if any(p in c for p in ['HISTORICO', 'HISTÓRICO', 'HIST', 'COMPLEMENTO', 'LANCAMENTO', 'DESCRI'])), None)
-    
-    if not col_data: return None
-    
+
+    col_data = next(
+        (c for c in cols if any(p in c for p in ['DATA', 'DT'])),
+        None
+    )
+    col_deb = next(
+        (c for c in cols if any(
+            p in c for p in ['DEBITO', 'DÉBITO', 'SAIDA', 'DEB']
+        )),
+        None
+    )
+    col_cred = next(
+        (c for c in cols if any(
+            p in c for p in ['CREDITO', 'CRÉDITO', 'ENTRADA', 'CRE']
+        )),
+        None
+    )
+    col_val = next(
+        (c for c in cols if any(p in c for p in ['VALOR', 'VL'])),
+        None
+    )
+    col_hist = next(
+        (c for c in cols if any(
+            p in c
+            for p in [
+                'HISTORICO', 'HISTÓRICO', 'HIST', 'COMPLEMENTO',
+                'LANCAMENTO', 'DESCRI'
+            ]
+        )),
+        None
+    )
+
+    if not col_data:
+        return None
+
     dados = []
     for _, row in df.iterrows():
         dt_raw = str(row[col_data]).strip() if pd.notna(row[col_data]) else ''
-        match_dt = re.search(r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', dt_raw)
-        if not match_dt: continue
-        dt_fmt = match_dt.group(1).replace('-', '/')
-        
+
+        # Datas lidas de XLS podem chegar como AAAA-MM-DD. Nesse caso não se
+        # deve aplicar dayfirst, pois 2026-03-02 viraria 03/02/2026.
+        if re.match(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}', dt_raw):
+            data_parseada = pd.to_datetime(
+                dt_raw, yearfirst=True, errors='coerce'
+            )
+        else:
+            match_dt = re.search(
+                r'(?<!\d)(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})(?!\d)',
+                dt_raw
+            )
+            data_parseada = (
+                pd.to_datetime(
+                    match_dt.group(1), dayfirst=True, errors='coerce'
+                )
+                if match_dt else pd.NaT
+            )
+
+        if pd.isna(data_parseada):
+            continue
+        dt_fmt = data_parseada.strftime('%d/%m/%Y')
+
         v_ent, v_sai = 0.0, 0.0
-        
+
         if col_deb and col_cred:
-            v_sai = abs(limpar_valor_monetario(row[col_deb])) if pd.notna(row[col_deb]) else 0.0
-            v_ent = abs(limpar_valor_monetario(row[col_cred])) if pd.notna(row[col_cred]) else 0.0
+            v_sai = (
+                abs(limpar_valor_monetario(row[col_deb]))
+                if pd.notna(row[col_deb]) else 0.0
+            )
+            v_ent = (
+                abs(limpar_valor_monetario(row[col_cred]))
+                if pd.notna(row[col_cred]) else 0.0
+            )
         elif col_val and pd.notna(row[col_val]):
             val_num = limpar_valor_monetario(row[col_val])
-            if val_num < 0: v_sai = abs(val_num)
-            else: v_ent = val_num
-                
-        hist_str = limpar_caracteres_ilegais(str(row[col_hist]).strip()) if col_hist and pd.notna(row[col_hist]) else 'LANCAMENTO RAZAO'
-                
+            if val_num < 0:
+                v_sai = abs(val_num)
+            else:
+                v_ent = val_num
+
+        hist_str = (
+            limpar_caracteres_ilegais(str(row[col_hist]).strip())
+            if col_hist and pd.notna(row[col_hist])
+            else 'LANCAMENTO RAZAO'
+        )
+
         if v_ent != 0 or v_sai != 0:
-            dados.append({'DATA': dt_fmt, 'ENTRADAS_RAZAO': v_ent, 'SAIDAS_RAZAO': v_sai, 'HISTÓRICO': hist_str})
-            
-    if not dados: return None
+            dados.append({
+                'DATA': dt_fmt,
+                'ENTRADAS_RAZAO': v_ent,
+                'SAIDAS_RAZAO': v_sai,
+                'HISTÓRICO': hist_str
+            })
+
+    if not dados:
+        return None
+
     df_res = pd.DataFrame(dados)
-    df_res['DATA_DT'] = pd.to_datetime(df_res['DATA'], dayfirst=True, errors='coerce')
+    df_res['DATA_DT'] = pd.to_datetime(
+        df_res['DATA'], dayfirst=True, errors='coerce'
+    )
     return df_res.dropna(subset=['DATA_DT'])
 
 # ==============================================================================
@@ -2895,12 +3074,12 @@ elif st.session_state['pagina_ativa'] == 'razao':
     with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
     
     st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas do Extrato com o Razão da Domínio.")
-    st.markdown("""<div class="aviso-banner"><p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p></div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="aviso-banner"><p><strong>Formatos aceitos:</strong> CSV, XLSX e XLS antigo da Domínio. Quando necessário, o sistema recupera e normaliza o arquivo automaticamente antes da leitura.</p></div>""", unsafe_allow_html=True)
 
     st.markdown("##### 📁 Arquivos de Importação")
     col_up1, col_up2 = st.columns(2)
     with col_up1: arq_extrato = st.file_uploader("1º - Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
-    with col_up2: arq_razao = st.file_uploader("2º - Envie o Razão exportado (CSV ou XLSX)", type=["csv", "xlsx", "xls"], key="up_razao")
+    with col_up2: arq_razao = st.file_uploader("2º - Envie o Razão exportado (CSV, XLSX ou XLS)", type=["csv", "xlsx", "xls"], key="up_razao")
 
     if arq_extrato and arq_razao:
         try:
@@ -2916,11 +3095,22 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 
             raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
             
-            if 'erro_bof_xls' in st.session_state: del st.session_state['erro_bof_xls']
+            for chave_estado_xls in ['erro_bof_xls', 'razao_xls_recuperado']:
+                st.session_state.pop(chave_estado_xls, None)
+
             df_razao_bruto = processar_razao_dominio(raz_bytes, raz_name)
 
+            if st.session_state.get('razao_xls_recuperado', False):
+                st.success(
+                    "Arquivo XLS antigo recuperado e convertido automaticamente "
+                    "em memória. A conciliação pode continuar normalmente."
+                )
+
             if st.session_state.get('erro_bof_xls', False):
-                st.markdown("""<div class="alerta-dominio"><h4>🚨 Formato .XLS da Domínio Detectado!</h4><p>O sistema Domínio exporta relatórios em <code>.xls</code> usando um formato binário antigo da Microsoft que oculta os valores originais.</p><p style="margin-top: 10px;"><strong>💡 Como resolver agora:</strong><br>Abra o arquivo <code>.xls</code> no seu Excel e clique em <b>Salvar Como -> CSV (separado por vírgulas)</b> ou <b>Pasta de Trabalho do Excel (.xlsx)</b> e anexe novamente.</p></div>""", unsafe_allow_html=True)
+                st.error(
+                    "Não foi possível recuperar este arquivo XLS. Como alternativa, "
+                    "salve-o como CSV ou XLSX e envie novamente."
+                )
                 st.stop()
 
             if lancamentos_ext and df_razao_bruto is not None and not df_razao_bruto.empty:
