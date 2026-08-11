@@ -44,6 +44,10 @@ st.markdown("""
         a.tool-card { text-decoration: none !important; color: inherit !important; cursor: pointer; }
         a.tool-card:hover { background-color: #1c2128; border-color: #8b949e; transform: translateY(-2px); }
         a.tool-card:focus-visible { outline: 2px solid #58a6ff; outline-offset: 3px; }
+        a.tool-card > span { display: block; }
+        .tool-card-icon { font-size: 22px; margin-bottom: 10px; line-height: 1; }
+        .tool-card-title { font-weight: 600; color: #f0f6fc; margin-bottom: 6px; font-size: 15px; }
+        .tool-card-description { font-size: 12px; color: #8b949e; line-height: 1.45; max-width: 310px; }
         .alerta-dominio { background-color: #3d1c1c; border-left: 5px solid #f85149; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
         .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
         .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
@@ -1749,19 +1753,19 @@ if st.session_state['pagina_ativa'] == 'home':
 
     with col_t1:
         st.markdown(
-            """<a class="tool-card" href="?pagina=extratos" target="_self" aria-label="Abrir Conversor de Extratos"><p style="font-size: 20px; margin-bottom: 8px;">📊</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conversor de Extratos</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p></a>""",
+            """<a class="tool-card" href="?pagina=extratos" target="_self" aria-label="Abrir Conversor de Extratos"><span class="tool-card-icon">📊</span><span class="tool-card-title">Conversor de Extratos</span><span class="tool-card-description">Converta extratos para o formato de importação da Domínio.</span></a>""",
             unsafe_allow_html=True
         )
 
     with col_t2:
         st.markdown(
-            """<a class="tool-card" href="?pagina=razao" target="_self" aria-label="Abrir Conciliação com Razão"><p style="font-size: 20px; margin-bottom: 8px;">🔍</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Análise automatizada, rolagem de saldos e auditoria de divergências.</p></a>""",
+            """<a class="tool-card" href="?pagina=razao" target="_self" aria-label="Abrir Conciliação com Razão"><span class="tool-card-icon">🔍</span><span class="tool-card-title">Conciliação com Razão</span><span class="tool-card-description">Análise automatizada, rolagem de saldos e auditoria de divergências.</span></a>""",
             unsafe_allow_html=True
         )
 
     with col_t3:
         st.markdown(
-            """<a class="tool-card" href="?pagina=organizador" target="_self" aria-label="Abrir Organizador de Planilhas"><p style="font-size: 20px; margin-bottom: 8px;">🗂️</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Organizador de Planilhas</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta planilhas específicas de empresas para o Modelo Domínio.</p></a>""",
+            """<a class="tool-card" href="?pagina=organizador" target="_self" aria-label="Abrir Organizador de Planilhas"><span class="tool-card-icon">🗂️</span><span class="tool-card-title">Organizador de Planilhas</span><span class="tool-card-description">Converta planilhas específicas de empresas para o Modelo Domínio.</span></a>""",
             unsafe_allow_html=True
         )
 
