@@ -140,7 +140,12 @@ st.markdown("""
         .st-key-home_card_extratos button,
         .st-key-home_card_razao button,
         .st-key-home_card_organizador button {
-            min-height: 166px !important;
+            width: 100% !important;
+            height: 184px !important;
+            min-height: 184px !important;
+            max-height: 184px !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
             padding: 24px 20px !important;
             background: linear-gradient(180deg, rgba(19, 185, 232, 0.035) 0%, var(--hc-surface) 34%) !important;
             border: 1px solid var(--hc-border) !important;
