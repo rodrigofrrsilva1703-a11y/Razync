@@ -192,15 +192,15 @@ st.markdown("""
         .stTextInput { margin-top: -2px; }
 
         /* Enterprise workspace */
-        .enterprise-shell { margin: 2px 0 22px; }
-        .enterprise-title { color: #f8fafc; font-size: 27px; font-weight: 720; letter-spacing: -.025em; margin: 0; }
-        .enterprise-subtitle { color: #7f8996; font-size: 13px; margin: 7px 0 0; }
+        .enterprise-shell { margin: 4px 0 24px; padding-bottom: 18px; border-bottom: 1px solid #20242b; }
+        .enterprise-title { color: #f3f4f6; font-size: 24px; font-weight: 680; letter-spacing: -.02em; margin: 0; }
+        .enterprise-subtitle { color: #737d8a; font-size: 12px; margin: 6px 0 0; }
         .enterprise-context { display: grid; grid-template-columns: 1.5fr 1fr 2fr; background: #0b0d10; border: 1px solid #242930; border-radius: 8px; margin: 14px 0 20px; overflow: hidden; }
         .enterprise-context-item { padding: 12px 15px; border-right: 1px solid #242930; min-width: 0; }
         .enterprise-context-item:last-child { border-right: 0; }
         .enterprise-context-label { color: #667180; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
         .enterprise-context-value { color: #e5e7eb; font-size: 12px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .enterprise-section { margin: 20px 0 10px; padding-top: 18px; border-top: 1px solid #242930; }
+        .enterprise-section { margin: 24px 0 12px; padding-top: 20px; border-top: 1px solid #20242b; }
         .enterprise-section:first-child { border-top: 0; padding-top: 0; }
         .enterprise-section-title { color: #f1f5f9; font-size: 16px; font-weight: 680; margin: 0 0 4px; }
         .enterprise-section-text { color: #7f8996; font-size: 12px; line-height: 1.5; margin: 0; }
@@ -213,12 +213,18 @@ st.markdown("""
         .operation-index { color: #4f8cff; font-size: 11px; font-weight: 800; letter-spacing: .08em; width: 34px; }
         .operation-name { color: #eef2f7; font-size: 14px; font-weight: 660; margin-bottom: 4px; }
         .operation-copy { color: #77818e; font-size: 11px; line-height: 1.45; }
-        div[data-testid="stSegmentedControl"] { margin: 2px 0 16px; }
+        .workspace-client { color: #9099a5; font-size: 11px; margin: -12px 0 18px; }
+        .workspace-client b { color: #d6dae0; font-weight: 650; }
+        .minimal-upload-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin: 16px 0 8px; }
+        .minimal-upload-title { color: #dfe3e8; font-size: 13px; font-weight: 630; }
+        .minimal-upload-copy { color: #68727f; font-size: 10px; margin-top: 3px; }
+        .minimal-upload-types { color: #626d79; font-size: 9px; font-weight: 750; letter-spacing: .08em; white-space: nowrap; }
+        div[data-testid="stSegmentedControl"] { margin: 2px 0 12px; }
         div[data-testid="stSegmentedControl"] button { min-height: 38px; border-color: #2a3039 !important; background: #0b0d10 !important; color: #8d96a3 !important; }
         div[data-testid="stSegmentedControl"] button[aria-pressed="true"] { background: #182235 !important; color: #eaf1ff !important; border-color: #35558a !important; }
-        div[data-testid="stFileUploaderDropzone"] { min-height: 92px; }
-        div[data-testid="stFileUploaderDropzone"] button { background: #1b2330 !important; border-color: #344156 !important; color: #dbe7f7 !important; }
-        div[data-testid="stFileUploaderDropzone"]:hover { border-color: #4f8cff; background: #0a0d12; }
+        div[data-testid="stFileUploaderDropzone"] { min-height: 76px; background: #090a0c; border: 1px solid #292e36; }
+        div[data-testid="stFileUploaderDropzone"] button { background: #151920 !important; border-color: #303743 !important; color: #d4d9e0 !important; }
+        div[data-testid="stFileUploaderDropzone"]:hover { border-color: #465263; background: #0b0d10; }
 
         @media (max-width: 760px) {
             .block-container { padding: 1.25rem 1rem 3rem; }
@@ -250,18 +256,12 @@ def renderizar_etapas(etapas):
     st.markdown(f'<div class="workflow-strip">{itens}</div>', unsafe_allow_html=True)
 
 def renderizar_area_upload(titulo, descricao, formatos):
-    etiquetas = ''.join(
-        f'<span class="upload-format">{formato.upper()}</span>'
-        for formato in formatos
-    )
+    tipos = ' · '.join(formato.upper() for formato in formatos)
     st.markdown(
-        f'''<div class="upload-guide">
-            <div class="upload-guide-icon">↑</div>
-            <div class="upload-guide-content">
-                <div class="upload-guide-title">{titulo}</div>
-                <div class="upload-guide-text">{descricao}</div>
-                <div class="upload-formats">{etiquetas}</div>
-            </div>
+        f'''<div class="minimal-upload-head"><div>
+            <div class="minimal-upload-title">{titulo}</div>
+            <div class="minimal-upload-copy">{descricao}</div></div>
+            <div class="minimal-upload-types">{tipos}</div>
         </div>''',
         unsafe_allow_html=True
     )
@@ -2393,7 +2393,7 @@ st.sidebar.markdown(
         border-radius:12px;background:rgba(15,23,42,.4);">
         <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
         <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 15.0 Enterprise</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 15.1 Minimal</div>
     </div>""",
     unsafe_allow_html=True
 )
@@ -2634,63 +2634,60 @@ elif st.session_state['pagina_ativa'] == 'extratos':
 # TELA 3: ORGANIZADOR DE PLANILHAS POR EMPRESA
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'organizador':
-    topo_voltar, topo_titulo = st.columns([1, 8])
-    with topo_voltar:
-        if st.button("← Voltar", key='ent_voltar_organizador', use_container_width=True):
-            mudar_pagina('home')
-            st.rerun()
-    with topo_titulo:
+    if st.button("← Voltar", key='ent_voltar_organizador'):
+        mudar_pagina('home')
+        st.rerun()
+    st.markdown(
+        '''<div class="enterprise-shell"><div class="page-kicker">Nova Geração</div>
+        <div class="enterprise-title">Operações bancárias</div>
+        <p class="enterprise-subtitle">Selecione o estabelecimento e a tarefa que deseja executar.</p></div>''',
+        unsafe_allow_html=True
+    )
+
+    coluna_estabelecimento, coluna_operacao = st.columns(2)
+    with coluna_estabelecimento:
+        estabelecimento = st.selectbox(
+            "Estabelecimento", ["Matriz", "Filial"], key='ent_estabelecimento'
+        )
+    with coluna_operacao:
+        operacao = st.selectbox(
+            "Operação",
+            ["Organizar planilha", "Conferir extratos", "Classificar contas", "Gerenciar base"],
+            key='ent_operacao'
+        )
+
+    chave_estabelecimento = normalizar_texto(estabelecimento)
+    contas, configuracoes = obter_contexto_nova_geracao(estabelecimento)
+    configs = []
+    if operacao in ["Organizar planilha", "Conferir extratos"]:
+        opcoes_bancos = list(configuracoes.keys())
+        bancos_escolhidos = st.multiselect(
+            "Bancos que serão processados", opcoes_bancos, default=[opcoes_bancos[0]],
+            key=f'ent_bancos_{chave_estabelecimento}_{normalizar_texto(operacao)}'
+        )
+        configs = [configuracoes[item] for item in bancos_escolhidos]
+        if configs:
+            st.markdown(
+                '<div class="workspace-client"><b>Escopo:</b> Nova Geração · '
+                + estabelecimento + ' · ' + ', '.join(config['nome'] for config in configs)
+                + '</div>', unsafe_allow_html=True
+            )
+    else:
         st.markdown(
-            '''<div class="enterprise-shell"><div class="page-kicker">Workspace por empresa</div>
-            <div class="enterprise-title">Operações bancárias</div>
-            <p class="enterprise-subtitle">Organize, confira e classifique os arquivos em fluxos separados.</p></div>''',
+            f'<div class="workspace-client"><b>Escopo:</b> Nova Geração · {estabelecimento}</div>',
             unsafe_allow_html=True
         )
 
-    st.markdown("##### Empresa")
-    empresa_enterprise = seletor_segmentado(
-        "Empresa", ["Nova Geração", "Empresa 2 · em breve"],
-        'ent_empresa', 'Nova Geração'
-    )
-    if empresa_enterprise != 'Nova Geração':
-        st.info("A segunda empresa ainda não possui regras configuradas.")
+    if operacao in ["Organizar planilha", "Conferir extratos"] and not configs:
+        st.info("Selecione pelo menos um banco para continuar.")
+    elif operacao == "Organizar planilha":
+        operacao_organizar_nova(estabelecimento, chave_estabelecimento, configs)
+    elif operacao == "Conferir extratos":
+        operacao_conferir_nova(chave_estabelecimento, configs)
+    elif operacao == "Classificar contas":
+        operacao_classificar_nova(chave_estabelecimento, contas)
     else:
-        coluna_estabelecimento, coluna_operacao = st.columns([1.2, 3])
-        with coluna_estabelecimento:
-            estabelecimento = seletor_segmentado(
-                "Estabelecimento", ["Matriz", "Filial"],
-                'ent_estabelecimento', 'Matriz'
-            )
-        chave_estabelecimento = normalizar_texto(estabelecimento)
-        contas, configuracoes = obter_contexto_nova_geracao(estabelecimento)
-        with coluna_operacao:
-            operacao = seletor_segmentado(
-                "Operação",
-                ["Organizar planilha", "Conferir extratos", "Classificar contas", "Gerenciar base"],
-                'ent_operacao', 'Organizar planilha'
-            )
-
-        opcoes_bancos = list(configuracoes.keys())
-        bancos_escolhidos = seletor_multiplas_opcoes(
-            "Bancos", opcoes_bancos,
-            f'ent_bancos_{chave_estabelecimento}_{normalizar_texto(operacao)}',
-            [opcoes_bancos[0]]
-        )
-        configs = [configuracoes[item] for item in bancos_escolhidos]
-        renderizar_contexto_enterprise(
-            "Nova Geração", estabelecimento, [config['nome'] for config in configs]
-        )
-
-        if operacao != "Gerenciar base" and not configs:
-            st.info("Selecione pelo menos um banco para continuar.")
-        elif operacao == "Organizar planilha":
-            operacao_organizar_nova(estabelecimento, chave_estabelecimento, configs)
-        elif operacao == "Conferir extratos":
-            operacao_conferir_nova(chave_estabelecimento, configs)
-        elif operacao == "Classificar contas":
-            operacao_classificar_nova(chave_estabelecimento, contas)
-        else:
-            operacao_gerenciar_base_nova()
+        operacao_gerenciar_base_nova()
 
 # Fluxo anterior mantido desativado apenas como referência de migração.
 elif False and st.session_state['pagina_ativa'] == 'organizador':
