@@ -216,6 +216,42 @@ st.markdown("""
         .aviso-banner p { margin: 0; color: #c5d0da; font-size: 14px; }
 
         .stTextInput { margin-top: -2px; }
+
+        /* Transição curta entre as ferramentas. O marcador só existe no
+           primeiro render após uma mudança real de página. */
+        @keyframes hc-page-enter {
+            0% {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            55% {
+                opacity: 0.92;
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .hc-page-transition-marker {
+            display: none !important;
+        }
+        .block-container:has(.hc-page-transition-marker) {
+            animation: hc-page-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+            transform-origin: top center;
+            will-change: opacity, transform;
+        }
+        .stButton > button:active {
+            transform: scale(0.988) !important;
+            transition-duration: 60ms !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .block-container:has(.hc-page-transition-marker) {
+                animation: none !important;
+            }
+            .stButton > button {
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -2055,8 +2091,17 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
-if 'pagina_ativa' not in st.session_state: st.session_state['pagina_ativa'] = 'home'
-def mudar_pagina(nome_pagina): st.session_state['pagina_ativa'] = nome_pagina
+if 'pagina_ativa' not in st.session_state:
+    st.session_state['pagina_ativa'] = 'home'
+if 'animar_transicao' not in st.session_state:
+    st.session_state['animar_transicao'] = True
+
+def mudar_pagina(nome_pagina):
+    """Troca a ferramenta e anima somente o primeiro render da nova tela."""
+    if st.session_state.get('pagina_ativa') == nome_pagina:
+        return
+    st.session_state['pagina_ativa'] = nome_pagina
+    st.session_state['animar_transicao'] = True
 
 # ==============================================================================
 # BARRA LATERAL DARK MINIMALISTA
@@ -2072,6 +2117,13 @@ if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
 st.sidebar.markdown("<p style='font-size: 10px; color: #6f8190; text-align: center;'>Hub Contábil · Operações bancárias</p>", unsafe_allow_html=True)
+
+# O marcador ativa o CSS uma única vez e desaparece nos reruns de filtros/uploads.
+if st.session_state.pop('animar_transicao', False):
+    st.markdown(
+        '<span class="hc-page-transition-marker" aria-hidden="true"></span>',
+        unsafe_allow_html=True
+    )
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
