@@ -505,6 +505,7 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
         (['ITAU'], 'BANCO ITAU'),
         (['BRADESCO'], 'BANCO BRADESCO'),
         (['FIBRA'], 'BANCO FIBRA'),
+        (['DAYCOVAL', 'DAYCONNECT'], 'BANCO DAYCOVAL'),
         (['SANTANDER'], 'BANCO SANTANDER'),
         (['SICOOB'], 'SICOOB'),
         (['SICREDI'], 'SICREDI'),
@@ -918,6 +919,73 @@ def extrair_valor_lancamento_pdf(texto_bloco):
 
     return token, natureza
 
+def processar_pdf_daycoval_detalhado(reader, banco_identificado):
+    """Lê o extrato detalhado Dayconnect/Daycoval com datas no formato DD/MM."""
+    textos_layout = []
+    textos_simples = []
+    for pagina in reader.pages:
+        texto_simples = pagina.extract_text() or ''
+        textos_simples.append(texto_simples)
+        try:
+            texto_layout = pagina.extract_text(extraction_mode='layout') or texto_simples
+        except (TypeError, ValueError):
+            texto_layout = texto_simples
+        textos_layout.append(texto_layout)
+
+    texto_identificacao = normalizar_texto('\n'.join(textos_simples[:2]))
+    if (
+        banco_identificado != 'BANCO DAYCOVAL'
+        and 'daycoval' not in texto_identificacao
+        and 'dayconnect' not in texto_identificacao
+    ):
+        return []
+
+    anos = re.findall(r'\b\d{2}/\d{2}/(20\d{2})\b', '\n'.join(textos_simples))
+    if not anos:
+        return []
+    ano_referencia = max(set(anos), key=anos.count)
+
+    padrao_lancamento = re.compile(
+        r'^\s*(\d{2}/\d{2})\s+(.+?)\s+([+-]?\s*R\$\s*[\d.]+,\d{2})\s*$',
+        re.IGNORECASE
+    )
+    lancamentos = []
+    chaves_vistas = set()
+    for texto_pagina in textos_layout:
+        for linha in texto_pagina.splitlines():
+            correspondencia = padrao_lancamento.match(linha)
+            if not correspondencia:
+                continue
+
+            dia_mes, historico_raw, valor_raw = correspondencia.groups()
+            data_completa = f'{dia_mes}/{ano_referencia}'
+            try:
+                datetime.strptime(data_completa, '%d/%m/%Y')
+            except ValueError:
+                continue
+
+            valor = limpar_valor_monetario(valor_raw)
+            if valor == 0:
+                continue
+            historico = re.sub(r'\s+', ' ', historico_raw).strip(' -|')
+            if not historico or 'saldo:' in normalizar_texto(historico):
+                continue
+
+            chave = (data_completa, round(valor, 2), historico)
+            if chave in chaves_vistas:
+                continue
+            chaves_vistas.add(chave)
+            lancamentos.append({
+                'DESCRIÇÃO': banco_identificado or 'BANCO DAYCOVAL',
+                'DATA': data_completa,
+                'VALOR': valor,
+                'DÉBITO': '',
+                'CRÉDITO': '',
+                'HISTÓRICO': limpar_caracteres_ilegais(historico)
+            })
+
+    return lancamentos
+
 def processar_arquivo_pdf(caminho_pdf, filename_original=None):
     lancamentos = []
     try:
@@ -928,6 +996,16 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
             
         nome_para_identificacao = filename_original or os.path.basename(caminho_pdf)
         banco_identificado = identificar_banco_inteligente(texto_completo, nome_para_identificacao)
+
+        # O extrato detalhado Dayconnect usa DD/MM nas linhas e informa o ano
+        # somente no cabeçalho do período. Esse formato é tratado antes do
+        # analisador estrutural geral e fica disponível em todos os fluxos.
+        if banco_identificado == 'BANCO DAYCOVAL':
+            lancamentos_daycoval = processar_pdf_daycoval_detalhado(
+                reader, banco_identificado
+            )
+            if lancamentos_daycoval:
+                return lancamentos_daycoval
 
         # Primeiro tenta o analisador estrutural único, independente do banco.
         lancamentos_layout = processar_pdf_layout_universal(reader, banco_identificado)
