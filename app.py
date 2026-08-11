@@ -343,7 +343,7 @@ def proteger_acesso_hub():
     if st.session_state.get('_hc_acesso_autorizado', False):
         return True
 
-    st.markdown("<div style='height: 8vh;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 12vh;'></div>", unsafe_allow_html=True)
     coluna_esquerda, coluna_login, coluna_direita = st.columns([1.25, 1, 1.25])
     with coluna_login:
         st.image("assets/razync-icon.png", width=66)
@@ -2393,7 +2393,6 @@ if st.session_state.pop('animar_transicao', False):
 if st.session_state['pagina_ativa'] == 'home':
     col_marca_logo, col_marca_texto = st.columns([0.7, 9.3])
     with col_marca_logo:
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         st.image("assets/razync-icon.png", width=68)
     with col_marca_texto:
         st.markdown('<div class="hc-brand-title">Razync</div>', unsafe_allow_html=True)
