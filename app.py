@@ -2177,7 +2177,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             except Exception as erro_base:
                 erro_base_classificacoes = str(erro_base)
 
-        with st.expander("Base inteligente de Débito e Crédito"):
+        aba_operacoes, aba_base_inteligente = st.tabs([
+            "Organizar e conferir",
+            "Base inteligente de Débito e Crédito"
+        ])
+
+        with aba_base_inteligente:
             if erro_base_classificacoes:
                 st.error(erro_base_classificacoes)
             elif url_base_classificacao and chave_base_classificacao:
@@ -2327,556 +2332,557 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             f"{erro_classificacao_final}"
                         )
 
-        st.markdown("---")
-        st.markdown("### Organizar planilha bancária")
+        with aba_operacoes:
+            st.markdown("---")
+            st.markdown("### Organizar planilha bancária")
 
-        banco_padrao = next(iter(configuracoes_bancos))
-        bancos_empresa = st.multiselect(
-            "Bancos",
-            list(configuracoes_bancos.keys()),
-            default=[banco_padrao],
-            key=f"org_banco_nova_geracao_{chave_estabelecimento}"
-        )
-        if not bancos_empresa:
-            st.info("Selecione pelo menos um banco para organizar a planilha.")
+            banco_padrao = next(iter(configuracoes_bancos))
+            bancos_empresa = st.multiselect(
+                "Bancos",
+                list(configuracoes_bancos.keys()),
+                default=[banco_padrao],
+                key=f"org_banco_nova_geracao_{chave_estabelecimento}"
+            )
+            if not bancos_empresa:
+                st.info("Selecione pelo menos um banco para organizar a planilha.")
 
-        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
-        nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
-        st.caption(
-            f"O sistema localizará automaticamente as contas de {nomes_bancos} dentro da "
-            "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
-        )
-        arquivo_empresa = st.file_uploader(
-            f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
-            type=["xlsx", "xls"],
-            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
-        )
-
-        if arquivo_empresa and configs_selecionadas:
-            try:
-                bytes_empresa = arquivo_empresa.getvalue()
-                dados_processados = []
-                for config in configs_selecionadas:
-                    df_banco, df_banco_retirados = config['processador'](bytes_empresa)
-                    dados_processados.append((config, df_banco, df_banco_retirados))
-
-                datas_disponiveis = pd.concat(
-                    [dados[1][['DATA']] for dados in dados_processados if not dados[1].empty],
-                    ignore_index=True
-                )
-                datas_disponiveis['DATA'] = pd.to_datetime(
-                    datas_disponiveis['DATA'], errors='coerce'
-                )
-                datas_disponiveis = datas_disponiveis.dropna(subset=['DATA'])
-                if datas_disponiveis.empty:
-                    raise ValueError("Nenhuma data válida foi encontrada nos bancos selecionados.")
-
-                data_minima = datas_disponiveis['DATA'].min().date()
-                data_maxima = datas_disponiveis['DATA'].max().date()
-                chave_periodo = (
-                    f"org_periodo_nova_{chave_estabelecimento}_"
-                    f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
-                    + "_".join(config['slug'] for config in configs_selecionadas)
-                )
-                st.markdown("### Período dos lançamentos")
-                periodo_selecionado = st.date_input(
-                    "Selecione a data inicial e a data final",
-                    value=(data_minima, data_maxima),
-                    min_value=data_minima,
-                    max_value=data_maxima,
-                    format="DD/MM/YYYY",
-                    key=chave_periodo
-                )
-                if not isinstance(periodo_selecionado, (tuple, list)) or len(periodo_selecionado) != 2:
-                    raise ValueError(
-                        "Selecione também a data final para concluir o período."
-                    )
-                data_inicial, data_final = periodo_selecionado
-                if data_inicial > data_final:
-                    raise ValueError(
-                        "A data inicial não pode ser maior que a data final."
-                    )
-
-                st.caption(
-                    f"Serão considerados os lançamentos de {data_inicial.strftime('%d/%m/%Y')} "
-                    f"até {data_final.strftime('%d/%m/%Y')}."
-                )
-
-                modelos_por_banco, retirados_por_banco = [], []
-                dados_exportacao_por_banco = {}
-                for config, df_banco_completo, df_banco_retirados_completo in dados_processados:
-                    df_banco = filtrar_dataframe_periodo(
-                        df_banco_completo, data_inicial, data_final
-                    )
-                    df_banco_retirados = filtrar_dataframe_periodo(
-                        df_banco_retirados_completo, data_inicial, data_final
-                    )
-                    modelos_por_banco.append(df_banco)
-                    retirados_por_banco.append(df_banco_retirados)
-                    dados_exportacao_por_banco[config['nome']] = {
-                        'principal': df_banco.sort_values('DATA', kind='stable').reset_index(drop=True),
-                        'retirados': df_banco_retirados.sort_values('DATA', kind='stable').reset_index(drop=True)
-                        if not df_banco_retirados.empty else df_banco_retirados
-                    }
-
-                df_org = pd.concat(modelos_por_banco, ignore_index=True)
-                if df_org.empty:
-                    raise ValueError(
-                        "Nenhum lançamento foi encontrado no período selecionado."
-                    )
-                df_org = df_org.sort_values(
-                    ['DATA', 'DESCRIÇÃO'], kind='stable'
-                ).reset_index(drop=True)
-                df_retirados = pd.concat(retirados_por_banco, ignore_index=True)
-                if not df_retirados.empty:
-                    df_retirados = df_retirados.sort_values(
-                        ['DATA', 'DESCRIÇÃO'], kind='stable'
-                    ).reset_index(drop=True)
-                modelo_org_bytes = None
-                for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
-                    if os.path.exists(caminho_modelo):
-                        with open(caminho_modelo, 'rb') as arquivo_modelo:
-                            modelo_org_bytes = arquivo_modelo.read()
-                        break
-                arquivo_final = gerar_excel_nova_geracao(
-                    dados_exportacao_por_banco, modelo_org_bytes
-                )
-
-                total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
-                total_saidas = df_org.loc[df_org['VALOR'] < 0, 'VALOR'].sum()
-                saldo_liquido = total_entradas + total_saidas
-
-                st.markdown("<br>", unsafe_allow_html=True)
-                m1, m2, m3, m4 = st.columns(4)
-                with m1: st.markdown(f'<div class="metric-card"><div class="metric-title">Modelo principal</div><div class="metric-value">{len(df_org)}</div></div>', unsafe_allow_html=True)
-                with m2: st.markdown(f'<div class="metric-card"><div class="metric-title">Retirados</div><div class="metric-value">{len(df_retirados)}</div></div>', unsafe_allow_html=True)
-                with m3: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(total_entradas)}</div></div>', unsafe_allow_html=True)
-                with m4:
-                    cor_saldo = "#3fb950" if saldo_liquido >= 0 else "#f85149"
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo líquido</div><div class="metric-value" style="color: {cor_saldo};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
-
-                tab_principal, tab_retirados = st.tabs(["Modelo principal", "Lançamentos retirados"])
-                with tab_principal:
-                    previa = df_org.copy()
-                    previa['DATA'] = pd.to_datetime(previa['DATA']).dt.strftime('%d/%m/%Y')
-                    st.dataframe(formatar_dataframe_moeda_br(previa, ['VALOR']), use_container_width=True, height=320)
-                with tab_retirados:
-                    if df_retirados.empty:
-                        st.info("Nenhum estorno de baixa foi identificado neste arquivo.")
-                    else:
-                        previa_ret = df_retirados.copy()
-                        previa_ret['DATA'] = pd.to_datetime(previa_ret['DATA']).dt.strftime('%d/%m/%Y')
-                        st.dataframe(formatar_dataframe_moeda_br(previa_ret, ['VALOR']), use_container_width=True, height=280)
-
-                nome_saida_banco = (
-                    configs_selecionadas[0]['nome']
-                    if len(configs_selecionadas) == 1
-                    else f"Separado_{len(configs_selecionadas)}_Bancos"
-                )
-                st.download_button(
-                    "Baixar Modelo Domínio com abas por banco (.XLSX)",
-                    data=arquivo_final,
-                    file_name=(
-                        f"Nova_Geracao_{estabelecimento_nova}_{nome_saida_banco}_"
-                        f"{data_inicial.strftime('%d%m%Y')}_a_{data_final.strftime('%d%m%Y')}_"
-                        "Modelo_Dominio.xlsx"
-                    ),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key=f"dl_org_nova_multibanco_{chave_estabelecimento}",
-                    use_container_width=True
-                )
-
-                st.markdown("---")
-            except Exception as e:
-                st.error(f"Não foi possível organizar a planilha: {e}")
-
-
-        st.markdown("---")
-        st.markdown("### Conferência com o extrato bancário")
-        st.caption(
-            "Esta área funciona de forma independente. Envie a planilha final organizada "
-            "e os extratos bancários que deseja comparar."
-        )
-
-        todas_configs_conferencia = list(configuracoes_bancos.values())
-        nomes_disponiveis_conferencia = [
-            config['nome'] for config in todas_configs_conferencia
-        ]
-        chave_grupo_conferencia = "_".join(
-            config['slug'] for config in todas_configs_conferencia
-        )
-        conferir_todos_bancos = st.checkbox(
-            "Conferir todos os bancos disponíveis",
-            value=False,
-            key=(
-                f"org_conferir_todos_indep_nova_{chave_estabelecimento}_"
-                f"{chave_grupo_conferencia}"
-            ),
-            disabled=len(nomes_disponiveis_conferencia) == 1
-        )
-        if conferir_todos_bancos:
-            bancos_conferencia = nomes_disponiveis_conferencia
-            st.caption("Cada banco terá seu próprio relatório de conferência.")
-        else:
-            bancos_conferencia = st.multiselect(
-                "Bancos que serão conferidos",
-                nomes_disponiveis_conferencia,
-                default=nomes_disponiveis_conferencia[:1],
-                key=(
-                    f"org_bancos_conferencia_indep_nova_{chave_estabelecimento}_"
-                    f"{chave_grupo_conferencia}"
-                ),
-                help="Selecione um ou vários bancos para conferir."
+            configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
+            nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
+            st.caption(
+                f"O sistema localizará automaticamente as contas de {nomes_bancos} dentro da "
+                "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
+            )
+            arquivo_empresa = st.file_uploader(
+                f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
+                type=["xlsx", "xls"],
+                key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
             )
 
-        if not bancos_conferencia:
-            st.info("Selecione pelo menos um banco para realizar a conferência.")
-        else:
-            configs_conferencia = [
-                config for config in todas_configs_conferencia
-                if config['nome'] in bancos_conferencia
-            ]
-
-            col_planilha_conf, col_extratos_conf = st.columns(2)
-            with col_planilha_conf:
-                planilha_atualizada_conferencia = st.file_uploader(
-                    "Planilha final organizada",
-                    type=["xlsx", "xls"],
-                    key=(
-                        "org_planilha_conferencia_indep_nova_"
-                        + chave_estabelecimento
-                    ),
-                    help=(
-                        "Pode conter um ou vários bancos. Somente os bancos "
-                        "selecionados acima serão utilizados."
-                    )
-                )
-            with col_extratos_conf:
-                extratos_conferencia = st.file_uploader(
-                    "Extrato(s) bancário(s)",
-                    type=["pdf", "ofx", "csv", "xlsx", "xls"],
-                    accept_multiple_files=True,
-                    key=(
-                        f"org_extratos_conferencia_indep_nova_"
-                        f"{chave_estabelecimento}_"
-                        + "_".join(config['slug'] for config in configs_conferencia)
-                    ),
-                    help="Envie os extratos correspondentes ao mesmo período da planilha."
-                )
-
-            if not planilha_atualizada_conferencia:
-                st.info(
-                    "Envie a planilha final organizada para identificar automaticamente "
-                    "o período e liberar a comparação."
-                )
-            else:
+            if arquivo_empresa and configs_selecionadas:
                 try:
-                    dados_brutos_conferencia = {}
-                    bancos_detectados_geral = set()
-                    datas_planilha_conferencia = []
+                    bytes_empresa = arquivo_empresa.getvalue()
+                    dados_processados = []
+                    for config in configs_selecionadas:
+                        df_banco, df_banco_retirados = config['processador'](bytes_empresa)
+                        dados_processados.append((config, df_banco, df_banco_retirados))
 
-                    for config in configs_conferencia:
-                        df_atualizada, df_retirados_atualizada, bancos_detectados = (
-                            ler_planilha_organizada_conferencia(
-                                planilha_atualizada_conferencia.getvalue(),
-                                config['slug']
-                            )
+                    datas_disponiveis = pd.concat(
+                        [dados[1][['DATA']] for dados in dados_processados if not dados[1].empty],
+                        ignore_index=True
+                    )
+                    datas_disponiveis['DATA'] = pd.to_datetime(
+                        datas_disponiveis['DATA'], errors='coerce'
+                    )
+                    datas_disponiveis = datas_disponiveis.dropna(subset=['DATA'])
+                    if datas_disponiveis.empty:
+                        raise ValueError("Nenhuma data válida foi encontrada nos bancos selecionados.")
+
+                    data_minima = datas_disponiveis['DATA'].min().date()
+                    data_maxima = datas_disponiveis['DATA'].max().date()
+                    chave_periodo = (
+                        f"org_periodo_nova_{chave_estabelecimento}_"
+                        f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
+                        + "_".join(config['slug'] for config in configs_selecionadas)
+                    )
+                    st.markdown("### Período dos lançamentos")
+                    periodo_selecionado = st.date_input(
+                        "Selecione a data inicial e a data final",
+                        value=(data_minima, data_maxima),
+                        min_value=data_minima,
+                        max_value=data_maxima,
+                        format="DD/MM/YYYY",
+                        key=chave_periodo
+                    )
+                    if not isinstance(periodo_selecionado, (tuple, list)) or len(periodo_selecionado) != 2:
+                        raise ValueError(
+                            "Selecione também a data final para concluir o período."
                         )
-                        bancos_detectados_geral.update(bancos_detectados)
-                        dados_brutos_conferencia[config['slug']] = {
-                            'modelo': df_atualizada,
-                            'retirados': df_retirados_atualizada
+                    data_inicial, data_final = periodo_selecionado
+                    if data_inicial > data_final:
+                        raise ValueError(
+                            "A data inicial não pode ser maior que a data final."
+                        )
+
+                    st.caption(
+                        f"Serão considerados os lançamentos de {data_inicial.strftime('%d/%m/%Y')} "
+                        f"até {data_final.strftime('%d/%m/%Y')}."
+                    )
+
+                    modelos_por_banco, retirados_por_banco = [], []
+                    dados_exportacao_por_banco = {}
+                    for config, df_banco_completo, df_banco_retirados_completo in dados_processados:
+                        df_banco = filtrar_dataframe_periodo(
+                            df_banco_completo, data_inicial, data_final
+                        )
+                        df_banco_retirados = filtrar_dataframe_periodo(
+                            df_banco_retirados_completo, data_inicial, data_final
+                        )
+                        modelos_por_banco.append(df_banco)
+                        retirados_por_banco.append(df_banco_retirados)
+                        dados_exportacao_por_banco[config['nome']] = {
+                            'principal': df_banco.sort_values('DATA', kind='stable').reset_index(drop=True),
+                            'retirados': df_banco_retirados.sort_values('DATA', kind='stable').reset_index(drop=True)
+                            if not df_banco_retirados.empty else df_banco_retirados
                         }
-                        if not df_atualizada.empty and 'DATA' in df_atualizada.columns:
-                            datas_validas_banco = pd.to_datetime(
-                                df_atualizada['DATA'], dayfirst=True, errors='coerce'
-                            ).dropna()
-                            datas_planilha_conferencia.extend(
-                                datas_validas_banco.dt.date.tolist()
-                            )
 
-                    if not datas_planilha_conferencia:
-                        st.warning(
-                            "A planilha final não possui datas válidas nos bancos selecionados."
+                    df_org = pd.concat(modelos_por_banco, ignore_index=True)
+                    if df_org.empty:
+                        raise ValueError(
+                            "Nenhum lançamento foi encontrado no período selecionado."
                         )
-                    else:
-                        data_minima_conferencia = min(datas_planilha_conferencia)
-                        data_maxima_conferencia = max(datas_planilha_conferencia)
-                        periodo_conferencia = st.date_input(
-                            "Período da conferência",
-                            value=(
-                                data_minima_conferencia,
-                                data_maxima_conferencia
-                            ),
-                            min_value=data_minima_conferencia,
-                            max_value=data_maxima_conferencia,
-                            format="DD/MM/YYYY",
-                            key=(
-                                f"org_periodo_conferencia_indep_nova_"
-                                f"{chave_estabelecimento}_{chave_grupo_conferencia}"
-                            )
-                        )
+                    df_org = df_org.sort_values(
+                        ['DATA', 'DESCRIÇÃO'], kind='stable'
+                    ).reset_index(drop=True)
+                    df_retirados = pd.concat(retirados_por_banco, ignore_index=True)
+                    if not df_retirados.empty:
+                        df_retirados = df_retirados.sort_values(
+                            ['DATA', 'DESCRIÇÃO'], kind='stable'
+                        ).reset_index(drop=True)
+                    modelo_org_bytes = None
+                    for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
+                        if os.path.exists(caminho_modelo):
+                            with open(caminho_modelo, 'rb') as arquivo_modelo:
+                                modelo_org_bytes = arquivo_modelo.read()
+                            break
+                    arquivo_final = gerar_excel_nova_geracao(
+                        dados_exportacao_por_banco, modelo_org_bytes
+                    )
 
-                        if (
-                            not isinstance(periodo_conferencia, (tuple, list))
-                            or len(periodo_conferencia) != 2
-                        ):
-                            st.info(
-                                "Selecione também a data final para concluir o período."
+                    total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
+                    total_saidas = df_org.loc[df_org['VALOR'] < 0, 'VALOR'].sum()
+                    saldo_liquido = total_entradas + total_saidas
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    m1, m2, m3, m4 = st.columns(4)
+                    with m1: st.markdown(f'<div class="metric-card"><div class="metric-title">Modelo principal</div><div class="metric-value">{len(df_org)}</div></div>', unsafe_allow_html=True)
+                    with m2: st.markdown(f'<div class="metric-card"><div class="metric-title">Retirados</div><div class="metric-value">{len(df_retirados)}</div></div>', unsafe_allow_html=True)
+                    with m3: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(total_entradas)}</div></div>', unsafe_allow_html=True)
+                    with m4:
+                        cor_saldo = "#3fb950" if saldo_liquido >= 0 else "#f85149"
+                        st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo líquido</div><div class="metric-value" style="color: {cor_saldo};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
+
+                    tab_principal, tab_retirados = st.tabs(["Modelo principal", "Lançamentos retirados"])
+                    with tab_principal:
+                        previa = df_org.copy()
+                        previa['DATA'] = pd.to_datetime(previa['DATA']).dt.strftime('%d/%m/%Y')
+                        st.dataframe(formatar_dataframe_moeda_br(previa, ['VALOR']), use_container_width=True, height=320)
+                    with tab_retirados:
+                        if df_retirados.empty:
+                            st.info("Nenhum estorno de baixa foi identificado neste arquivo.")
+                        else:
+                            previa_ret = df_retirados.copy()
+                            previa_ret['DATA'] = pd.to_datetime(previa_ret['DATA']).dt.strftime('%d/%m/%Y')
+                            st.dataframe(formatar_dataframe_moeda_br(previa_ret, ['VALOR']), use_container_width=True, height=280)
+
+                    nome_saida_banco = (
+                        configs_selecionadas[0]['nome']
+                        if len(configs_selecionadas) == 1
+                        else f"Separado_{len(configs_selecionadas)}_Bancos"
+                    )
+                    st.download_button(
+                        "Baixar Modelo Domínio com abas por banco (.XLSX)",
+                        data=arquivo_final,
+                        file_name=(
+                            f"Nova_Geracao_{estabelecimento_nova}_{nome_saida_banco}_"
+                            f"{data_inicial.strftime('%d%m%Y')}_a_{data_final.strftime('%d%m%Y')}_"
+                            "Modelo_Dominio.xlsx"
+                        ),
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"dl_org_nova_multibanco_{chave_estabelecimento}",
+                        use_container_width=True
+                    )
+
+                    st.markdown("---")
+                except Exception as e:
+                    st.error(f"Não foi possível organizar a planilha: {e}")
+
+
+            st.markdown("---")
+            st.markdown("### Conferência com o extrato bancário")
+            st.caption(
+                "Esta área funciona de forma independente. Envie a planilha final organizada "
+                "e os extratos bancários que deseja comparar."
+            )
+
+            todas_configs_conferencia = list(configuracoes_bancos.values())
+            nomes_disponiveis_conferencia = [
+                config['nome'] for config in todas_configs_conferencia
+            ]
+            chave_grupo_conferencia = "_".join(
+                config['slug'] for config in todas_configs_conferencia
+            )
+            conferir_todos_bancos = st.checkbox(
+                "Conferir todos os bancos disponíveis",
+                value=False,
+                key=(
+                    f"org_conferir_todos_indep_nova_{chave_estabelecimento}_"
+                    f"{chave_grupo_conferencia}"
+                ),
+                disabled=len(nomes_disponiveis_conferencia) == 1
+            )
+            if conferir_todos_bancos:
+                bancos_conferencia = nomes_disponiveis_conferencia
+                st.caption("Cada banco terá seu próprio relatório de conferência.")
+            else:
+                bancos_conferencia = st.multiselect(
+                    "Bancos que serão conferidos",
+                    nomes_disponiveis_conferencia,
+                    default=nomes_disponiveis_conferencia[:1],
+                    key=(
+                        f"org_bancos_conferencia_indep_nova_{chave_estabelecimento}_"
+                        f"{chave_grupo_conferencia}"
+                    ),
+                    help="Selecione um ou vários bancos para conferir."
+                )
+
+            if not bancos_conferencia:
+                st.info("Selecione pelo menos um banco para realizar a conferência.")
+            else:
+                configs_conferencia = [
+                    config for config in todas_configs_conferencia
+                    if config['nome'] in bancos_conferencia
+                ]
+
+                col_planilha_conf, col_extratos_conf = st.columns(2)
+                with col_planilha_conf:
+                    planilha_atualizada_conferencia = st.file_uploader(
+                        "Planilha final organizada",
+                        type=["xlsx", "xls"],
+                        key=(
+                            "org_planilha_conferencia_indep_nova_"
+                            + chave_estabelecimento
+                        ),
+                        help=(
+                            "Pode conter um ou vários bancos. Somente os bancos "
+                            "selecionados acima serão utilizados."
+                        )
+                    )
+                with col_extratos_conf:
+                    extratos_conferencia = st.file_uploader(
+                        "Extrato(s) bancário(s)",
+                        type=["pdf", "ofx", "csv", "xlsx", "xls"],
+                        accept_multiple_files=True,
+                        key=(
+                            f"org_extratos_conferencia_indep_nova_"
+                            f"{chave_estabelecimento}_"
+                            + "_".join(config['slug'] for config in configs_conferencia)
+                        ),
+                        help="Envie os extratos correspondentes ao mesmo período da planilha."
+                    )
+
+                if not planilha_atualizada_conferencia:
+                    st.info(
+                        "Envie a planilha final organizada para identificar automaticamente "
+                        "o período e liberar a comparação."
+                    )
+                else:
+                    try:
+                        dados_brutos_conferencia = {}
+                        bancos_detectados_geral = set()
+                        datas_planilha_conferencia = []
+
+                        for config in configs_conferencia:
+                            df_atualizada, df_retirados_atualizada, bancos_detectados = (
+                                ler_planilha_organizada_conferencia(
+                                    planilha_atualizada_conferencia.getvalue(),
+                                    config['slug']
+                                )
+                            )
+                            bancos_detectados_geral.update(bancos_detectados)
+                            dados_brutos_conferencia[config['slug']] = {
+                                'modelo': df_atualizada,
+                                'retirados': df_retirados_atualizada
+                            }
+                            if not df_atualizada.empty and 'DATA' in df_atualizada.columns:
+                                datas_validas_banco = pd.to_datetime(
+                                    df_atualizada['DATA'], dayfirst=True, errors='coerce'
+                                ).dropna()
+                                datas_planilha_conferencia.extend(
+                                    datas_validas_banco.dt.date.tolist()
+                                )
+
+                        if not datas_planilha_conferencia:
+                            st.warning(
+                                "A planilha final não possui datas válidas nos bancos selecionados."
                             )
                         else:
-                            data_inicial_conferencia, data_final_conferencia = (
-                                periodo_conferencia
-                            )
-                            dados_conferencia_por_banco = {}
-                            bancos_sem_dados = []
-
-                            for config in configs_conferencia:
-                                chave = config['slug']
-                                dados_conferencia_por_banco[chave] = {
-                                    'modelo': filtrar_dataframe_periodo(
-                                        dados_brutos_conferencia[chave]['modelo'],
-                                        data_inicial_conferencia,
-                                        data_final_conferencia
-                                    ),
-                                    'retirados': filtrar_dataframe_periodo(
-                                        dados_brutos_conferencia[chave]['retirados'],
-                                        data_inicial_conferencia,
-                                        data_final_conferencia
-                                    )
-                                }
-                                if dados_conferencia_por_banco[chave]['modelo'].empty:
-                                    bancos_sem_dados.append(config['nome'])
-
-                            bancos_texto = (
-                                ", ".join(sorted(bancos_detectados_geral))
-                                if bancos_detectados_geral else "não identificados"
-                            )
-                            st.success(
-                                f"Planilha carregada. Bancos identificados: {bancos_texto}. "
-                                f"Período: {data_inicial_conferencia.strftime('%d/%m/%Y')} "
-                                f"até {data_final_conferencia.strftime('%d/%m/%Y')}."
-                            )
-                            if bancos_sem_dados:
-                                st.warning(
-                                    "Sem lançamentos no período para: "
-                                    + ", ".join(bancos_sem_dados)
+                            data_minima_conferencia = min(datas_planilha_conferencia)
+                            data_maxima_conferencia = max(datas_planilha_conferencia)
+                            periodo_conferencia = st.date_input(
+                                "Período da conferência",
+                                value=(
+                                    data_minima_conferencia,
+                                    data_maxima_conferencia
+                                ),
+                                min_value=data_minima_conferencia,
+                                max_value=data_maxima_conferencia,
+                                format="DD/MM/YYYY",
+                                key=(
+                                    f"org_periodo_conferencia_indep_nova_"
+                                    f"{chave_estabelecimento}_{chave_grupo_conferencia}"
                                 )
+                            )
 
-                            if not extratos_conferencia:
+                            if (
+                                not isinstance(periodo_conferencia, (tuple, list))
+                                or len(periodo_conferencia) != 2
+                            ):
                                 st.info(
-                                    "Agora envie pelo menos um extrato bancário para "
-                                    "gerar os relatórios."
+                                    "Selecione também a data final para concluir o período."
                                 )
                             else:
-                                extratos_por_banco = {
-                                    config['slug']: [] for config in configs_conferencia
-                                }
-                                arquivos_nao_identificados = []
+                                data_inicial_conferencia, data_final_conferencia = (
+                                    periodo_conferencia
+                                )
+                                dados_conferencia_por_banco = {}
+                                bancos_sem_dados = []
 
-                                for extrato_conferencia in extratos_conferencia:
-                                    lancamentos_arquivo = (
-                                        processar_extrato_conferencia_empresa(
-                                            extrato_conferencia.getvalue(),
-                                            extrato_conferencia.name
+                                for config in configs_conferencia:
+                                    chave = config['slug']
+                                    dados_conferencia_por_banco[chave] = {
+                                        'modelo': filtrar_dataframe_periodo(
+                                            dados_brutos_conferencia[chave]['modelo'],
+                                            data_inicial_conferencia,
+                                            data_final_conferencia
+                                        ),
+                                        'retirados': filtrar_dataframe_periodo(
+                                            dados_brutos_conferencia[chave]['retirados'],
+                                            data_inicial_conferencia,
+                                            data_final_conferencia
                                         )
-                                    )
-                                    df_arquivo = filtrar_dataframe_periodo(
-                                        pd.DataFrame(lancamentos_arquivo),
-                                        data_inicial_conferencia,
-                                        data_final_conferencia
-                                    )
-                                    if df_arquivo.empty:
-                                        continue
+                                    }
+                                    if dados_conferencia_por_banco[chave]['modelo'].empty:
+                                        bancos_sem_dados.append(config['nome'])
 
-                                    chave_pelo_nome = identificar_chave_banco_empresa(
-                                        extrato_conferencia.name
-                                    )
-                                    if chave_pelo_nome in extratos_por_banco:
-                                        extratos_por_banco[chave_pelo_nome].extend(
-                                            df_arquivo.to_dict('records')
-                                        )
-                                        continue
-
-                                    chaves_arquivo = df_arquivo['DESCRIÇÃO'].apply(
-                                        identificar_chave_banco_empresa
-                                    )
-                                    chaves_reconhecidas = set(
-                                        chave for chave in chaves_arquivo.unique().tolist()
-                                        if chave
-                                    )
-                                    if not chaves_reconhecidas:
-                                        if len(configs_conferencia) == 1:
-                                            chave_unica = configs_conferencia[0]['slug']
-                                            extratos_por_banco[chave_unica].extend(
-                                                df_arquivo.to_dict('records')
-                                            )
-                                        else:
-                                            arquivos_nao_identificados.append(
-                                                extrato_conferencia.name
-                                            )
-                                        continue
-
-                                    for config in configs_conferencia:
-                                        chave = config['slug']
-                                        df_banco_extrato = df_arquivo[
-                                            chaves_arquivo.eq(chave)
-                                        ]
-                                        if not df_banco_extrato.empty:
-                                            extratos_por_banco[chave].extend(
-                                                df_banco_extrato.to_dict('records')
-                                            )
-
-                                if arquivos_nao_identificados:
+                                bancos_texto = (
+                                    ", ".join(sorted(bancos_detectados_geral))
+                                    if bancos_detectados_geral else "não identificados"
+                                )
+                                st.success(
+                                    f"Planilha carregada. Bancos identificados: {bancos_texto}. "
+                                    f"Período: {data_inicial_conferencia.strftime('%d/%m/%Y')} "
+                                    f"até {data_final_conferencia.strftime('%d/%m/%Y')}."
+                                )
+                                if bancos_sem_dados:
                                     st.warning(
-                                        "Não foi possível identificar o banco destes arquivos: "
-                                        + ", ".join(arquivos_nao_identificados)
+                                        "Sem lançamentos no período para: "
+                                        + ", ".join(bancos_sem_dados)
                                     )
 
-                                if not any(extratos_por_banco.values()):
-                                    st.warning(
-                                        "Nenhum lançamento dos extratos foi identificado "
-                                        "dentro do período selecionado."
+                                if not extratos_conferencia:
+                                    st.info(
+                                        "Agora envie pelo menos um extrato bancário para "
+                                        "gerar os relatórios."
                                     )
                                 else:
-                                    abas_bancos = st.tabs([
-                                        config['nome']
-                                        for config in configs_conferencia
-                                    ])
-                                    for aba_banco, config in zip(
-                                        abas_bancos, configs_conferencia
-                                    ):
-                                        with aba_banco:
-                                            chave = config['slug']
-                                            nome_banco = config['nome']
-                                            df_modelo_banco = (
-                                                dados_conferencia_por_banco[chave]['modelo']
-                                            )
-                                            df_retirados_banco = (
-                                                dados_conferencia_por_banco[chave]['retirados']
-                                            )
-                                            df_extrato_banco = pd.DataFrame(
-                                                extratos_por_banco[chave]
-                                            )
+                                    extratos_por_banco = {
+                                        config['slug']: [] for config in configs_conferencia
+                                    }
+                                    arquivos_nao_identificados = []
 
-                                            st.markdown(
-                                                f"#### Relatório — {nome_banco}"
+                                    for extrato_conferencia in extratos_conferencia:
+                                        lancamentos_arquivo = (
+                                            processar_extrato_conferencia_empresa(
+                                                extrato_conferencia.getvalue(),
+                                                extrato_conferencia.name
                                             )
-                                            if df_modelo_banco.empty:
-                                                st.warning(
-                                                    f"Não há lançamentos do {nome_banco} "
-                                                    "na planilha para o período."
-                                                )
-                                                continue
-                                            if df_extrato_banco.empty:
-                                                st.warning(
-                                                    f"Nenhum extrato do {nome_banco} "
-                                                    "foi identificado para o período."
-                                                )
-                                                continue
+                                        )
+                                        df_arquivo = filtrar_dataframe_periodo(
+                                            pd.DataFrame(lancamentos_arquivo),
+                                            data_inicial_conferencia,
+                                            data_final_conferencia
+                                        )
+                                        if df_arquivo.empty:
+                                            continue
 
-                                            diario, _, _, _ = (
-                                                conciliar_empresa_com_extrato(
-                                                    df_modelo_banco,
-                                                    df_extrato_banco,
-                                                    df_retirados_banco
-                                                )
+                                        chave_pelo_nome = identificar_chave_banco_empresa(
+                                            extrato_conferencia.name
+                                        )
+                                        if chave_pelo_nome in extratos_por_banco:
+                                            extratos_por_banco[chave_pelo_nome].extend(
+                                                df_arquivo.to_dict('records')
                                             )
-                                            if diario.empty:
-                                                st.warning(
-                                                    "Não existem datas válidas para realizar "
-                                                    "a conferência."
-                                                )
-                                                continue
+                                            continue
 
-                                            periodo_inicial = (
-                                                diario['DATA'].min().strftime('%d/%m/%Y')
-                                            )
-                                            periodo_final = (
-                                                diario['DATA'].max().strftime('%d/%m/%Y')
-                                            )
-                                            dias_batendo = int(
-                                                (diario['STATUS'] == '✅ Batendo').sum()
-                                            )
-                                            dias_divergentes = int(
-                                                (diario['STATUS'] == '❌ Divergente').sum()
-                                            )
-                                            st.info(
-                                                f"Período analisado: {periodo_inicial} "
-                                                f"até {periodo_final}"
-                                            )
-
-                                            c1, c2 = st.columns(2)
-                                            with c1:
-                                                st.markdown(
-                                                    '<div class="metric-card">'
-                                                    '<div class="metric-title">Dias batendo</div>'
-                                                    f'<div class="metric-value" style="color: #3fb950;">'
-                                                    f'{dias_batendo}</div></div>',
-                                                    unsafe_allow_html=True
-                                                )
-                                            with c2:
-                                                st.markdown(
-                                                    '<div class="metric-card">'
-                                                    '<div class="metric-title">Dias divergentes</div>'
-                                                    f'<div class="metric-value" style="color: #f85149;">'
-                                                    f'{dias_divergentes}</div></div>',
-                                                    unsafe_allow_html=True
-                                                )
-
-                                            if dias_divergentes == 0:
-                                                st.success(
-                                                    "Conferência concluída: todos os dias "
-                                                    "estão batendo."
+                                        chaves_arquivo = df_arquivo['DESCRIÇÃO'].apply(
+                                            identificar_chave_banco_empresa
+                                        )
+                                        chaves_reconhecidas = set(
+                                            chave for chave in chaves_arquivo.unique().tolist()
+                                            if chave
+                                        )
+                                        if not chaves_reconhecidas:
+                                            if len(configs_conferencia) == 1:
+                                                chave_unica = configs_conferencia[0]['slug']
+                                                extratos_por_banco[chave_unica].extend(
+                                                    df_arquivo.to_dict('records')
                                                 )
                                             else:
-                                                st.warning(
-                                                    "Foram encontradas diferenças nos "
-                                                    "totais diários."
+                                                arquivos_nao_identificados.append(
+                                                    extrato_conferencia.name
                                                 )
+                                            continue
 
-                                            with st.expander(
-                                                "O que significam os valores acumulados?"
-                                            ):
-                                                st.markdown(
-                                                    "O **acumulado** soma progressivamente os "
-                                                    "movimentos desde o primeiro dia do período "
-                                                    "analisado. Ele **não é o saldo bancário real**, "
-                                                    "pois não inclui o saldo inicial da conta. A "
-                                                    "diferença acumulada mostra quanto das divergências "
-                                                    "anteriores ainda permanece sem correção."
-                                                )
-
-                                            exibicao_diaria = diario.copy()
-                                            exibicao_diaria['DATA'] = (
-                                                exibicao_diaria['DATA'].dt.strftime(
-                                                    '%d/%m/%Y'
-                                                )
-                                            )
-                                            colunas_monetarias_diarias = [
-                                                'TOTAL EXTRATO',
-                                                'TOTAL PLANILHA',
-                                                'DIFERENÇA DO DIA',
-                                                'ACUMULADO EXTRATO',
-                                                'ACUMULADO PLANILHA',
-                                                'DIFERENÇA ACUMULADA'
+                                        for config in configs_conferencia:
+                                            chave = config['slug']
+                                            df_banco_extrato = df_arquivo[
+                                                chaves_arquivo.eq(chave)
                                             ]
-                                            exibicao_diaria = (
-                                                formatar_dataframe_moeda_br(
-                                                    exibicao_diaria,
-                                                    colunas_monetarias_diarias
+                                            if not df_banco_extrato.empty:
+                                                extratos_por_banco[chave].extend(
+                                                    df_banco_extrato.to_dict('records')
                                                 )
-                                            )
-                                            st.dataframe(
-                                                exibicao_diaria,
-                                                use_container_width=True,
-                                                height=360
-                                            )
-                except Exception as erro_conferencia_independente:
-                    st.error(
-                        "Não foi possível realizar a conferência: "
-                        f"{erro_conferencia_independente}"
-                    )
+
+                                    if arquivos_nao_identificados:
+                                        st.warning(
+                                            "Não foi possível identificar o banco destes arquivos: "
+                                            + ", ".join(arquivos_nao_identificados)
+                                        )
+
+                                    if not any(extratos_por_banco.values()):
+                                        st.warning(
+                                            "Nenhum lançamento dos extratos foi identificado "
+                                            "dentro do período selecionado."
+                                        )
+                                    else:
+                                        abas_bancos = st.tabs([
+                                            config['nome']
+                                            for config in configs_conferencia
+                                        ])
+                                        for aba_banco, config in zip(
+                                            abas_bancos, configs_conferencia
+                                        ):
+                                            with aba_banco:
+                                                chave = config['slug']
+                                                nome_banco = config['nome']
+                                                df_modelo_banco = (
+                                                    dados_conferencia_por_banco[chave]['modelo']
+                                                )
+                                                df_retirados_banco = (
+                                                    dados_conferencia_por_banco[chave]['retirados']
+                                                )
+                                                df_extrato_banco = pd.DataFrame(
+                                                    extratos_por_banco[chave]
+                                                )
+
+                                                st.markdown(
+                                                    f"#### Relatório — {nome_banco}"
+                                                )
+                                                if df_modelo_banco.empty:
+                                                    st.warning(
+                                                        f"Não há lançamentos do {nome_banco} "
+                                                        "na planilha para o período."
+                                                    )
+                                                    continue
+                                                if df_extrato_banco.empty:
+                                                    st.warning(
+                                                        f"Nenhum extrato do {nome_banco} "
+                                                        "foi identificado para o período."
+                                                    )
+                                                    continue
+
+                                                diario, _, _, _ = (
+                                                    conciliar_empresa_com_extrato(
+                                                        df_modelo_banco,
+                                                        df_extrato_banco,
+                                                        df_retirados_banco
+                                                    )
+                                                )
+                                                if diario.empty:
+                                                    st.warning(
+                                                        "Não existem datas válidas para realizar "
+                                                        "a conferência."
+                                                    )
+                                                    continue
+
+                                                periodo_inicial = (
+                                                    diario['DATA'].min().strftime('%d/%m/%Y')
+                                                )
+                                                periodo_final = (
+                                                    diario['DATA'].max().strftime('%d/%m/%Y')
+                                                )
+                                                dias_batendo = int(
+                                                    (diario['STATUS'] == '✅ Batendo').sum()
+                                                )
+                                                dias_divergentes = int(
+                                                    (diario['STATUS'] == '❌ Divergente').sum()
+                                                )
+                                                st.info(
+                                                    f"Período analisado: {periodo_inicial} "
+                                                    f"até {periodo_final}"
+                                                )
+
+                                                c1, c2 = st.columns(2)
+                                                with c1:
+                                                    st.markdown(
+                                                        '<div class="metric-card">'
+                                                        '<div class="metric-title">Dias batendo</div>'
+                                                        f'<div class="metric-value" style="color: #3fb950;">'
+                                                        f'{dias_batendo}</div></div>',
+                                                        unsafe_allow_html=True
+                                                    )
+                                                with c2:
+                                                    st.markdown(
+                                                        '<div class="metric-card">'
+                                                        '<div class="metric-title">Dias divergentes</div>'
+                                                        f'<div class="metric-value" style="color: #f85149;">'
+                                                        f'{dias_divergentes}</div></div>',
+                                                        unsafe_allow_html=True
+                                                    )
+
+                                                if dias_divergentes == 0:
+                                                    st.success(
+                                                        "Conferência concluída: todos os dias "
+                                                        "estão batendo."
+                                                    )
+                                                else:
+                                                    st.warning(
+                                                        "Foram encontradas diferenças nos "
+                                                        "totais diários."
+                                                    )
+
+                                                with st.expander(
+                                                    "O que significam os valores acumulados?"
+                                                ):
+                                                    st.markdown(
+                                                        "O **acumulado** soma progressivamente os "
+                                                        "movimentos desde o primeiro dia do período "
+                                                        "analisado. Ele **não é o saldo bancário real**, "
+                                                        "pois não inclui o saldo inicial da conta. A "
+                                                        "diferença acumulada mostra quanto das divergências "
+                                                        "anteriores ainda permanece sem correção."
+                                                    )
+
+                                                exibicao_diaria = diario.copy()
+                                                exibicao_diaria['DATA'] = (
+                                                    exibicao_diaria['DATA'].dt.strftime(
+                                                        '%d/%m/%Y'
+                                                    )
+                                                )
+                                                colunas_monetarias_diarias = [
+                                                    'TOTAL EXTRATO',
+                                                    'TOTAL PLANILHA',
+                                                    'DIFERENÇA DO DIA',
+                                                    'ACUMULADO EXTRATO',
+                                                    'ACUMULADO PLANILHA',
+                                                    'DIFERENÇA ACUMULADA'
+                                                ]
+                                                exibicao_diaria = (
+                                                    formatar_dataframe_moeda_br(
+                                                        exibicao_diaria,
+                                                        colunas_monetarias_diarias
+                                                    )
+                                                )
+                                                st.dataframe(
+                                                    exibicao_diaria,
+                                                    use_container_width=True,
+                                                    height=360
+                                                )
+                    except Exception as erro_conferencia_independente:
+                        st.error(
+                            "Não foi possível realizar a conferência: "
+                            f"{erro_conferencia_independente}"
+                        )
 
 # ==============================================================================
 # TELA 4: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
