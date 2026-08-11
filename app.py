@@ -41,13 +41,46 @@ st.markdown("""
         section[data-testid="stSidebar"] { background-color: #0d1117; border-right: 1px solid #30363d; }
         .tool-card { background-color: #161b22; border: 1px solid #30363d; padding: 24px 20px; border-radius: 8px; text-align: center; height: 160px; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: border-color 0.2s ease; }
         .tool-card:hover { border-color: #8b949e; }
-        a.tool-card { text-decoration: none !important; color: inherit !important; cursor: pointer; }
-        a.tool-card:hover { background-color: #1c2128; border-color: #8b949e; transform: translateY(-2px); }
-        a.tool-card:focus-visible { outline: 2px solid #58a6ff; outline-offset: 3px; }
-        a.tool-card > span { display: block; }
-        .tool-card-icon { font-size: 22px; margin-bottom: 10px; line-height: 1; }
-        .tool-card-title { font-weight: 600; color: #f0f6fc; margin-bottom: 6px; font-size: 15px; }
-        .tool-card-description { font-size: 12px; color: #8b949e; line-height: 1.45; max-width: 310px; }
+        /* Cards nativos da tela inicial: um único widget e apenas um rerun. */
+        .st-key-home_card_extratos button,
+        .st-key-home_card_razao button,
+        .st-key-home_card_organizador button {
+            min-height: 160px !important;
+            padding: 24px 20px !important;
+            background-color: #161b22 !important;
+            border: 1px solid #30363d !important;
+            border-radius: 8px !important;
+            color: #c9d1d9 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: pre-line !important;
+            line-height: 1.55 !important;
+            font-size: 12px !important;
+            font-weight: 400 !important;
+            transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease !important;
+        }
+        .st-key-home_card_extratos button p,
+        .st-key-home_card_razao button p,
+        .st-key-home_card_organizador button p {
+            white-space: pre-line !important;
+            margin: 0 !important;
+        }
+        .st-key-home_card_extratos button:hover,
+        .st-key-home_card_razao button:hover,
+        .st-key-home_card_organizador button:hover {
+            background-color: #1c2128 !important;
+            border-color: #8b949e !important;
+            color: #f0f6fc !important;
+            transform: translateY(-2px);
+        }
+        .st-key-home_card_extratos button:focus-visible,
+        .st-key-home_card_razao button:focus-visible,
+        .st-key-home_card_organizador button:focus-visible {
+            outline: 2px solid #58a6ff !important;
+            outline-offset: 3px !important;
+        }
         .alerta-dominio { background-color: #3d1c1c; border-left: 5px solid #f85149; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
         .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
         .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
@@ -1718,14 +1751,6 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
 if 'pagina_ativa' not in st.session_state: st.session_state['pagina_ativa'] = 'home'
-
-# Permite que os cards da tela inicial naveguem pela própria URL.
-pagina_solicitada = st.query_params.get('pagina')
-paginas_validas = {'home', 'extratos', 'razao', 'organizador'}
-if pagina_solicitada in paginas_validas:
-    st.session_state['pagina_ativa'] = pagina_solicitada
-    st.query_params.clear()
-
 def mudar_pagina(nome_pagina): st.session_state['pagina_ativa'] = nome_pagina
 
 # ==============================================================================
@@ -1752,21 +1777,30 @@ if st.session_state['pagina_ativa'] == 'home':
     col_t1, col_t2, col_t3 = st.columns(3)
 
     with col_t1:
-        st.markdown(
-            """<a class="tool-card" href="?pagina=extratos" target="_self" aria-label="Abrir Conversor de Extratos"><span class="tool-card-icon">📊</span><span class="tool-card-title">Conversor de Extratos</span><span class="tool-card-description">Converta extratos para o formato de importação da Domínio.</span></a>""",
-            unsafe_allow_html=True
+        st.button(
+            "📊\n\n**Conversor de Extratos**\n\nConverta extratos para o formato de importação da Domínio.",
+            key="home_card_extratos",
+            use_container_width=True,
+            on_click=mudar_pagina,
+            args=('extratos',)
         )
 
     with col_t2:
-        st.markdown(
-            """<a class="tool-card" href="?pagina=razao" target="_self" aria-label="Abrir Conciliação com Razão"><span class="tool-card-icon">🔍</span><span class="tool-card-title">Conciliação com Razão</span><span class="tool-card-description">Análise automatizada, rolagem de saldos e auditoria de divergências.</span></a>""",
-            unsafe_allow_html=True
+        st.button(
+            "🔍\n\n**Conciliação com Razão**\n\nAnálise automatizada, rolagem de saldos e auditoria de divergências.",
+            key="home_card_razao",
+            use_container_width=True,
+            on_click=mudar_pagina,
+            args=('razao',)
         )
 
     with col_t3:
-        st.markdown(
-            """<a class="tool-card" href="?pagina=organizador" target="_self" aria-label="Abrir Organizador de Planilhas"><span class="tool-card-icon">🗂️</span><span class="tool-card-title">Organizador de Planilhas</span><span class="tool-card-description">Converta planilhas específicas de empresas para o Modelo Domínio.</span></a>""",
-            unsafe_allow_html=True
+        st.button(
+            "🗂️\n\n**Organizador de Planilhas**\n\nConverta planilhas específicas de empresas para o Modelo Domínio.",
+            key="home_card_organizador",
+            use_container_width=True,
+            on_click=mudar_pagina,
+            args=('organizador',)
         )
 
 # ==============================================================================
