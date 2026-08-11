@@ -2328,6 +2328,170 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         )
 
         st.markdown("---")
+        st.markdown("### Organizar planilha bancária")
+
+        banco_padrao = next(iter(configuracoes_bancos))
+        bancos_empresa = st.multiselect(
+            "Bancos",
+            list(configuracoes_bancos.keys()),
+            default=[banco_padrao],
+            key=f"org_banco_nova_geracao_{chave_estabelecimento}"
+        )
+        if not bancos_empresa:
+            st.info("Selecione pelo menos um banco para organizar a planilha.")
+
+        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
+        nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
+        st.caption(
+            f"O sistema localizará automaticamente as contas de {nomes_bancos} dentro da "
+            "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
+        )
+        arquivo_empresa = st.file_uploader(
+            f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
+            type=["xlsx", "xls"],
+            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
+        )
+
+        if arquivo_empresa and configs_selecionadas:
+            try:
+                bytes_empresa = arquivo_empresa.getvalue()
+                dados_processados = []
+                for config in configs_selecionadas:
+                    df_banco, df_banco_retirados = config['processador'](bytes_empresa)
+                    dados_processados.append((config, df_banco, df_banco_retirados))
+
+                datas_disponiveis = pd.concat(
+                    [dados[1][['DATA']] for dados in dados_processados if not dados[1].empty],
+                    ignore_index=True
+                )
+                datas_disponiveis['DATA'] = pd.to_datetime(
+                    datas_disponiveis['DATA'], errors='coerce'
+                )
+                datas_disponiveis = datas_disponiveis.dropna(subset=['DATA'])
+                if datas_disponiveis.empty:
+                    raise ValueError("Nenhuma data válida foi encontrada nos bancos selecionados.")
+
+                data_minima = datas_disponiveis['DATA'].min().date()
+                data_maxima = datas_disponiveis['DATA'].max().date()
+                chave_periodo = (
+                    f"org_periodo_nova_{chave_estabelecimento}_"
+                    f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
+                    + "_".join(config['slug'] for config in configs_selecionadas)
+                )
+                st.markdown("### Período dos lançamentos")
+                periodo_selecionado = st.date_input(
+                    "Selecione a data inicial e a data final",
+                    value=(data_minima, data_maxima),
+                    min_value=data_minima,
+                    max_value=data_maxima,
+                    format="DD/MM/YYYY",
+                    key=chave_periodo
+                )
+                if not isinstance(periodo_selecionado, (tuple, list)) or len(periodo_selecionado) != 2:
+                    raise ValueError(
+                        "Selecione também a data final para concluir o período."
+                    )
+                data_inicial, data_final = periodo_selecionado
+                if data_inicial > data_final:
+                    raise ValueError(
+                        "A data inicial não pode ser maior que a data final."
+                    )
+
+                st.caption(
+                    f"Serão considerados os lançamentos de {data_inicial.strftime('%d/%m/%Y')} "
+                    f"até {data_final.strftime('%d/%m/%Y')}."
+                )
+
+                modelos_por_banco, retirados_por_banco = [], []
+                dados_exportacao_por_banco = {}
+                for config, df_banco_completo, df_banco_retirados_completo in dados_processados:
+                    df_banco = filtrar_dataframe_periodo(
+                        df_banco_completo, data_inicial, data_final
+                    )
+                    df_banco_retirados = filtrar_dataframe_periodo(
+                        df_banco_retirados_completo, data_inicial, data_final
+                    )
+                    modelos_por_banco.append(df_banco)
+                    retirados_por_banco.append(df_banco_retirados)
+                    dados_exportacao_por_banco[config['nome']] = {
+                        'principal': df_banco.sort_values('DATA', kind='stable').reset_index(drop=True),
+                        'retirados': df_banco_retirados.sort_values('DATA', kind='stable').reset_index(drop=True)
+                        if not df_banco_retirados.empty else df_banco_retirados
+                    }
+
+                df_org = pd.concat(modelos_por_banco, ignore_index=True)
+                if df_org.empty:
+                    raise ValueError(
+                        "Nenhum lançamento foi encontrado no período selecionado."
+                    )
+                df_org = df_org.sort_values(
+                    ['DATA', 'DESCRIÇÃO'], kind='stable'
+                ).reset_index(drop=True)
+                df_retirados = pd.concat(retirados_por_banco, ignore_index=True)
+                if not df_retirados.empty:
+                    df_retirados = df_retirados.sort_values(
+                        ['DATA', 'DESCRIÇÃO'], kind='stable'
+                    ).reset_index(drop=True)
+                modelo_org_bytes = None
+                for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
+                    if os.path.exists(caminho_modelo):
+                        with open(caminho_modelo, 'rb') as arquivo_modelo:
+                            modelo_org_bytes = arquivo_modelo.read()
+                        break
+                arquivo_final = gerar_excel_nova_geracao(
+                    dados_exportacao_por_banco, modelo_org_bytes
+                )
+
+                total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
+                total_saidas = df_org.loc[df_org['VALOR'] < 0, 'VALOR'].sum()
+                saldo_liquido = total_entradas + total_saidas
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                m1, m2, m3, m4 = st.columns(4)
+                with m1: st.markdown(f'<div class="metric-card"><div class="metric-title">Modelo principal</div><div class="metric-value">{len(df_org)}</div></div>', unsafe_allow_html=True)
+                with m2: st.markdown(f'<div class="metric-card"><div class="metric-title">Retirados</div><div class="metric-value">{len(df_retirados)}</div></div>', unsafe_allow_html=True)
+                with m3: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(total_entradas)}</div></div>', unsafe_allow_html=True)
+                with m4:
+                    cor_saldo = "#3fb950" if saldo_liquido >= 0 else "#f85149"
+                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo líquido</div><div class="metric-value" style="color: {cor_saldo};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
+
+                tab_principal, tab_retirados = st.tabs(["Modelo principal", "Lançamentos retirados"])
+                with tab_principal:
+                    previa = df_org.copy()
+                    previa['DATA'] = pd.to_datetime(previa['DATA']).dt.strftime('%d/%m/%Y')
+                    st.dataframe(formatar_dataframe_moeda_br(previa, ['VALOR']), use_container_width=True, height=320)
+                with tab_retirados:
+                    if df_retirados.empty:
+                        st.info("Nenhum estorno de baixa foi identificado neste arquivo.")
+                    else:
+                        previa_ret = df_retirados.copy()
+                        previa_ret['DATA'] = pd.to_datetime(previa_ret['DATA']).dt.strftime('%d/%m/%Y')
+                        st.dataframe(formatar_dataframe_moeda_br(previa_ret, ['VALOR']), use_container_width=True, height=280)
+
+                nome_saida_banco = (
+                    configs_selecionadas[0]['nome']
+                    if len(configs_selecionadas) == 1
+                    else f"Separado_{len(configs_selecionadas)}_Bancos"
+                )
+                st.download_button(
+                    "Baixar Modelo Domínio com abas por banco (.XLSX)",
+                    data=arquivo_final,
+                    file_name=(
+                        f"Nova_Geracao_{estabelecimento_nova}_{nome_saida_banco}_"
+                        f"{data_inicial.strftime('%d%m%Y')}_a_{data_final.strftime('%d%m%Y')}_"
+                        "Modelo_Dominio.xlsx"
+                    ),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"dl_org_nova_multibanco_{chave_estabelecimento}",
+                    use_container_width=True
+                )
+
+                st.markdown("---")
+            except Exception as e:
+                st.error(f"Não foi possível organizar a planilha: {e}")
+
+
+        st.markdown("---")
         st.markdown("### Conferência com o extrato bancário")
         st.caption(
             "Esta área funciona de forma independente. Envie a planilha final organizada "
@@ -2713,168 +2877,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         "Não foi possível realizar a conferência: "
                         f"{erro_conferencia_independente}"
                     )
-
-        st.markdown("---")
-        st.markdown("### Organizar planilha bancária")
-
-        banco_padrao = next(iter(configuracoes_bancos))
-        bancos_empresa = st.multiselect(
-            "Bancos",
-            list(configuracoes_bancos.keys()),
-            default=[banco_padrao],
-            key=f"org_banco_nova_geracao_{chave_estabelecimento}"
-        )
-        if not bancos_empresa:
-            st.info("Selecione pelo menos um banco para continuar.")
-            st.stop()
-
-        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
-        nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
-        st.caption(
-            f"O sistema localizará automaticamente as contas de {nomes_bancos} dentro da "
-            "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
-        )
-        arquivo_empresa = st.file_uploader(
-            f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
-            type=["xlsx", "xls"],
-            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
-        )
-
-        if arquivo_empresa:
-            try:
-                bytes_empresa = arquivo_empresa.getvalue()
-                dados_processados = []
-                for config in configs_selecionadas:
-                    df_banco, df_banco_retirados = config['processador'](bytes_empresa)
-                    dados_processados.append((config, df_banco, df_banco_retirados))
-
-                datas_disponiveis = pd.concat(
-                    [dados[1][['DATA']] for dados in dados_processados if not dados[1].empty],
-                    ignore_index=True
-                )
-                datas_disponiveis['DATA'] = pd.to_datetime(
-                    datas_disponiveis['DATA'], errors='coerce'
-                )
-                datas_disponiveis = datas_disponiveis.dropna(subset=['DATA'])
-                if datas_disponiveis.empty:
-                    raise ValueError("Nenhuma data válida foi encontrada nos bancos selecionados.")
-
-                data_minima = datas_disponiveis['DATA'].min().date()
-                data_maxima = datas_disponiveis['DATA'].max().date()
-                chave_periodo = (
-                    f"org_periodo_nova_{chave_estabelecimento}_"
-                    f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
-                    + "_".join(config['slug'] for config in configs_selecionadas)
-                )
-                st.markdown("### Período dos lançamentos")
-                periodo_selecionado = st.date_input(
-                    "Selecione a data inicial e a data final",
-                    value=(data_minima, data_maxima),
-                    min_value=data_minima,
-                    max_value=data_maxima,
-                    format="DD/MM/YYYY",
-                    key=chave_periodo
-                )
-                if not isinstance(periodo_selecionado, (tuple, list)) or len(periodo_selecionado) != 2:
-                    st.info("Selecione também a data final para concluir o período.")
-                    st.stop()
-                data_inicial, data_final = periodo_selecionado
-                if data_inicial > data_final:
-                    st.error("A data inicial não pode ser maior que a data final.")
-                    st.stop()
-
-                st.caption(
-                    f"Serão considerados os lançamentos de {data_inicial.strftime('%d/%m/%Y')} "
-                    f"até {data_final.strftime('%d/%m/%Y')}."
-                )
-
-                modelos_por_banco, retirados_por_banco = [], []
-                dados_exportacao_por_banco = {}
-                for config, df_banco_completo, df_banco_retirados_completo in dados_processados:
-                    df_banco = filtrar_dataframe_periodo(
-                        df_banco_completo, data_inicial, data_final
-                    )
-                    df_banco_retirados = filtrar_dataframe_periodo(
-                        df_banco_retirados_completo, data_inicial, data_final
-                    )
-                    modelos_por_banco.append(df_banco)
-                    retirados_por_banco.append(df_banco_retirados)
-                    dados_exportacao_por_banco[config['nome']] = {
-                        'principal': df_banco.sort_values('DATA', kind='stable').reset_index(drop=True),
-                        'retirados': df_banco_retirados.sort_values('DATA', kind='stable').reset_index(drop=True)
-                        if not df_banco_retirados.empty else df_banco_retirados
-                    }
-
-                df_org = pd.concat(modelos_por_banco, ignore_index=True)
-                if df_org.empty:
-                    st.warning("Nenhum lançamento foi encontrado no período selecionado.")
-                    st.stop()
-                df_org = df_org.sort_values(
-                    ['DATA', 'DESCRIÇÃO'], kind='stable'
-                ).reset_index(drop=True)
-                df_retirados = pd.concat(retirados_por_banco, ignore_index=True)
-                if not df_retirados.empty:
-                    df_retirados = df_retirados.sort_values(
-                        ['DATA', 'DESCRIÇÃO'], kind='stable'
-                    ).reset_index(drop=True)
-                modelo_org_bytes = None
-                for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
-                    if os.path.exists(caminho_modelo):
-                        with open(caminho_modelo, 'rb') as arquivo_modelo:
-                            modelo_org_bytes = arquivo_modelo.read()
-                        break
-                arquivo_final = gerar_excel_nova_geracao(
-                    dados_exportacao_por_banco, modelo_org_bytes
-                )
-
-                total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
-                total_saidas = df_org.loc[df_org['VALOR'] < 0, 'VALOR'].sum()
-                saldo_liquido = total_entradas + total_saidas
-
-                st.markdown("<br>", unsafe_allow_html=True)
-                m1, m2, m3, m4 = st.columns(4)
-                with m1: st.markdown(f'<div class="metric-card"><div class="metric-title">Modelo principal</div><div class="metric-value">{len(df_org)}</div></div>', unsafe_allow_html=True)
-                with m2: st.markdown(f'<div class="metric-card"><div class="metric-title">Retirados</div><div class="metric-value">{len(df_retirados)}</div></div>', unsafe_allow_html=True)
-                with m3: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(total_entradas)}</div></div>', unsafe_allow_html=True)
-                with m4:
-                    cor_saldo = "#3fb950" if saldo_liquido >= 0 else "#f85149"
-                    st.markdown(f'<div class="metric-card"><div class="metric-title">Saldo líquido</div><div class="metric-value" style="color: {cor_saldo};">{formatar_moeda(saldo_liquido)}</div></div>', unsafe_allow_html=True)
-
-                tab_principal, tab_retirados = st.tabs(["Modelo principal", "Lançamentos retirados"])
-                with tab_principal:
-                    previa = df_org.copy()
-                    previa['DATA'] = pd.to_datetime(previa['DATA']).dt.strftime('%d/%m/%Y')
-                    st.dataframe(formatar_dataframe_moeda_br(previa, ['VALOR']), use_container_width=True, height=320)
-                with tab_retirados:
-                    if df_retirados.empty:
-                        st.info("Nenhum estorno de baixa foi identificado neste arquivo.")
-                    else:
-                        previa_ret = df_retirados.copy()
-                        previa_ret['DATA'] = pd.to_datetime(previa_ret['DATA']).dt.strftime('%d/%m/%Y')
-                        st.dataframe(formatar_dataframe_moeda_br(previa_ret, ['VALOR']), use_container_width=True, height=280)
-
-                nome_saida_banco = (
-                    configs_selecionadas[0]['nome']
-                    if len(configs_selecionadas) == 1
-                    else f"Separado_{len(configs_selecionadas)}_Bancos"
-                )
-                st.download_button(
-                    "Baixar Modelo Domínio com abas por banco (.XLSX)",
-                    data=arquivo_final,
-                    file_name=(
-                        f"Nova_Geracao_{estabelecimento_nova}_{nome_saida_banco}_"
-                        f"{data_inicial.strftime('%d%m%Y')}_a_{data_final.strftime('%d%m%Y')}_"
-                        "Modelo_Dominio.xlsx"
-                    ),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key=f"dl_org_nova_multibanco_{chave_estabelecimento}",
-                    use_container_width=True
-                )
-
-                st.markdown("---")
-            except Exception as e:
-                st.error(f"Não foi possível organizar a planilha: {e}")
-
 
 # ==============================================================================
 # TELA 4: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
