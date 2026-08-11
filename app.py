@@ -22,8 +22,8 @@ import traceback
 
 # Configuração da página Web
 st.set_page_config(
-    page_title="Hub Contábil", 
-    page_icon="assets/hc-icon.png", 
+    page_title="Razync", 
+    page_icon="assets/razync-icon.png", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -346,8 +346,8 @@ def proteger_acesso_hub():
     st.markdown("<div style='height: 8vh;'></div>", unsafe_allow_html=True)
     coluna_esquerda, coluna_login, coluna_direita = st.columns([1.25, 1, 1.25])
     with coluna_login:
-        st.image("assets/hc-icon.png", width=66)
-        st.markdown("## Hub Contábil")
+        st.image("assets/razync-icon.png", width=66)
+        st.markdown("## Razync")
         st.caption("Acesso restrito. Informe a senha para continuar.")
         with st.form('hc_formulario_acesso', clear_on_submit=True):
             senha_informada = st.text_input(
@@ -2358,8 +2358,8 @@ def mudar_pagina(nome_pagina):
 # ==============================================================================
 # BARRA LATERAL DARK MINIMALISTA
 # ==============================================================================
-st.sidebar.image("assets/hc-icon.png", width=58)
-st.sidebar.markdown("<p style='font-size: 15px; font-weight: 700; color: #f4f7fa; margin: 8px 0 0;'>Hub Contábil</p>", unsafe_allow_html=True)
+st.sidebar.image("assets/razync-icon.png", width=58)
+st.sidebar.markdown("<p style='font-size: 15px; font-weight: 700; color: #f4f7fa; margin: 8px 0 0;'>Razync</p>", unsafe_allow_html=True)
 st.sidebar.markdown("<p style='font-size: 11px; color: #94a4b3; margin-top: 3px;'>Operações bancárias</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
@@ -2378,7 +2378,7 @@ if SEGURANCA_POR_SENHA_ATIVA:
         st.session_state['_hc_acesso_autorizado'] = False
         st.rerun()
 
-st.sidebar.markdown("<p style='font-size: 10px; color: #6f8190; text-align: center;'>Hub Contábil · Operações bancárias</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 10px; color: #6f8190; text-align: center;'>Razync · Operações bancárias</p>", unsafe_allow_html=True)
 
 # O marcador ativa o CSS uma única vez e desaparece nos reruns de filtros/uploads.
 if st.session_state.pop('animar_transicao', False):
@@ -2393,9 +2393,9 @@ if st.session_state.pop('animar_transicao', False):
 if st.session_state['pagina_ativa'] == 'home':
     col_marca_logo, col_marca_texto = st.columns([0.7, 9.3])
     with col_marca_logo:
-        st.image("assets/hc-icon.png", width=68)
+        st.image("assets/razync-icon.png", width=68)
     with col_marca_texto:
-        st.markdown('<div class="hc-brand-title">Hub Contábil</div>', unsafe_allow_html=True)
+        st.markdown('<div class="hc-brand-title">Razync</div>', unsafe_allow_html=True)
         st.markdown(
             '<div class="hc-brand-subtitle">Organização, conversão e conferência de lançamentos bancários em um só lugar.</div>',
             unsafe_allow_html=True
