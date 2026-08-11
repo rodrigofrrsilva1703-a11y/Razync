@@ -217,6 +217,48 @@ st.markdown("""
 
         .stTextInput { margin-top: -2px; }
 
+        @keyframes hc-loader-enter {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes hc-loader-line {
+            0% { transform: translateX(-140%); }
+            100% { transform: translateX(430%); }
+        }
+        [data-testid="stSpinner"] {
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 14px 16px !important;
+            margin: 8px 0 12px;
+            border: 1px solid var(--hc-border);
+            border-radius: 8px;
+            background: linear-gradient(90deg, rgba(19, 185, 232, 0.055), var(--hc-surface) 45%);
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+            animation: hc-loader-enter 180ms ease-out both;
+        }
+        [data-testid="stSpinner"]::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 26%;
+            height: 2px;
+            border-radius: 99px;
+            background: linear-gradient(90deg, transparent, var(--hc-accent), transparent);
+            box-shadow: 0 0 12px rgba(19, 185, 232, 0.45);
+            animation: hc-loader-line 1.25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        [data-testid="stSpinner"] p {
+            color: #d9e4ec !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+        }
+        [data-testid="stSpinner"] svg {
+            color: var(--hc-accent) !important;
+        }
+
         /* A animação ocorre somente no primeiro render após trocar de tela. */
         @keyframes hc-page-enter {
             0% {
@@ -264,6 +306,9 @@ st.markdown("""
                 animation: none !important;
                 filter: none !important;
             }
+            [data-testid="stSpinner"]::after {
+                animation: none !important;
+            }
             .stButton > button,
             [data-baseweb="tab"],
             [data-testid="stExpander"],
@@ -298,6 +343,11 @@ def formatar_dataframe_moeda_br(df, colunas):
                 lambda valor: formatar_moeda(valor) if pd.notna(valor) and valor != '' else ''
             )
     return exibicao
+
+def executar_com_loading(mensagem, funcao, *args, **kwargs):
+    """Exibe o carregamento visual apenas enquanto a operação estiver executando."""
+    with st.spinner(mensagem):
+        return funcao(*args, **kwargs)
 
 def sanitizar_dataframe(df):
     for col in df.select_dtypes(include=['object', 'string']).columns: df[col] = df[col].apply(limpar_caracteres_ilegais)
@@ -2341,13 +2391,24 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                 file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
                 lancamentos, data_ini_doc, data_fim_doc = [], None, None
                 
-                if extensao == '.ofx': lancamentos = processar_ofx(file_bytes, arquivo.name)
-                elif extensao in ['.csv', '.xlsx', '.xls']: lancamentos = processar_planilha_universal(file_bytes, arquivo.name)
+                if extensao == '.ofx':
+                    lancamentos = executar_com_loading(
+                        f"Lendo {arquivo.name}...", processar_ofx, file_bytes, arquivo.name
+                    )
+                elif extensao in ['.csv', '.xlsx', '.xls']:
+                    lancamentos = executar_com_loading(
+                        f"Lendo {arquivo.name}...",
+                        processar_planilha_universal,
+                        file_bytes,
+                        arquivo.name
+                    )
                 elif extensao == '.pdf':
                     caminho_temp = f"temp_{arquivo.name}"
                     with open(caminho_temp, "wb") as f: f.write(file_bytes)
                     data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
-                    lancamentos = processar_arquivo_pdf(caminho_temp)
+                    lancamentos = executar_com_loading(
+                        f"Analisando {arquivo.name}...", processar_arquivo_pdf, caminho_temp
+                    )
                     if os.path.exists(caminho_temp): os.remove(caminho_temp)
                     
                 if lancamentos:
@@ -2605,8 +2666,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     st.warning("Envie pelo menos uma planilha classificada ou arquivo ZIP.")
                 else:
                     try:
-                        novos_registros = importar_arquivos_classificados(arquivos_aprendizado)
-                        quantidade_salva = salvar_classificacoes_online(novos_registros)
+                        novos_registros = executar_com_loading(
+                            "Lendo os padrões das planilhas...",
+                            importar_arquivos_classificados,
+                            arquivos_aprendizado
+                        )
+                        quantidade_salva = executar_com_loading(
+                            "Atualizando a base inteligente...",
+                            salvar_classificacoes_online,
+                            novos_registros
+                        )
                         st.success(
                             f"Base atualizada com {quantidade_salva} padrões de classificação."
                         )
@@ -2635,7 +2704,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     )
                 else:
                     try:
-                        arquivo_classificado, resumo_classificacao = classificar_planilha_final(
+                        arquivo_classificado, resumo_classificacao = executar_com_loading(
+                            "Analisando históricos e classificando as contas...",
+                            classificar_planilha_final,
                             planilha_final_classificacao.getvalue(),
                             planilha_final_classificacao.name,
                             base_classificacoes,
@@ -2706,7 +2777,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     bytes_empresa = arquivo_empresa.getvalue()
                     dados_processados = []
                     for config in configs_selecionadas:
-                        df_banco, df_banco_retirados = config['processador'](bytes_empresa)
+                        df_banco, df_banco_retirados = executar_com_loading(
+                            f"Organizando os lançamentos do {config['nome']}...",
+                            config['processador'],
+                            bytes_empresa
+                        )
                         dados_processados.append((config, df_banco, df_banco_retirados))
 
                     datas_disponiveis = pd.concat(
@@ -2787,8 +2862,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             with open(caminho_modelo, 'rb') as arquivo_modelo:
                                 modelo_org_bytes = arquivo_modelo.read()
                             break
-                    arquivo_final = gerar_excel_nova_geracao(
-                        dados_exportacao_por_banco, modelo_org_bytes
+                    arquivo_final = executar_com_loading(
+                        "Gerando a planilha final...",
+                        gerar_excel_nova_geracao,
+                        dados_exportacao_por_banco,
+                        modelo_org_bytes
                     )
 
                     total_entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
@@ -3024,11 +3102,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                     arquivos_nao_identificados = []
 
                                     for extrato_conferencia in extratos_conferencia:
-                                        lancamentos_arquivo = (
-                                            processar_extrato_conferencia_empresa(
-                                                extrato_conferencia.getvalue(),
-                                                extrato_conferencia.name
-                                            )
+                                        lancamentos_arquivo = executar_com_loading(
+                                            f"Lendo {extrato_conferencia.name}...",
+                                            processar_extrato_conferencia_empresa,
+                                            extrato_conferencia.getvalue(),
+                                            extrato_conferencia.name
                                         )
                                         df_arquivo = filtrar_dataframe_periodo(
                                             pd.DataFrame(lancamentos_arquivo),
@@ -3124,12 +3202,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                                     )
                                                     continue
 
-                                                diario, _, _, _ = (
-                                                    conciliar_empresa_com_extrato(
-                                                        df_modelo_banco,
-                                                        df_extrato_banco,
-                                                        df_retirados_banco
-                                                    )
+                                                diario, _, _, _ = executar_com_loading(
+                                                    f"Conferindo os movimentos do {nome_banco}...",
+                                                    conciliar_empresa_com_extrato,
+                                                    df_modelo_banco,
+                                                    df_extrato_banco,
+                                                    df_retirados_banco
                                                 )
                                                 if diario.empty:
                                                     st.warning(
@@ -3249,12 +3327,23 @@ elif st.session_state['pagina_ativa'] == 'razao':
         try:
             ext_bytes, ext_ext = arq_extrato.getvalue(), os.path.splitext(arq_extrato.name)[1].lower()
             lancamentos_ext = []
-            if ext_ext == '.ofx': lancamentos_ext = processar_ofx(ext_bytes, arq_extrato.name)
-            elif ext_ext in ['.csv', '.xlsx', '.xls']: lancamentos_ext = processar_planilha_universal(ext_bytes, arq_extrato.name)
+            if ext_ext == '.ofx':
+                lancamentos_ext = executar_com_loading(
+                    "Lendo o extrato bancário...", processar_ofx, ext_bytes, arq_extrato.name
+                )
+            elif ext_ext in ['.csv', '.xlsx', '.xls']:
+                lancamentos_ext = executar_com_loading(
+                    "Lendo o extrato bancário...",
+                    processar_planilha_universal,
+                    ext_bytes,
+                    arq_extrato.name
+                )
             elif ext_ext == '.pdf':
                 tmp_ext = f"temp_ext_conc_{arq_extrato.name}"
                 with open(tmp_ext, "wb") as f: f.write(ext_bytes)
-                lancamentos_ext = processar_arquivo_pdf(tmp_ext)
+                lancamentos_ext = executar_com_loading(
+                    "Analisando o extrato bancário...", processar_arquivo_pdf, tmp_ext
+                )
                 if os.path.exists(tmp_ext): os.remove(tmp_ext)
                 
             raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
@@ -3262,7 +3351,12 @@ elif st.session_state['pagina_ativa'] == 'razao':
             for chave_estado_xls in ['erro_bof_xls', 'razao_xls_recuperado']:
                 st.session_state.pop(chave_estado_xls, None)
 
-            df_razao_bruto = processar_razao_dominio(raz_bytes, raz_name)
+            df_razao_bruto = executar_com_loading(
+                "Lendo e preparando o Razão da Domínio...",
+                processar_razao_dominio,
+                raz_bytes,
+                raz_name
+            )
 
             if st.session_state.get('razao_xls_recuperado', False):
                 st.success(
