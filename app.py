@@ -1184,60 +1184,140 @@ def decompor_assinatura_classificacao(assinatura):
     observacao = '|'.join(partes[2:]) if len(partes) > 2 else ''
     return natureza, empresa, observacao
 
-def normalizar_nome_empresa_classificacao(nome):
-    """Retira diferenças societárias sem apagar palavras relevantes da empresa."""
-    texto = normalizar_texto(texto_celula_seguro(nome))
-    tokens = re.findall(r'[a-z0-9]+', texto)
-    termos_societarios = {
-        'ltda', 'limitada', 'eireli', 'epp', 'me', 'sa', 'sociedade', 'anonima'
+def extrair_nome_empresa_classificacao(historico, assinatura=''):
+    """
+    Extrai a entidade do histórico e elimina somente ruídos que mudam por mês,
+    preservando as palavras que realmente identificam o fornecedor ou cliente.
+    """
+    texto = normalizar_texto(texto_celula_seguro(historico))
+    empresa_match = re.search(
+        r'empresa\s*:\s*(.*?)(?:\s+obs\s*:|$)', texto
+    )
+    if empresa_match:
+        empresa = empresa_match.group(1)
+    elif assinatura:
+        _, empresa, _ = decompor_assinatura_classificacao(assinatura)
+    else:
+        empresa = re.sub(
+            r'^\s*(?:pago|pagar|pagamento|recebido|receber|recebimento)\b',
+            ' ',
+            texto
+        )
+        # Remove um documento variável que apareça logo após a natureza.
+        empresa = re.sub(
+            r'^\s*[a-z0-9./-]*\d[a-z0-9./-]*\s+',
+            ' ',
+            empresa
+        )
+
+    tokens = re.findall(r'[a-z0-9]+', empresa)
+    termos_ruido = {
+        'ltda', 'limitada', 'eireli', 'epp', 'me', 'mei', 'sa', 's', 'a',
+        'sociedade', 'anonima', 'unipessoal', 'de', 'da', 'do', 'das', 'dos',
+        'e', 'doc', 'documento', 'nf', 'nfe', 'nota', 'fiscal', 'pedido',
+        'parcela', 'pagto', 'pago', 'recebido', 'empresa', 'obs'
     }
-    tokens = [token for token in tokens if token not in termos_societarios]
-    return ' '.join(tokens)
+    tokens_validos = []
+    for token in tokens:
+        if token in termos_ruido or token.isdigit() or len(token) < 2:
+            continue
+        # Protocolos mistos longos também variam entre os períodos. Marcas
+        # curtas com números, como 3M, continuam preservadas.
+        if any(caractere.isdigit() for caractere in token) and len(token) >= 4:
+            continue
+        tokens_validos.append(token)
+    return ' '.join(tokens_validos).strip()
+
+
+def normalizar_nome_empresa_classificacao(nome):
+    """Normaliza um nome já extraído para comparação conservadora."""
+    return extrair_nome_empresa_classificacao(nome)
+
 
 def calcular_similaridade_nome_empresa(nome_a, nome_b):
+    """
+    Compara nomes por caracteres e palavras. Nomes de uma única palavra só
+    passam quando são exatamente iguais, evitando aproximações arriscadas.
+    """
     a = normalizar_nome_empresa_classificacao(nome_a)
     b = normalizar_nome_empresa_classificacao(nome_b)
     if not a or not b:
         return 0.0
     if a == b:
         return 1.0
-    razao_caracteres = difflib.SequenceMatcher(None, a, b).ratio()
-    tokens_a, tokens_b = set(a.split()), set(b.split())
-    uniao = tokens_a | tokens_b
-    razao_tokens = len(tokens_a & tokens_b) / len(uniao) if uniao else 0.0
-    combinada = (razao_caracteres * 0.75) + (razao_tokens * 0.25)
-    return max(razao_caracteres, combinada)
 
-def encontrar_conta_por_nome_similar(assinatura, mapa_seguro):
-    """Retorna conta somente quando a aproximação possui margem de segurança."""
-    natureza_alvo, empresa_alvo, observacao_alvo = decompor_assinatura_classificacao(
-        assinatura
-    )
-    empresa_alvo_limpa = normalizar_nome_empresa_classificacao(empresa_alvo)
-    if natureza_alvo not in {'pago', 'recebido'} or len(empresa_alvo_limpa) < 6:
-        return None, 0.0
+    tokens_a, tokens_b = set(a.split()), set(b.split())
+    if min(len(tokens_a), len(tokens_b)) < 2:
+        return 0.0
+
+    comuns = tokens_a & tokens_b
+    if not comuns:
+        return 0.0
+
+    razao_caracteres = difflib.SequenceMatcher(None, a, b).ratio()
+    cobertura = len(comuns) / min(len(tokens_a), len(tokens_b))
+    uniao = tokens_a | tokens_b
+    jaccard = len(comuns) / len(uniao) if uniao else 0.0
+
+    # Um nome completo contido no outro é um sinal forte, desde que existam
+    # pelo menos duas palavras distintivas em comum.
+    if (a in b or b in a) and len(comuns) >= 2:
+        return max(0.97, razao_caracteres)
+
+    # Aceita pequenas variações de escrita ou complemento, mas nunca apenas
+    # porque duas empresas compartilham uma palavra genérica.
+    if len(comuns) >= 2 and cobertura >= 0.80 and razao_caracteres >= 0.72:
+        return max(0.95, (razao_caracteres * 0.55) + (cobertura * 0.35) + (jaccard * 0.10))
+    if len(comuns) >= 2 and cobertura >= 0.67 and razao_caracteres >= 0.90:
+        return max(0.94, razao_caracteres)
+    if len(comuns) >= 1 and razao_caracteres >= 0.95 and min(len(a), len(b)) >= 10:
+        return razao_caracteres
+    return 0.0
+
+
+def encontrar_conta_por_nome_historico(historico, natureza, evidencias_nomes):
+    """
+    Retorna uma conta somente quando o nome foi confirmado em períodos
+    diferentes, pertence à mesma natureza e não possui classificação concorrente.
+    """
+    nome_alvo = extrair_nome_empresa_classificacao(historico)
+    if natureza not in {'pago', 'recebido'} or len(nome_alvo) < 4:
+        return None, 0.0, 'nome_insuficiente'
+
+    entidades_natureza = evidencias_nomes.get(natureza, {})
+    evidencia_exata = entidades_natureza.get(nome_alvo)
+    if evidencia_exata:
+        if len(evidencia_exata) != 1:
+            return None, 1.0, 'conflito'
+        conta, evidencia = next(iter(evidencia_exata.items()))
+        if len(evidencia['periodos']) >= 2:
+            return conta, 1.0, 'nome_exato'
+        # Um único mês não ensina uma regra contábil com segurança.
+        return None, 1.0, 'evidencia_insuficiente'
 
     melhor_por_conta = {}
-    for assinatura_base, conta in mapa_seguro.items():
-        natureza_base, empresa_base, observacao_base = decompor_assinatura_classificacao(
-            assinatura_base
-        )
-        if natureza_base != natureza_alvo or observacao_base != observacao_alvo:
+    for nome_base, contas in entidades_natureza.items():
+        if len(contas) != 1:
             continue
-        similaridade = calcular_similaridade_nome_empresa(empresa_alvo, empresa_base)
+        conta, evidencia = next(iter(contas.items()))
+        if len(evidencia['periodos']) < 2 or evidencia['ocorrencias'] < 2:
+            continue
+        similaridade = calcular_similaridade_nome_empresa(nome_alvo, nome_base)
         if similaridade > melhor_por_conta.get(conta, 0.0):
             melhor_por_conta[conta] = similaridade
 
     resultados = sorted(
         melhor_por_conta.items(), key=lambda item: item[1], reverse=True
     )
-    if not resultados or resultados[0][1] < 0.90:
-        return None, resultados[0][1] if resultados else 0.0
+    if not resultados or resultados[0][1] < 0.94:
+        return None, resultados[0][1] if resultados else 0.0, 'sem_correspondencia'
+
     melhor_conta, melhor_nota = resultados[0]
     segunda_nota = resultados[1][1] if len(resultados) > 1 else 0.0
-    if segunda_nota >= 0.90 and (melhor_nota - segunda_nota) < 0.05:
-        return None, melhor_nota
-    return melhor_conta, melhor_nota
+    if segunda_nota >= 0.90 and (melhor_nota - segunda_nota) < 0.08:
+        return None, melhor_nota, 'conflito'
+    return melhor_conta, melhor_nota, 'nome_aproximado'
+
 
 def obter_config_classificacao_online():
     """Obtém somente no servidor as credenciais guardadas em st.secrets."""
@@ -1494,6 +1574,7 @@ def classificar_planilha_final(
     }
     candidatos_por_banco = {}
     periodos_por_banco = {}
+    evidencias_nomes_por_banco = {}
     for item in base_classificacoes:
         banco = item.get('banco', '')
         assinatura = item.get('assinatura', '')
@@ -1509,9 +1590,29 @@ def classificar_planilha_final(
         candidatos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).add(
             contrapartida
         )
+        periodos_item = set(item.get('periodos') or [])
         periodos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).update(
-            item.get('periodos') or []
+            periodos_item
         )
+
+        historico_exemplo = item.get('exemplo_historico') or ''
+        nome_empresa = extrair_nome_empresa_classificacao(
+            historico_exemplo, assinatura
+        )
+        if nome_empresa:
+            por_natureza = evidencias_nomes_por_banco.setdefault(
+                banco, {}
+            ).setdefault(natureza, {})
+            por_conta = por_natureza.setdefault(nome_empresa, {}).setdefault(
+                contrapartida,
+                {'periodos': set(), 'ocorrencias': 0}
+            )
+            por_conta['periodos'].update(periodos_item)
+            try:
+                ocorrencias_item = max(1, int(item.get('ocorrencias') or 1))
+            except (TypeError, ValueError):
+                ocorrencias_item = 1
+            por_conta['ocorrencias'] += ocorrencias_item
 
     mapas_seguros = {}
     for banco, candidatos in candidatos_por_banco.items():
@@ -1631,13 +1732,15 @@ def classificar_planilha_final(
                 resumo['conflitos'] += 1
                 resumo['somente_banco'] += 1
             else:
-                chave_cache = (banco_linha, assinatura)
+                chave_cache = (banco_linha, natureza, assinatura)
                 if chave_cache not in cache_similaridade:
-                    cache_similaridade[chave_cache] = encontrar_conta_por_nome_similar(
-                        assinatura, mapas_seguros.get(banco_linha, {})
+                    cache_similaridade[chave_cache] = encontrar_conta_por_nome_historico(
+                        historico,
+                        natureza,
+                        evidencias_nomes_por_banco.get(banco_linha, {})
                     )
-                conta_similar, _ = cache_similaridade[chave_cache]
-                if not candidatos and conta_similar:
+                conta_similar, _, motivo_nome = cache_similaridade[chave_cache]
+                if conta_similar:
                     ws.cell(numero_linha, coluna_contrapartida).value = valor_conta_excel(
                         conta_similar
                     )
@@ -1646,7 +1749,10 @@ def classificar_planilha_final(
                     if linha_estava_parcial:
                         resumo['parciais_completados'] += 1
                 else:
-                    resumo['padroes_novos'] += 1
+                    if motivo_nome == 'conflito':
+                        resumo['conflitos'] += 1
+                    else:
+                        resumo['padroes_novos'] += 1
                     resumo['somente_banco'] += 1
 
     if resumo['abas_processadas'] == 0:
