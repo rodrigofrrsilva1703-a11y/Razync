@@ -2043,6 +2043,107 @@ def processar_nova_geracao_filial_bradesco(file_bytes):
         file_bytes, 'Bradesco', '3084-8', 'BANCO BRADESCO'
     )
 
+def processar_mapa_autokraft(file_bytes, filename=''):
+    """Converte as abas diárias do mapa Autokraft para o Modelo Domínio."""
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    abas_diarias = [
+        aba for aba in xls.sheet_names if re.fullmatch(r'\d{2}\.\d{2}', str(aba).strip())
+    ]
+    if not abas_diarias:
+        raise ValueError(
+            "Nenhuma aba diária no formato DD.MM foi encontrada no arquivo enviado."
+        )
+
+    ano_nome = re.search(r'(?<!\d)(20\d{2})(?!\d)', str(filename))
+    ano_referencia = int(ano_nome.group(1)) if ano_nome else datetime.now().year
+    colunas_saida = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    registros = {'Itaú': [], 'Daycoval': []}
+    abas_processadas = []
+
+    for nome_aba in abas_diarias:
+        df = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
+        if df.empty or df.shape[1] < 6:
+            continue
+
+        data_raw = df.iloc[1, 2] if len(df.index) > 1 and df.shape[1] > 2 else None
+        if isinstance(data_raw, (int, float)) and not pd.isna(data_raw):
+            data_aba = pd.to_datetime(
+                data_raw, unit='D', origin='1899-12-30', errors='coerce'
+            )
+        else:
+            data_aba = pd.to_datetime(data_raw, dayfirst=True, errors='coerce')
+        if pd.isna(data_aba):
+            dia, mes = [int(parte) for parte in str(nome_aba).split('.')]
+            data_aba = pd.Timestamp(year=ano_referencia, month=mes, day=dia)
+
+        banco_atual = None
+        for _, linha in df.iterrows():
+            nome_bloco = normalizar_texto(texto_celula_seguro(linha.iloc[0])).strip()
+            if nome_bloco == 'itau':
+                banco_atual = 'Itaú'
+                continue
+            if nome_bloco == 'daycoval':
+                banco_atual = 'Daycoval'
+                continue
+
+            historico_credito = texto_celula_seguro(linha.iloc[2])
+            historico_debito = texto_celula_seguro(linha.iloc[4])
+            texto_credito = normalizar_texto(historico_credito)
+            texto_debito = normalizar_texto(historico_debito)
+
+            if texto_credito.startswith('total de creditos') or texto_debito.startswith(
+                'total de debitos'
+            ):
+                banco_atual = None
+                continue
+            if banco_atual is None:
+                continue
+
+            if historico_credito and not texto_credito.startswith('total'):
+                valor_credito = abs(limpar_valor_monetario(linha.iloc[3]))
+                if valor_credito:
+                    registros[banco_atual].append({
+                        'DESCRIÇÃO': f'BANCO {banco_atual.upper()}',
+                        'DATA': data_aba.to_pydatetime(),
+                        'VALOR': valor_credito,
+                        'DÉBITO': '',
+                        'CRÉDITO': '',
+                        'HISTÓRICO': limpar_caracteres_ilegais(historico_credito).strip()
+                    })
+
+            if historico_debito and not texto_debito.startswith('total'):
+                valor_debito = abs(limpar_valor_monetario(linha.iloc[5]))
+                if valor_debito:
+                    registros[banco_atual].append({
+                        'DESCRIÇÃO': f'BANCO {banco_atual.upper()}',
+                        'DATA': data_aba.to_pydatetime(),
+                        'VALOR': -valor_debito,
+                        'DÉBITO': '',
+                        'CRÉDITO': '',
+                        'HISTÓRICO': limpar_caracteres_ilegais(historico_debito).strip()
+                    })
+
+        abas_processadas.append(str(nome_aba))
+
+    dados_por_banco = {}
+    for nome_banco, linhas in registros.items():
+        df_banco = pd.DataFrame(linhas, columns=colunas_saida)
+        if not df_banco.empty:
+            df_banco = df_banco.sort_values('DATA', kind='stable').reset_index(drop=True)
+        dados_por_banco[nome_banco] = {
+            'principal': df_banco,
+            'retirados': pd.DataFrame(columns=colunas_saida + ['MOTIVO'])
+        }
+
+    total_lancamentos = sum(
+        len(dados['principal']) for dados in dados_por_banco.values()
+    )
+    if total_lancamentos == 0:
+        raise ValueError(
+            "As abas diárias foram encontradas, mas nenhum lançamento bancário válido foi lido."
+        )
+    return dados_por_banco, abas_processadas
+
 def filtrar_dataframe_periodo(df, data_inicial, data_final):
     """Mantém somente os lançamentos entre as datas informadas, inclusive."""
     if df is None or df.empty:
@@ -2617,9 +2718,147 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             st.session_state['empresa_organizador'] = 'nova_geracao'
             st.rerun()
     with col_emp2:
-        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Segunda Empresa</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">As regras serão configuradas na próxima etapa.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏭</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Grupo Autokraft</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Mapas diários dos bancos Itaú e Daycoval.</p></div>""", unsafe_allow_html=True)
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        st.button("Em breve", use_container_width=True, disabled=True, key="org_empresa_2")
+        if st.button("Selecionar Grupo Autokraft", use_container_width=True, key="org_autokraft"):
+            st.session_state['empresa_organizador'] = 'autokraft'
+            st.rerun()
+
+    if st.session_state['empresa_organizador'] == 'autokraft':
+        st.markdown("---")
+        st.markdown("### Grupo Autokraft")
+        empresa_autokraft = st.selectbox(
+            "Empresa",
+            [
+                "3 - Autokraft Industrial",
+                "178 - Autokraft Projetos",
+                "343 - I.S.A"
+            ],
+            key="org_empresa_autokraft"
+        )
+
+        if empresa_autokraft != "3 - Autokraft Industrial":
+            st.info(
+                "Esta empresa já foi incluída na seleção. A conversão será liberada "
+                "depois da validação da Autokraft Industrial."
+            )
+        else:
+            st.caption(
+                "O sistema lê automaticamente cada aba diária, ignora saldos e totais "
+                "e separa os lançamentos por banco."
+            )
+            bancos_autokraft = st.multiselect(
+                "Bancos para organizar",
+                ["Itaú", "Daycoval"],
+                default=["Itaú", "Daycoval"],
+                key="org_bancos_autokraft"
+            )
+            arquivo_autokraft = st.file_uploader(
+                "Envie o mapa bancário da Autokraft Industrial",
+                type=['xlsx', 'xls'],
+                key="upload_mapa_autokraft_industrial",
+                help="O arquivo pode conter todas as abas diárias do mês."
+            )
+
+            if arquivo_autokraft is not None:
+                try:
+                    dados_autokraft, abas_autokraft = processar_mapa_autokraft(
+                        arquivo_autokraft.getvalue(), arquivo_autokraft.name
+                    )
+                    datas_disponiveis = []
+                    for dados_banco in dados_autokraft.values():
+                        df_banco = dados_banco['principal']
+                        if not df_banco.empty:
+                            datas_disponiveis.extend(
+                                pd.to_datetime(df_banco['DATA'], errors='coerce').dropna().dt.date.tolist()
+                            )
+                    if not datas_disponiveis:
+                        raise ValueError("Nenhuma data válida foi localizada nas abas diárias.")
+
+                    data_min_autokraft = min(datas_disponiveis)
+                    data_max_autokraft = max(datas_disponiveis)
+                    col_data_ak1, col_data_ak2 = st.columns(2)
+                    with col_data_ak1:
+                        data_ini_autokraft = st.date_input(
+                            "Data inicial",
+                            value=data_min_autokraft,
+                            min_value=data_min_autokraft,
+                            max_value=data_max_autokraft,
+                            format="DD/MM/YYYY",
+                            key="data_ini_autokraft"
+                        )
+                    with col_data_ak2:
+                        data_fim_autokraft = st.date_input(
+                            "Data final",
+                            value=data_max_autokraft,
+                            min_value=data_min_autokraft,
+                            max_value=data_max_autokraft,
+                            format="DD/MM/YYYY",
+                            key="data_fim_autokraft"
+                        )
+
+                    if data_ini_autokraft > data_fim_autokraft:
+                        st.warning("A data inicial deve ser anterior ou igual à data final.")
+                    elif not bancos_autokraft:
+                        st.warning("Selecione pelo menos um banco para gerar a planilha.")
+                    else:
+                        dados_filtrados_autokraft = {}
+                        for nome_banco in bancos_autokraft:
+                            df_filtrado = filtrar_dataframe_periodo(
+                                dados_autokraft[nome_banco]['principal'],
+                                data_ini_autokraft,
+                                data_fim_autokraft
+                            )
+                            dados_filtrados_autokraft[nome_banco] = {
+                                'principal': df_filtrado,
+                                'retirados': pd.DataFrame()
+                            }
+
+                        df_resumo_autokraft = pd.concat(
+                            [dados['principal'] for dados in dados_filtrados_autokraft.values()],
+                            ignore_index=True
+                        )
+                        total_autokraft = len(df_resumo_autokraft)
+                        entradas_autokraft = df_resumo_autokraft.loc[
+                            df_resumo_autokraft['VALOR'] > 0, 'VALOR'
+                        ].sum() if not df_resumo_autokraft.empty else 0
+                        saidas_autokraft = abs(df_resumo_autokraft.loc[
+                            df_resumo_autokraft['VALOR'] < 0, 'VALOR'
+                        ].sum()) if not df_resumo_autokraft.empty else 0
+
+                        met_ak1, met_ak2, met_ak3 = st.columns(3)
+                        with met_ak1:
+                            st.metric("Lançamentos", total_autokraft)
+                        with met_ak2:
+                            st.metric("Entradas", formatar_moeda(entradas_autokraft))
+                        with met_ak3:
+                            st.metric("Saídas", formatar_moeda(saidas_autokraft))
+
+                        st.caption(
+                            f"{len(abas_autokraft)} abas diárias reconhecidas, de "
+                            f"{data_min_autokraft.strftime('%d/%m/%Y')} a "
+                            f"{data_max_autokraft.strftime('%d/%m/%Y')}."
+                        )
+                        if df_resumo_autokraft.empty:
+                            st.warning("Não há lançamentos para os bancos e período escolhidos.")
+                        else:
+                            arquivo_final_autokraft = gerar_excel_nova_geracao(
+                                dados_filtrados_autokraft
+                            )
+                            st.download_button(
+                                "Baixar planilha no Modelo Domínio",
+                                data=arquivo_final_autokraft,
+                                file_name=(
+                                    "Autokraft_Industrial_"
+                                    f"{data_ini_autokraft.strftime('%d%m%Y')}_a_"
+                                    f"{data_fim_autokraft.strftime('%d%m%Y')}.xlsx"
+                                ),
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                                key="download_autokraft_industrial"
+                            )
+                except Exception as erro_autokraft:
+                    st.error(f"Não foi possível processar o mapa Autokraft: {erro_autokraft}")
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         st.markdown("---")
