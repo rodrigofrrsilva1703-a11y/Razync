@@ -1511,9 +1511,12 @@ def requisicao_classificacao_online(caminho, metodo='GET', dados=None, prefer=''
     corpo = json.dumps(dados, ensure_ascii=False).encode('utf-8') if dados is not None else None
     cabecalhos = {
         'apikey': chave,
-        'Authorization': f'Bearer {chave}',
         'Content-Type': 'application/json',
     }
+    # As novas chaves sb_secret_ não são JWT. A chave no cabeçalho apikey
+    # já autentica o serviço; o Bearer continua apenas para a service_role legada.
+    if not chave.startswith('sb_secret_'):
+        cabecalhos['Authorization'] = f'Bearer {chave}'
     if prefer:
         cabecalhos['Prefer'] = prefer
     requisicao = urllib.request.Request(
