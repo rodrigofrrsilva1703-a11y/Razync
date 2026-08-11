@@ -191,11 +191,43 @@ st.markdown("""
         .aviso-banner p { margin: 0; color: #cbd5e1; font-size: 13px; }
         .stTextInput { margin-top: -2px; }
 
+        /* Enterprise workspace */
+        .enterprise-shell { margin: 2px 0 22px; }
+        .enterprise-title { color: #f8fafc; font-size: 27px; font-weight: 720; letter-spacing: -.025em; margin: 0; }
+        .enterprise-subtitle { color: #7f8996; font-size: 13px; margin: 7px 0 0; }
+        .enterprise-context { display: grid; grid-template-columns: 1.5fr 1fr 2fr; background: #0b0d10; border: 1px solid #242930; border-radius: 8px; margin: 14px 0 20px; overflow: hidden; }
+        .enterprise-context-item { padding: 12px 15px; border-right: 1px solid #242930; min-width: 0; }
+        .enterprise-context-item:last-child { border-right: 0; }
+        .enterprise-context-label { color: #667180; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
+        .enterprise-context-value { color: #e5e7eb; font-size: 12px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .enterprise-section { margin: 20px 0 10px; padding-top: 18px; border-top: 1px solid #242930; }
+        .enterprise-section:first-child { border-top: 0; padding-top: 0; }
+        .enterprise-section-title { color: #f1f5f9; font-size: 16px; font-weight: 680; margin: 0 0 4px; }
+        .enterprise-section-text { color: #7f8996; font-size: 12px; line-height: 1.5; margin: 0; }
+        .enterprise-status { display: flex; align-items: center; gap: 9px; padding: 11px 13px; background: #0b0d10; border: 1px solid #242930; border-radius: 7px; color: #aab2bd; font-size: 11px; }
+        .enterprise-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 0 3px rgba(45,212,191,.10); }
+        .enterprise-home-head { padding: 8px 0 22px; border-bottom: 1px solid #242930; margin-bottom: 20px; }
+        .enterprise-home-title { color: #f8fafc; font-size: 31px; font-weight: 720; letter-spacing: -.03em; margin: 0 0 7px; }
+        .enterprise-home-copy { color: #7f8996; font-size: 13px; margin: 0; max-width: 760px; }
+        .operation-row { min-height: 82px; display: flex; align-items: center; gap: 16px; padding: 15px 17px; background: #0b0d10; border: 1px solid #242930; border-radius: 7px; }
+        .operation-index { color: #4f8cff; font-size: 11px; font-weight: 800; letter-spacing: .08em; width: 34px; }
+        .operation-name { color: #eef2f7; font-size: 14px; font-weight: 660; margin-bottom: 4px; }
+        .operation-copy { color: #77818e; font-size: 11px; line-height: 1.45; }
+        div[data-testid="stSegmentedControl"] { margin: 2px 0 16px; }
+        div[data-testid="stSegmentedControl"] button { min-height: 38px; border-color: #2a3039 !important; background: #0b0d10 !important; color: #8d96a3 !important; }
+        div[data-testid="stSegmentedControl"] button[aria-pressed="true"] { background: #182235 !important; color: #eaf1ff !important; border-color: #35558a !important; }
+        div[data-testid="stFileUploaderDropzone"] { min-height: 92px; }
+        div[data-testid="stFileUploaderDropzone"] button { background: #1b2330 !important; border-color: #344156 !important; color: #dbe7f7 !important; }
+        div[data-testid="stFileUploaderDropzone"]:hover { border-color: #4f8cff; background: #0a0d12; }
+
         @media (max-width: 760px) {
             .block-container { padding: 1.25rem 1rem 3rem; }
             .hero-shell { padding: 22px; border-radius: 8px; }
             .tool-card { min-height: 180px; }
             .metric-value { font-size: 17px; }
+            .enterprise-context { grid-template-columns: 1fr; }
+            .enterprise-context-item { border-right: 0; border-bottom: 1px solid #242930; }
+            .enterprise-context-item:last-child { border-bottom: 0; }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -221,6 +253,44 @@ def renderizar_area_upload(titulo, descricao, formatos):
     etiquetas = ''.join(
         f'<span class="upload-format">{formato.upper()}</span>'
         for formato in formatos
+    )
+
+def seletor_segmentado(rotulo, opcoes, chave, padrao=None):
+    """Segmented control com compatibilidade para versões antigas do Streamlit."""
+    padrao = padrao or opcoes[0]
+    if hasattr(st, 'segmented_control'):
+        valor = st.segmented_control(
+            rotulo, opcoes, default=padrao, key=chave, selection_mode='single'
+        )
+        return valor or padrao
+    return st.radio(
+        rotulo, opcoes, index=opcoes.index(padrao), horizontal=True, key=chave
+    )
+
+def seletor_multiplas_opcoes(rotulo, opcoes, chave, padrao=None):
+    """Pílulas quando disponíveis; multiselect nas versões anteriores."""
+    padrao = padrao or [opcoes[0]]
+    if hasattr(st, 'pills'):
+        return st.pills(
+            rotulo, opcoes, default=padrao, selection_mode='multi', key=chave
+        ) or []
+    return st.multiselect(rotulo, opcoes, default=padrao, key=chave)
+
+def renderizar_contexto_enterprise(empresa, estabelecimento, bancos):
+    bancos_texto = ', '.join(bancos) if bancos else 'Nenhum selecionado'
+    st.markdown(
+        f'''<div class="enterprise-context">
+            <div class="enterprise-context-item"><div class="enterprise-context-label">Empresa</div><div class="enterprise-context-value">{empresa}</div></div>
+            <div class="enterprise-context-item"><div class="enterprise-context-label">Estabelecimento</div><div class="enterprise-context-value">{estabelecimento}</div></div>
+            <div class="enterprise-context-item"><div class="enterprise-context-label">Bancos em escopo</div><div class="enterprise-context-value">{bancos_texto}</div></div>
+        </div>''', unsafe_allow_html=True
+    )
+
+def renderizar_titulo_secao(titulo, descricao):
+    st.markdown(
+        f'''<div class="enterprise-section"><div class="enterprise-section-title">{titulo}</div>
+        <p class="enterprise-section-text">{descricao}</p></div>''',
+        unsafe_allow_html=True
     )
     st.markdown(
         f'''<div class="upload-guide">
@@ -1889,6 +1959,394 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
 
     return diario, faltando_planilha, a_mais_planilha, ignorados
 
+def obter_contexto_nova_geracao(estabelecimento):
+    """Centraliza contas e processadores da Matriz e da Filial."""
+    if normalizar_texto(estabelecimento) == 'filial':
+        contas = {'itau': '515', 'bradesco': '514'}
+        bancos = {
+            "Itaú · 98002-6 · contábil 515": {
+                'nome': 'Itaú', 'conta': '98002-6', 'slug': 'itau',
+                'processador': processar_nova_geracao_filial_itau
+            },
+            "Bradesco · 3084-8 · contábil 514": {
+                'nome': 'Bradesco', 'conta': '3084-8', 'slug': 'bradesco',
+                'processador': processar_nova_geracao_filial_bradesco
+            }
+        }
+    else:
+        contas = {'itau': '508', 'bradesco': '9', 'fibra': '506'}
+        bancos = {
+            "Itaú · 99549-5 · contábil 508": {
+                'nome': 'Itaú', 'conta': '99549-5', 'slug': 'itau',
+                'processador': processar_nova_geracao_itau
+            },
+            "Bradesco · 451990-6 · contábil 9": {
+                'nome': 'Bradesco', 'conta': '451990-6', 'slug': 'bradesco',
+                'processador': processar_nova_geracao_bradesco
+            },
+            "Fibra · 673947-1 · contábil 506": {
+                'nome': 'Fibra', 'conta': '673947-1', 'slug': 'fibra',
+                'processador': processar_nova_geracao_fibra
+            }
+        }
+    return contas, bancos
+
+def carregar_estado_base_classificacao():
+    url, chave, senha = obter_config_classificacao_online()
+    base, erro = [], ''
+    if url and chave:
+        try:
+            base = carregar_classificacoes_online()
+        except Exception as exc:
+            erro = str(exc)
+    return url, chave, senha, base, erro
+
+def mostrar_status_base(url, chave, base, erro):
+    if erro:
+        st.error(erro)
+    elif url and chave:
+        st.markdown(
+            f'<div class="enterprise-status"><span class="enterprise-status-dot"></span>'
+            f'Base online conectada · {len(base)} padrões disponíveis</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.warning(
+            "A base online não está configurada. A organização continua disponível, "
+            "mas a classificação automática depende dos Secrets do Supabase."
+        )
+
+def renderizar_resumo_classificacao(resumo):
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Automáticos", resumo['automaticos'])
+    c2.metric("Somente banco", resumo['somente_banco'])
+    c3.metric("Antecipados · 532", resumo['antecipados'])
+    c4.metric("Revisar", resumo['conflitos'])
+    if resumo['banco_nao_identificado']:
+        st.warning(
+            f"{resumo['banco_nao_identificado']} lançamentos permaneceram sem classificação "
+            "porque o banco não foi identificado."
+        )
+    if resumo['parciais_completados']:
+        st.caption(
+            f"{resumo['parciais_completados']} linhas parcialmente preenchidas tiveram "
+            "somente a célula vazia completada."
+        )
+    if resumo['por_nome_empresa']:
+        st.caption(
+            f"{resumo['por_nome_empresa']} lançamentos foram classificados por semelhança "
+            "segura do nome da empresa."
+        )
+
+def operacao_organizar_nova(estabelecimento, chave_estabelecimento, configs):
+    renderizar_titulo_secao(
+        "Organizar planilha bancária",
+        "Envie a planilha consolidada do cliente. O sistema encontra as contas selecionadas e gera uma aba por banco."
+    )
+    renderizar_area_upload(
+        "Arquivo de origem", "Planilha consolidada da Nova Geração.", ["XLSX", "XLS"]
+    )
+    arquivo = st.file_uploader(
+        "Arquivo de origem", type=['xlsx', 'xls'],
+        key=f'ent_org_upload_{chave_estabelecimento}', label_visibility='collapsed'
+    )
+    if not arquivo:
+        st.caption("Após o envio, o período disponível e a prévia serão exibidos aqui.")
+        return
+    try:
+        dados_processados = []
+        for config in configs:
+            principal, retirados = config['processador'](arquivo.getvalue())
+            dados_processados.append((config, principal, retirados))
+        blocos_data = [item[1][['DATA']] for item in dados_processados if not item[1].empty]
+        if not blocos_data:
+            raise ValueError("Nenhum lançamento foi encontrado para os bancos selecionados.")
+        datas = pd.concat(blocos_data, ignore_index=True)
+        datas['DATA'] = pd.to_datetime(datas['DATA'], errors='coerce')
+        datas = datas.dropna(subset=['DATA'])
+        if datas.empty:
+            raise ValueError("Nenhuma data válida foi encontrada.")
+        data_minima, data_maxima = datas['DATA'].min().date(), datas['DATA'].max().date()
+        periodo = st.date_input(
+            "Período do arquivo", value=(data_minima, data_maxima),
+            min_value=data_minima, max_value=data_maxima, format='DD/MM/YYYY',
+            key=f'ent_org_periodo_{chave_estabelecimento}_' + '_'.join(c['slug'] for c in configs)
+        )
+        if not isinstance(periodo, (tuple, list)) or len(periodo) != 2:
+            st.info("Selecione a data inicial e a data final.")
+            return
+        data_inicial, data_final = periodo
+        modelos, retirados_lista, exportacao = [], [], {}
+        for config, principal, retirados in dados_processados:
+            principal = filtrar_dataframe_periodo(principal, data_inicial, data_final)
+            retirados = filtrar_dataframe_periodo(retirados, data_inicial, data_final)
+            modelos.append(principal)
+            retirados_lista.append(retirados)
+            exportacao[config['nome']] = {
+                'principal': principal.sort_values('DATA', kind='stable').reset_index(drop=True),
+                'retirados': retirados.sort_values('DATA', kind='stable').reset_index(drop=True)
+                if not retirados.empty else retirados
+            }
+        df_org = pd.concat(modelos, ignore_index=True)
+        if df_org.empty:
+            st.warning("Nenhum lançamento existe no período selecionado.")
+            return
+        df_org = df_org.sort_values(['DATA', 'DESCRIÇÃO'], kind='stable').reset_index(drop=True)
+        df_retirados = pd.concat(retirados_lista, ignore_index=True)
+        modelo_bytes = None
+        for caminho in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
+            if os.path.exists(caminho):
+                with open(caminho, 'rb') as modelo:
+                    modelo_bytes = modelo.read()
+                break
+        arquivo_final = gerar_excel_nova_geracao(exportacao, modelo_bytes)
+        entradas = df_org.loc[df_org['VALOR'] > 0, 'VALOR'].sum()
+        saidas = df_org.loc[df_org['VALOR'] < 0, 'VALOR'].sum()
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Lançamentos", len(df_org))
+        m2.metric("Retirados", len(df_retirados))
+        m3.metric("Entradas", formatar_moeda(entradas))
+        m4.metric("Movimento líquido", formatar_moeda(entradas + saidas))
+        previa_principal, previa_retirados = st.tabs(['Modelo principal', 'Retirados por segurança'])
+        with previa_principal:
+            exibicao = df_org.copy()
+            exibicao['DATA'] = pd.to_datetime(exibicao['DATA']).dt.strftime('%d/%m/%Y')
+            st.dataframe(formatar_dataframe_moeda_br(exibicao, ['VALOR']), use_container_width=True, height=310)
+        with previa_retirados:
+            if df_retirados.empty:
+                st.info("Nenhum estorno de baixa foi separado.")
+            else:
+                exibicao = df_retirados.copy()
+                exibicao['DATA'] = pd.to_datetime(exibicao['DATA']).dt.strftime('%d/%m/%Y')
+                st.dataframe(formatar_dataframe_moeda_br(exibicao, ['VALOR']), use_container_width=True, height=260)
+        nome_bancos = configs[0]['nome'] if len(configs) == 1 else f'{len(configs)}_Bancos'
+        st.download_button(
+            "Baixar arquivo organizado", data=arquivo_final,
+            file_name=(f"Nova_Geracao_{estabelecimento}_{nome_bancos}_"
+                       f"{data_inicial:%d%m%Y}_a_{data_final:%d%m%Y}_Modelo_Dominio.xlsx"),
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            key=f'ent_org_download_{chave_estabelecimento}', type='primary'
+        )
+    except Exception as exc:
+        st.error(f"Não foi possível organizar a planilha: {exc}")
+
+def operacao_classificar_nova(chave_estabelecimento, contas):
+    renderizar_titulo_secao(
+        "Classificar contas",
+        "Envie somente a planilha final já conferida. Células preenchidas são preservadas; apenas Débito e Crédito vazios podem ser completados."
+    )
+    url, chave, _, base, erro = carregar_estado_base_classificacao()
+    mostrar_status_base(url, chave, base, erro)
+    renderizar_area_upload(
+        "Planilha final conferida", "Arquivo final com os saldos já batidos.", ["XLSX"]
+    )
+    arquivo = st.file_uploader(
+        "Planilha final conferida", type=['xlsx'],
+        key=f'ent_classificar_{chave_estabelecimento}', label_visibility='collapsed'
+    )
+    if not arquivo:
+        return
+    if erro or not base:
+        st.warning("A base online precisa estar conectada e possuir padrões antes da classificação.")
+        return
+    try:
+        saida, resumo = classificar_planilha_final(
+            arquivo.getvalue(), arquivo.name, base, contas
+        )
+        renderizar_resumo_classificacao(resumo)
+        nome = os.path.splitext(arquivo.name)[0]
+        st.download_button(
+            "Baixar planilha classificada", data=saida,
+            file_name=f'{nome}_Classificada.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            key=f'ent_classificada_download_{chave_estabelecimento}', type='primary'
+        )
+    except Exception as exc:
+        st.error(f"Não foi possível classificar a planilha: {exc}")
+
+def operacao_gerenciar_base_nova():
+    renderizar_titulo_secao(
+        "Gerenciar base inteligente",
+        "Importe planilhas já classificadas para ensinar novos fornecedores e padrões. Reimportações não criam duplicidades."
+    )
+    url, chave, senha_admin, base, erro = carregar_estado_base_classificacao()
+    mostrar_status_base(url, chave, base, erro)
+    renderizar_area_upload(
+        "Arquivos de aprendizado", "Pode enviar arquivos separados, uma planilha com vários bancos ou ZIP.",
+        ["XLSX", "XLS", "ZIP"]
+    )
+    arquivos = st.file_uploader(
+        "Arquivos de aprendizado", type=['xlsx', 'xls', 'zip'], accept_multiple_files=True,
+        key='ent_base_arquivos', label_visibility='collapsed'
+    )
+    senha = st.text_input("Senha administrativa", type='password', key='ent_base_senha')
+    if st.button("Importar para a base", key='ent_base_importar', type='primary'):
+        if not url or not chave:
+            st.error("Configure a conexão do Supabase nos Secrets do Streamlit.")
+        elif not senha_admin:
+            st.error("Configure a senha administrativa nos Secrets.")
+        elif not hmac.compare_digest(senha, senha_admin):
+            st.error("Senha administrativa incorreta.")
+        elif not arquivos:
+            st.warning("Selecione pelo menos um arquivo.")
+        else:
+            try:
+                registros = importar_arquivos_classificados(arquivos)
+                quantidade = salvar_classificacoes_online(registros)
+                st.success(f"Base atualizada com {quantidade} padrões.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Não foi possível atualizar a base: {exc}")
+
+def exibir_relatorio_conferencia_banco(nome_banco, df_modelo, df_extrato, df_retirados):
+    st.markdown(f"#### {nome_banco}")
+    if df_modelo.empty:
+        st.warning(f"A planilha final não possui lançamentos do {nome_banco} no período.")
+        return
+    if df_extrato.empty:
+        st.warning(f"Nenhum lançamento do extrato do {nome_banco} foi identificado no período.")
+        return
+    diario, _, _, _ = conciliar_empresa_com_extrato(df_modelo, df_extrato, df_retirados)
+    if diario.empty:
+        st.warning("Não existem datas válidas para comparar.")
+        return
+    dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())
+    dias_divergentes = int((diario['STATUS'] == '❌ Divergente').sum())
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Dias analisados", len(diario))
+    c2.metric("Dias batendo", dias_batendo)
+    c3.metric("Dias divergentes", dias_divergentes)
+    if dias_divergentes:
+        st.warning("Existem diferenças no movimento diário deste banco.")
+    else:
+        st.success("Todos os dias deste banco estão batendo.")
+    with st.expander("Entender os valores acumulados"):
+        st.markdown(
+            "O acumulado soma os movimentos desde o primeiro dia escolhido. Ele não representa "
+            "o saldo real da conta, pois não inclui o saldo inicial. A diferença acumulada mostra "
+            "quanto das divergências anteriores ainda permanece sem correção."
+        )
+    exibicao = diario.copy()
+    exibicao['DATA'] = exibicao['DATA'].dt.strftime('%d/%m/%Y')
+    monetarias = [
+        'TOTAL EXTRATO', 'TOTAL PLANILHA', 'DIFERENÇA DO DIA',
+        'ACUMULADO EXTRATO', 'ACUMULADO PLANILHA', 'DIFERENÇA ACUMULADA'
+    ]
+    st.dataframe(
+        formatar_dataframe_moeda_br(exibicao, monetarias),
+        use_container_width=True, height=360
+    )
+
+def operacao_conferir_nova(chave_estabelecimento, configs):
+    renderizar_titulo_secao(
+        "Conferir extratos bancários",
+        "Compare uma planilha final — inclusive com vários bancos — com os extratos do mesmo período. Cada banco recebe seu próprio relatório."
+    )
+    renderizar_area_upload(
+        "Planilha final para conferência", "Pode conter um ou vários bancos em abas separadas.",
+        ["XLSX", "XLS"]
+    )
+    planilha = st.file_uploader(
+        "Planilha final para conferência", type=['xlsx', 'xls'],
+        key=f'ent_conf_planilha_{chave_estabelecimento}', label_visibility='collapsed'
+    )
+    if not planilha:
+        st.caption("A seleção do período e o envio dos extratos serão liberados após a leitura da planilha.")
+        return
+    try:
+        dados_bancos, datas_validas, detectados = {}, [], set()
+        for config in configs:
+            principal, retirados, bancos_detectados = ler_planilha_organizada_conferencia(
+                planilha.getvalue(), config['slug']
+            )
+            detectados.update(bancos_detectados)
+            dados_bancos[config['slug']] = {'modelo': principal, 'retirados': retirados}
+            if not principal.empty:
+                serie = pd.to_datetime(principal['DATA'], dayfirst=True, errors='coerce').dropna()
+                datas_validas.extend(serie.tolist())
+        if not datas_validas:
+            st.error("Não foram encontrados lançamentos dos bancos selecionados na planilha final.")
+            return
+        data_minima = min(datas_validas).date()
+        data_maxima = max(datas_validas).date()
+        periodo = st.date_input(
+            "Período da conferência", value=(data_minima, data_maxima),
+            min_value=data_minima, max_value=data_maxima, format='DD/MM/YYYY',
+            key=f'ent_conf_periodo_{chave_estabelecimento}_' + '_'.join(c['slug'] for c in configs)
+        )
+        if not isinstance(periodo, (tuple, list)) or len(periodo) != 2:
+            st.info("Selecione a data inicial e a data final.")
+            return
+        data_inicial, data_final = periodo
+        for config in configs:
+            chave = config['slug']
+            dados_bancos[chave]['modelo'] = filtrar_dataframe_periodo(
+                dados_bancos[chave]['modelo'], data_inicial, data_final
+            )
+            dados_bancos[chave]['retirados'] = filtrar_dataframe_periodo(
+                dados_bancos[chave]['retirados'], data_inicial, data_final
+            )
+        renderizar_area_upload(
+            "Extratos do mesmo período",
+            "Envie um ou vários arquivos. O banco é identificado pelo conteúdo, conta ou nome do arquivo.",
+            ["PDF", "OFX", "CSV", "XLSX", "XLS"]
+        )
+        extratos = st.file_uploader(
+            "Extratos do mesmo período", type=['pdf', 'ofx', 'csv', 'xlsx', 'xls'],
+            accept_multiple_files=True,
+            key=f'ent_conf_extratos_{chave_estabelecimento}_' + '_'.join(c['slug'] for c in configs),
+            label_visibility='collapsed'
+        )
+        if not extratos:
+            return
+        por_banco = {config['slug']: [] for config in configs}
+        nao_identificados = []
+        for arquivo in extratos:
+            registros = processar_extrato_conferencia_empresa(arquivo.getvalue(), arquivo.name)
+            df_arquivo = filtrar_dataframe_periodo(
+                pd.DataFrame(registros), data_inicial, data_final
+            )
+            if df_arquivo.empty:
+                continue
+            chave_nome = identificar_chave_banco_empresa(arquivo.name)
+            if chave_nome in por_banco:
+                por_banco[chave_nome].extend(df_arquivo.to_dict('records'))
+                continue
+            chaves_linhas = df_arquivo['DESCRIÇÃO'].apply(identificar_chave_banco_empresa)
+            reconhecidas = {item for item in chaves_linhas.unique().tolist() if item in por_banco}
+            if reconhecidas:
+                for chave in reconhecidas:
+                    por_banco[chave].extend(
+                        df_arquivo[chaves_linhas.eq(chave)].to_dict('records')
+                    )
+            elif len(configs) == 1:
+                por_banco[configs[0]['slug']].extend(df_arquivo.to_dict('records'))
+            else:
+                nao_identificados.append(arquivo.name)
+        if nao_identificados:
+            st.warning("Banco não identificado nestes arquivos: " + ', '.join(nao_identificados))
+        if not any(por_banco.values()):
+            st.warning("Nenhum lançamento dos extratos foi encontrado dentro do período escolhido.")
+            return
+        if len(configs) == 1:
+            config = configs[0]
+            dados = dados_bancos[config['slug']]
+            exibir_relatorio_conferencia_banco(
+                config['nome'], dados['modelo'], pd.DataFrame(por_banco[config['slug']]),
+                dados['retirados']
+            )
+        else:
+            abas = st.tabs([config['nome'] for config in configs])
+            for aba, config in zip(abas, configs):
+                with aba:
+                    dados = dados_bancos[config['slug']]
+                    exibir_relatorio_conferencia_banco(
+                        config['nome'], dados['modelo'],
+                        pd.DataFrame(por_banco[config['slug']]), dados['retirados']
+                    )
+    except Exception as exc:
+        st.error(f"Não foi possível realizar a conferência: {exc}")
+
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
@@ -1935,7 +2393,7 @@ st.sidebar.markdown(
         border-radius:12px;background:rgba(15,23,42,.4);">
         <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
         <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 14.0</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 15.0 Enterprise</div>
     </div>""",
     unsafe_allow_html=True
 )
@@ -1944,6 +2402,33 @@ st.sidebar.markdown(
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
+    st.markdown(
+        '''<div class="enterprise-home-head"><div class="page-kicker">Plataforma Contábil Pro</div>
+        <div class="enterprise-home-title">Central de operações</div>
+        <p class="enterprise-home-copy">Escolha um fluxo. Cada área mostra somente os controles necessários para concluir a tarefa.</p></div>''',
+        unsafe_allow_html=True
+    )
+    operacoes_home = [
+        ("01", "Conversor de extratos", "Padronize PDF, OFX, CSV ou Excel para o modelo da Domínio.", "extratos"),
+        ("02", "Organizador por empresa", "Organize, confira e classifique os arquivos da Nova Geração.", "organizador"),
+        ("03", "Conciliação com razão", "Compare extrato e razão contábil por data e valor.", "razao")
+    ]
+    for indice, nome, descricao, destino in operacoes_home:
+        coluna_info, coluna_acao = st.columns([7, 1.25])
+        with coluna_info:
+            st.markdown(
+                f'''<div class="operation-row"><div class="operation-index">{indice}</div><div>
+                <div class="operation-name">{nome}</div><div class="operation-copy">{descricao}</div>
+                </div></div>''', unsafe_allow_html=True
+            )
+        with coluna_acao:
+            if st.button("Abrir →", key=f'ent_home_{destino}', use_container_width=True,
+                         type='primary' if destino == 'organizador' else 'secondary'):
+                mudar_pagina(destino)
+                st.rerun()
+        st.markdown("<div style='height:7px'></div>", unsafe_allow_html=True)
+
+if False:
     st.markdown(
         """<div class="hero-shell">
             <div class="eyebrow">Plataforma Contábil Pro</div>
@@ -2149,6 +2634,66 @@ elif st.session_state['pagina_ativa'] == 'extratos':
 # TELA 3: ORGANIZADOR DE PLANILHAS POR EMPRESA
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'organizador':
+    topo_voltar, topo_titulo = st.columns([1, 8])
+    with topo_voltar:
+        if st.button("← Voltar", key='ent_voltar_organizador', use_container_width=True):
+            mudar_pagina('home')
+            st.rerun()
+    with topo_titulo:
+        st.markdown(
+            '''<div class="enterprise-shell"><div class="page-kicker">Workspace por empresa</div>
+            <div class="enterprise-title">Operações bancárias</div>
+            <p class="enterprise-subtitle">Organize, confira e classifique os arquivos em fluxos separados.</p></div>''',
+            unsafe_allow_html=True
+        )
+
+    st.markdown("##### Empresa")
+    empresa_enterprise = seletor_segmentado(
+        "Empresa", ["Nova Geração", "Empresa 2 · em breve"],
+        'ent_empresa', 'Nova Geração'
+    )
+    if empresa_enterprise != 'Nova Geração':
+        st.info("A segunda empresa ainda não possui regras configuradas.")
+    else:
+        coluna_estabelecimento, coluna_operacao = st.columns([1.2, 3])
+        with coluna_estabelecimento:
+            estabelecimento = seletor_segmentado(
+                "Estabelecimento", ["Matriz", "Filial"],
+                'ent_estabelecimento', 'Matriz'
+            )
+        chave_estabelecimento = normalizar_texto(estabelecimento)
+        contas, configuracoes = obter_contexto_nova_geracao(estabelecimento)
+        with coluna_operacao:
+            operacao = seletor_segmentado(
+                "Operação",
+                ["Organizar planilha", "Conferir extratos", "Classificar contas", "Gerenciar base"],
+                'ent_operacao', 'Organizar planilha'
+            )
+
+        opcoes_bancos = list(configuracoes.keys())
+        bancos_escolhidos = seletor_multiplas_opcoes(
+            "Bancos", opcoes_bancos,
+            f'ent_bancos_{chave_estabelecimento}_{normalizar_texto(operacao)}',
+            [opcoes_bancos[0]]
+        )
+        configs = [configuracoes[item] for item in bancos_escolhidos]
+        renderizar_contexto_enterprise(
+            "Nova Geração", estabelecimento, [config['nome'] for config in configs]
+        )
+
+        if operacao != "Gerenciar base" and not configs:
+            st.info("Selecione pelo menos um banco para continuar.")
+        elif operacao == "Organizar planilha":
+            operacao_organizar_nova(estabelecimento, chave_estabelecimento, configs)
+        elif operacao == "Conferir extratos":
+            operacao_conferir_nova(chave_estabelecimento, configs)
+        elif operacao == "Classificar contas":
+            operacao_classificar_nova(chave_estabelecimento, contas)
+        else:
+            operacao_gerenciar_base_nova()
+
+# Fluxo anterior mantido desativado apenas como referência de migração.
+elif False and st.session_state['pagina_ativa'] == 'organizador':
     col_voltar, col_tit = st.columns([1.2, 8.8])
     with col_voltar:
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
