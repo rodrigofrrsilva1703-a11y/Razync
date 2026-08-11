@@ -22,217 +22,35 @@ import traceback
 # Configuração da página Web
 st.set_page_config(
     page_title="Plataforma Contábil Pro", 
-    page_icon="📊", 
+    page_icon="🤖", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ==============================================================================
-# DESIGN SYSTEM — INTERFACE MODERNA E RESPONSIVA
+# ESTILIZAÇÃO CSS DARK MODE
 # ==============================================================================
 st.markdown("""
     <style>
-        :root {
-            --bg: #050505;
-            --surface: #0d0f12;
-            --surface-strong: #12151a;
-            --border: #242930;
-            --border-strong: #3b424d;
-            --text: #f5f7fa;
-            --muted: #8d96a3;
-            --primary: #4f8cff;
-            --primary-2: #78a7ff;
-            --teal: #2dd4bf;
-            --amber: #fbbf24;
-            --violet: #a78bfa;
-            --success: #2dd4bf;
-            --danger: #fb7185;
-        }
-        html, body, [class*="css"] { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-        .stApp { background: var(--bg); color: var(--text); }
-        .block-container { padding: 2rem 2.25rem 4rem; max-width: 1400px; }
-        h1 { letter-spacing: -0.025em !important; font-size: clamp(1.9rem, 3vw, 2.6rem) !important; }
-        h2, h3 { letter-spacing: -0.015em !important; }
-        hr { border-color: var(--border) !important; margin: 1.7rem 0 !important; }
-
-        section[data-testid="stSidebar"] {
-            background: #000000;
-            border-right: 1px solid var(--border);
-            min-width: 270px !important;
-        }
-        section[data-testid="stSidebar"] .block-container { padding: 1.35rem 1rem 2rem !important; }
-        .sidebar-brand {
-            padding: 14px 14px 18px;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 14px;
-        }
-        .brand-mark {
-            width: 38px; height: 38px; border-radius: 8px;
-            display: inline-flex; align-items: center; justify-content: center;
-            color: white; font-weight: 800; font-size: 17px;
-            background: #111827;
-            border: 1px solid #263247;
-            color: #78a7ff;
-            box-shadow: none;
-            margin-bottom: 12px;
-        }
-        .brand-name { color: var(--text); font-size: 16px; font-weight: 750; margin: 0; }
-        .brand-subtitle { color: var(--muted); font-size: 11px; margin: 3px 0 0; }
-        .sidebar-section { color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; padding: 12px 9px 7px; }
-
-        .stButton > button, .stDownloadButton > button {
-            width: 100% !important; min-height: 42px;
-            border-radius: 6px !important; font-weight: 600 !important;
-            padding: .58rem 1rem !important;
-            border: 1px solid var(--border) !important;
-            background: #111318 !important;
-            color: #c9d1d9 !important;
-            transition: border-color .15s ease, background .15s ease;
-            box-shadow: none !important;
-        }
-        .stButton > button:hover, .stDownloadButton > button:hover {
-            background: #191d23 !important;
-            border-color: #454d59 !important;
-            color: white !important;
-            box-shadow: none !important;
-        }
-        button[kind="primary"] {
-            background: var(--primary) !important;
-            border-color: #58a6ff !important; color: white !important;
-            box-shadow: none !important;
-        }
-        section[data-testid="stSidebar"] .stButton > button {
-            justify-content: flex-start !important; min-height: 44px;
-            background: transparent !important; border-color: transparent !important;
-            color: #94a3b8 !important; padding-left: 13px !important;
-        }
-        section[data-testid="stSidebar"] .stButton > button:hover {
-            background: #0d0f12 !important;
-            border-color: #242930 !important; color: #f5f7fa !important;
-        }
-        section[data-testid="stSidebar"] button[kind="primary"] {
-            background: #111827 !important;
-            border-color: #263c61 !important;
-            color: white !important; box-shadow: none !important;
-        }
-
-        .hero-shell {
-            padding: 28px 30px;
-            border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px;
-            background: var(--surface);
-            box-shadow: none;
-            margin-bottom: 28px;
-        }
-        .hero-shell:after {
-            display: none;
-        }
-        .eyebrow { color: #8b949e; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 9px; }
-        .hero-title { max-width: 820px; color: white; font-size: clamp(1.8rem, 3vw, 2.35rem); line-height: 1.15; letter-spacing: -.025em; font-weight: 700; margin: 0 0 11px; }
-        .hero-title span { color: white; }
-        .hero-subtitle { max-width: 800px; color: #8b949e; font-size: 14px; line-height: 1.6; margin: 0; }
-        .hero-badges { display: none; }
-        .hero-badge { padding: 7px 11px; border-radius: 999px; border: 1px solid var(--border); background: rgba(15,23,42,.65); color: #cbd5e1; font-size: 11px; font-weight: 650; }
-
-        .page-header { margin: 4px 0 22px; }
-        .page-kicker { color: #8b949e; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
-        .page-title { color: white; font-size: clamp(1.65rem, 3vw, 2.25rem); line-height: 1.12; font-weight: 700; letter-spacing: -.025em; margin: 0 0 8px; }
-        .page-subtitle { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0; max-width: 880px; }
-
-        .tool-card {
-            position: relative; background: var(--surface);
-            border: 1px solid var(--border); padding: 22px; border-radius: 8px;
-            min-height: 182px; display: flex; flex-direction: column; align-items: flex-start;
-            transition: border-color .15s ease;
-        }
-        .tool-card:before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--primary); border-radius: 8px 8px 0 0; }
-        .tool-card.accent-teal:before { background: var(--teal); }
-        .tool-card.accent-violet:before { background: var(--violet); }
-        .tool-card:hover { border-color: var(--border-strong); box-shadow: none; }
-        .tool-icon { width: 38px; height: 38px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 17px; background: #111318; border: 1px solid #272d35; color: #78a7ff; margin-bottom: 18px; }
-        .tool-tag { position: absolute; right: 15px; top: 15px; color: #6e7681; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-        .tool-title { color: white; font-size: 16px; font-weight: 650; margin: 0 0 7px; }
-        .tool-description { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0; text-align: left; }
-
-        .workflow-strip { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 22px; }
-        .workflow-step { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 6px; background: #161b22; border: 1px solid var(--border); color: #8b949e; font-size: 11px; font-weight: 600; }
-        .workflow-step b { width: 18px; height: 18px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; color: #c9d1d9; background: #30363d; font-size: 9px; }
-
-        .metric-card { background: var(--surface); border: 1px solid var(--border); border-top: 2px solid #303844; padding: 16px; border-radius: 8px; text-align: left; min-height: 84px; box-shadow: none; }
-        .metric-title { font-size: 10px; color: #8290a5; text-transform: uppercase; font-weight: 800; margin-bottom: 8px; letter-spacing: .08em; }
-        .metric-value { font-size: 20px; color: var(--text); font-weight: 780; letter-spacing: -.02em; }
-
-        .upload-guide { display: flex; align-items: center; gap: 14px; padding: 15px 17px; margin: 8px 0 10px; background: #0d0f12; border: 1px solid #242930; border-radius: 8px; }
-        .upload-guide-icon { width: 42px; height: 42px; flex: 0 0 42px; display: flex; align-items: center; justify-content: center; border-radius: 7px; background: rgba(45,212,191,.08); border: 1px solid rgba(45,212,191,.22); color: var(--teal); font-size: 19px; font-weight: 700; }
-        .upload-guide-content { min-width: 0; flex: 1; }
-        .upload-guide-title { color: #f5f7fa; font-size: 14px; font-weight: 650; margin-bottom: 3px; }
-        .upload-guide-text { color: #7f8996; font-size: 11px; line-height: 1.45; }
-        .upload-formats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
-        .upload-format { padding: 2px 7px; border-radius: 4px; background: #15181d; border: 1px solid #292f38; color: #aab2bd; font-size: 9px; font-weight: 700; letter-spacing: .04em; }
-        div[data-testid="stFileUploader"] { padding: 0; border: none; background: transparent; }
-        div[data-testid="stFileUploaderDropzone"] { min-height: 128px; display: flex; align-items: center; background: #08090b; border: 1px dashed #343b45; border-radius: 8px; transition: border-color .15s ease, background .15s ease; }
-        div[data-testid="stFileUploaderDropzone"]:hover { background: #0b0d10; border-color: var(--teal); }
-        div[data-testid="stFileUploaderDropzone"] button { background: var(--teal) !important; border-color: var(--teal) !important; color: #04110f !important; font-weight: 750 !important; }
-        div[data-testid="stFileUploaderDropzoneInstructions"] { color: #aab2bd !important; }
-        div[data-testid="stFileUploaderFile"] { background: #0d0f12; border: 1px solid #242930; border-radius: 7px; padding: 8px 10px; }
-        span[data-baseweb="tag"] { background: #15181d !important; color: #c9d1d9 !important; border: 1px solid #2b313a !important; }
-        div[data-baseweb="select"] > div, .stTextInput input, .stDateInput input, .stNumberInput input {
-            background: #08090b !important; border-color: var(--border) !important; border-radius: 6px !important;
-        }
-        div[data-baseweb="tab-list"] { gap: 7px; border-bottom: 1px solid var(--border); }
-        button[data-baseweb="tab"] { border-radius: 4px 4px 0 0; padding: 9px 14px; color: var(--muted); }
-        button[data-baseweb="tab"][aria-selected="true"] { color: white; background: #21262d; }
-        div[data-testid="stExpander"] { border: 1px solid var(--border); border-radius: 8px; background: #161b22; overflow: hidden; }
-        div[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-        div[data-testid="stAlert"] { border-radius: 8px; border: 1px solid var(--border); }
-        .alerta-dominio { background: rgba(127,29,29,.22); border: 1px solid rgba(248,113,113,.25); border-left: 4px solid var(--danger); padding: 16px; border-radius: 13px; margin-bottom: 20px; }
-        .alerta-dominio h4 { margin-top: 0; color: #fda4af; font-size: 15px; }
-        .alerta-dominio p { margin-bottom: 0; color: #cbd5e1; font-size: 13px; }
-        .aviso-banner { background: rgba(30,41,59,.52); border: 1px solid var(--border); padding: 14px 16px; border-radius: 13px; margin-bottom: 20px; }
-        .aviso-banner p { margin: 0; color: #cbd5e1; font-size: 13px; }
+        .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 100%; }
+        .stButton>button { width: 100% !important; border-radius: 6px !important; font-weight: 500 !important; padding: 0.45rem 1rem !important; border: 1px solid #30363d !important; background-color: #21262d !important; color: #c9d1d9 !important; transition: all 0.2s ease; box-shadow: none !important; }
+        .stButton>button:hover { background-color: #30363d !important; border-color: #8b949e !important; color: #ffffff !important; }
+        .metric-card { background-color: #161b22; border: 1px solid #30363d; padding: 14px; border-radius: 8px; text-align: center; }
+        .metric-title { font-size: 11px; color: #8b949e; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; letter-spacing: 0.5px; }
+        .metric-value { font-size: 18px; color: #f0f6fc; font-weight: 700; }
+        section[data-testid="stSidebar"] { background-color: #0d1117; border-right: 1px solid #30363d; }
+        .tool-card { background-color: #161b22; border: 1px solid #30363d; padding: 24px 20px; border-radius: 8px; text-align: center; height: 160px; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: border-color 0.2s ease; }
+        .tool-card:hover { border-color: #8b949e; }
+        .alerta-dominio { background-color: #3d1c1c; border-left: 5px solid #f85149; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
+        .alerta-dominio h4 { margin-top: 0; color: #f85149; font-size: 16px; }
+        .alerta-dominio p { margin-bottom: 0; color: #c9d1d9; font-size: 14px; }
+        .aviso-banner { background-color: #161b22; border: 1px solid #30363d; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; }
+        .aviso-banner p { margin: 0; color: #c9d1d9; font-size: 14px; }
+        
+        /* Alinhamento perfeito entre date_input e text_input */
         .stTextInput { margin-top: -2px; }
-
-        @media (max-width: 760px) {
-            .block-container { padding: 1.25rem 1rem 3rem; }
-            .hero-shell { padding: 22px; border-radius: 8px; }
-            .tool-card { min-height: 180px; }
-            .metric-value { font-size: 17px; }
-        }
     </style>
 """, unsafe_allow_html=True)
-
-def renderizar_cabecalho_pagina(rotulo, titulo, subtitulo):
-    st.markdown(
-        f'''<div class="page-header">
-            <div class="page-kicker">{rotulo}</div>
-            <div class="page-title">{titulo}</div>
-            <p class="page-subtitle">{subtitulo}</p>
-        </div>''',
-        unsafe_allow_html=True
-    )
-
-def renderizar_etapas(etapas):
-    itens = ''.join(
-        f'<span class="workflow-step"><b>{indice}</b>{texto}</span>'
-        for indice, texto in enumerate(etapas, start=1)
-    )
-    st.markdown(f'<div class="workflow-strip">{itens}</div>', unsafe_allow_html=True)
-
-def renderizar_area_upload(titulo, descricao, formatos):
-    etiquetas = ''.join(
-        f'<span class="upload-format">{formato.upper()}</span>'
-        for formato in formatos
-    )
-    st.markdown(
-        f'''<div class="upload-guide">
-            <div class="upload-guide-icon">↑</div>
-            <div class="upload-guide-content">
-                <div class="upload-guide-title">{titulo}</div>
-                <div class="upload-guide-text">{descricao}</div>
-                <div class="upload-formats">{etiquetas}</div>
-            </div>
-        </div>''',
-        unsafe_allow_html=True
-    )
 
 # ==============================================================================
 # FUNÇÕES DE LIMPEZA E FORMATAÇÃO (MECÂNICAS)
@@ -1896,90 +1714,46 @@ if 'pagina_ativa' not in st.session_state: st.session_state['pagina_ativa'] = 'h
 def mudar_pagina(nome_pagina): st.session_state['pagina_ativa'] = nome_pagina
 
 # ==============================================================================
-# BARRA LATERAL
+# BARRA LATERAL DARK MINIMALISTA
 # ==============================================================================
-st.sidebar.markdown(
-    """<div class="sidebar-brand">
-        <div class="brand-mark">CP</div>
-        <p class="brand-name">Contábil Pro</p>
-        <p class="brand-subtitle">Automação e conferência bancária</p>
-    </div>
-    <div class="sidebar-section">Navegação</div>""",
-    unsafe_allow_html=True
-)
+st.sidebar.markdown("<p style='font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 0px;'>Hub Contábil</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 11px; color: #8b949e; margin-top: 2px;'>Domínio Systems</p>", unsafe_allow_html=True)
+st.sidebar.markdown("---")
 
-pagina_atual = st.session_state['pagina_ativa']
-if st.sidebar.button(
-    "⌂  Visão geral", use_container_width=True, key="sb_home",
-    type="primary" if pagina_atual == 'home' else "secondary"
-):
-    mudar_pagina('home'); st.rerun()
-if st.sidebar.button(
-    "⇄  Conversor de extratos", use_container_width=True, key="sb_extratos",
-    type="primary" if pagina_atual == 'extratos' else "secondary"
-):
-    mudar_pagina('extratos'); st.rerun()
-if st.sidebar.button(
-    "✓  Conciliação com razão", use_container_width=True, key="sb_razao",
-    type="primary" if pagina_atual == 'razao' else "secondary"
-):
-    mudar_pagina('razao'); st.rerun()
-if st.sidebar.button(
-    "▦  Organizador de planilhas", use_container_width=True, key="sb_organizador",
-    type="primary" if pagina_atual == 'organizador' else "secondary"
-):
-    mudar_pagina('organizador'); st.rerun()
-
-st.sidebar.markdown(
-    """<div style="margin:24px 9px 0;padding:13px;border:1px solid rgba(148,163,184,.13);
-        border-radius:12px;background:rgba(15,23,42,.4);">
-        <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
-        <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 14.0</div>
-    </div>""",
-    unsafe_allow_html=True
-)
+if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_pagina('home')
+if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
+if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
+if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
+st.sidebar.markdown("---")
+st.sidebar.markdown("<p style='font-size: 10px; color: #8b949e; text-align: center;'>v12.1 · Clear View</p>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
-    st.markdown(
-        """<div class="hero-shell">
-            <div class="eyebrow">Plataforma Contábil Pro</div>
-            <h1 class="hero-title">Central de operações contábeis</h1>
-            <p class="hero-subtitle">Conversão de extratos, organização de planilhas e conferência de lançamentos em um único ambiente.</p>
-            <div class="hero-badges">
-                <span class="hero-badge">Conversão inteligente</span>
-                <span class="hero-badge">Conferência diária</span>
-                <span class="hero-badge">Classificação automática</span>
-                <span class="hero-badge">Matriz e filial</span>
-            </div>
-        </div>""",
-        unsafe_allow_html=True
-    )
-    st.markdown("<div class='page-kicker'>Ferramentas</div>", unsafe_allow_html=True)
-    st.markdown("<p class='page-subtitle' style='margin-bottom:18px;'>Selecione a operação que deseja realizar.</p>", unsafe_allow_html=True)
+    st.title("Início")
+    st.caption("Selecione uma ferramenta abaixo para começar.")
+    st.markdown("<br>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
     
     with col_t1:
-        st.markdown("""<div class="tool-card"><span class="tool-tag">Universal</span><div class="tool-icon">⇄</div><p class="tool-title">Conversor de Extratos</p><p class="tool-description">Transforme PDF, OFX, Excel ou CSV em um arquivo padronizado e pronto para importar na Domínio.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar conversor", use_container_width=True, key="btn_abrir_extratos", type="primary"):
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">📊</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conversor de Extratos</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta extratos para o formato de importação da Domínio.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        if st.button("Acessar", use_container_width=True, key="btn_abrir_extratos"):
             mudar_pagina('extratos')
             st.rerun()
             
     with col_t2:
-        st.markdown("""<div class="tool-card accent-teal"><span class="tool-tag">Conferência</span><div class="tool-icon">✓</div><p class="tool-title">Conciliação com Razão</p><p class="tool-description">Compare extrato e razão, acompanhe totais diários e identifique rapidamente os períodos divergentes.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar conciliação", use_container_width=True, key="btn_abrir_razao", type="primary"):
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🔍</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Conciliação com Razão</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Análise automatizada, rolagem de saldos e auditoria de divergências.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        if st.button("Acessar", use_container_width=True, key="btn_abrir_razao"):
             mudar_pagina('razao')
             st.rerun()
         
     with col_t3:
-        st.markdown("""<div class="tool-card accent-violet"><span class="tool-tag">Por empresa</span><div class="tool-icon">▦</div><p class="tool-title">Organizador de Planilhas</p><p class="tool-description">Aplique regras específicas de cada cliente, classifique contas e faça a conferência dos bancos.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.button("Acessar organizador", use_container_width=True, key="btn_abrir_organizador", type="primary"):
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🗂️</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Organizador de Planilhas</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Converta planilhas específicas de empresas para o Modelo Domínio.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        if st.button("Acessar", use_container_width=True, key="btn_abrir_organizador"):
             mudar_pagina('organizador')
             st.rerun()
 
@@ -1993,23 +1767,11 @@ elif st.session_state['pagina_ativa'] == 'extratos':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home"):
             mudar_pagina('home')
             st.rerun()
-    with col_tit:
-        renderizar_cabecalho_pagina(
-            "Conversão universal",
-            "Conversor de Extratos Bancários",
-            "Envie um ou vários arquivos, confira os lançamentos reconhecidos e exporte no formato da Domínio."
-        )
-    renderizar_etapas(["Enviar extratos", "Definir período", "Conferir lançamentos", "Baixar arquivo"])
+    with col_tit: st.title("Conversor de Extratos Bancários")
+    st.caption("Faça o upload dos arquivos para gerar os layouts compatíveis com a Domínio.")
+    st.markdown("---")
 
-    renderizar_area_upload(
-        "Enviar extratos bancários",
-        "Arraste os arquivos para a área abaixo ou clique no botão para selecionar. É possível enviar vários extratos de uma vez.",
-        ["PDF", "OFX", "CSV", "XLSX", "XLS"]
-    )
-    arquivos = st.file_uploader(
-        "Enviar extratos bancários", type=["pdf", "ofx", "csv", "xlsx", "xls"],
-        accept_multiple_files=True, label_visibility="collapsed"
-    )
+    arquivos = st.file_uploader("Selecione os extratos (PDF, OFX, CSV, Excel)", type=["pdf", "ofx", "csv", "xlsx", "xls"], accept_multiple_files=True)
 
     if arquivos:
         try:
@@ -2155,105 +1917,75 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_org"):
             mudar_pagina('home')
             st.rerun()
-    with col_tit:
-        renderizar_cabecalho_pagina(
-            "Fluxos personalizados",
-            "Organizador de Planilhas",
-            "Escolha a empresa e siga as etapas para organizar, classificar e conferir os lançamentos bancários."
-        )
+    with col_tit: st.title("Organizador de Planilhas")
+    st.caption("Selecione a empresa e aplique as regras específicas para gerar o Modelo Domínio.")
+    st.markdown("---")
+
     if 'empresa_organizador' not in st.session_state:
         st.session_state['empresa_organizador'] = None
 
-    if st.session_state['empresa_organizador'] is None:
-        st.markdown("#### Selecione a empresa")
-        st.caption("As regras de leitura e organização são aplicadas de acordo com a empresa escolhida.")
-        col_emp1, col_emp2 = st.columns(2)
-        with col_emp1:
-            st.markdown("""<div class="tool-card accent-teal"><span class="tool-tag">Disponível</span><div class="tool-icon">NG</div><p class="tool-title">Nova Geração</p><p class="tool-description">Organização de lançamentos da Matriz e da Filial, com Itaú, Bradesco e Fibra conforme cada estabelecimento.</p></div>""", unsafe_allow_html=True)
-            st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-            if st.button("Selecionar Nova Geração", use_container_width=True, key="org_nova_geracao", type="primary"):
-                st.session_state['empresa_organizador'] = 'nova_geracao'
-                st.rerun()
-        with col_emp2:
-            st.markdown("""<div class="tool-card"><span class="tool-tag">Em breve</span><div class="tool-icon">＋</div><p class="tool-title">Nova empresa</p><p class="tool-description">Espaço reservado para adicionar outro cliente com regras próprias de leitura e organização.</p></div>""", unsafe_allow_html=True)
-            st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-            st.button("Em breve", use_container_width=True, disabled=True, key="org_empresa_2")
+    st.markdown("##### Selecione a empresa")
+    col_emp1, col_emp2 = st.columns(2)
+    with col_emp1:
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Nova Geração</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">Organização dos movimentos bancários da matriz.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        if st.button("Selecionar Nova Geração", use_container_width=True, key="org_nova_geracao"):
+            st.session_state['empresa_organizador'] = 'nova_geracao'
+            st.rerun()
+    with col_emp2:
+        st.markdown("""<div class="tool-card"><p style="font-size: 20px; margin-bottom: 8px;">🏢</p><p style="font-weight: 600; color: #f0f6fc; margin-bottom: 4px; font-size: 15px;">Segunda Empresa</p><p style="font-size: 12px; color: #8b949e; line-height: 1.4;">As regras serão configuradas na próxima etapa.</p></div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        st.button("Em breve", use_container_width=True, disabled=True, key="org_empresa_2")
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
-        col_empresa_titulo, col_trocar_empresa = st.columns([5, 1])
-        with col_empresa_titulo:
-            st.markdown("### Nova Geração")
-        with col_trocar_empresa:
-            if st.button("Trocar empresa", key="org_trocar_empresa", use_container_width=True):
-                st.session_state['empresa_organizador'] = None
-                st.rerun()
-        st.caption("Defina o estabelecimento e os bancos presentes na planilha.")
-        coluna_estabelecimento, coluna_bancos = st.columns([1, 2])
-        with coluna_estabelecimento:
-            estabelecimento_nova = st.selectbox(
-                "Estabelecimento",
-                ["Matriz", "Filial"],
-                key="org_estabelecimento_nova_geracao",
-                help="As contas contábeis dos bancos são ajustadas automaticamente."
-            )
+        st.markdown("---")
+        st.markdown("### Nova Geração")
+        estabelecimento_nova = st.radio(
+            "Área da empresa",
+            ["Matriz", "Filial"],
+            horizontal=True,
+            key="org_estabelecimento_nova_geracao",
+            help="Escolha a empresa antes de organizar ou classificar a planilha final."
+        )
         chave_estabelecimento = normalizar_texto(estabelecimento_nova)
         if chave_estabelecimento == 'filial':
             contas_dominio_estabelecimento = {'itau': '515', 'bradesco': '514'}
             configuracoes_bancos = {
-                "Itaú 98002-6  ·  Conta contábil 515": {
+                "Itaú - Conta 98002-6": {
                     "nome": "Itaú", "conta": "98002-6", "slug": "itau",
                     "processador": processar_nova_geracao_filial_itau
                 },
-                "Bradesco 3084-8  ·  Conta contábil 514": {
+                "Bradesco - Conta 3084-8": {
                     "nome": "Bradesco", "conta": "3084-8", "slug": "bradesco",
                     "processador": processar_nova_geracao_filial_bradesco
                 }
             }
+            st.caption(
+                "Filial selecionada — Itaú 98002-6 usa a conta 515 e "
+                "Bradesco 3084-8 usa a conta 514 na classificação."
+            )
         else:
             contas_dominio_estabelecimento = {
                 'itau': '508', 'bradesco': '9', 'fibra': '506'
             }
             configuracoes_bancos = {
-                "Itaú 99549-5  ·  Conta contábil 508": {
+                "Itaú - Conta 99549-5": {
                     "nome": "Itaú", "conta": "99549-5", "slug": "itau",
                     "processador": processar_nova_geracao_itau
                 },
-                "Bradesco 451990-6  ·  Conta contábil 9": {
+                "Bradesco - Conta 451990-6": {
                     "nome": "Bradesco", "conta": "451990-6", "slug": "bradesco",
                     "processador": processar_nova_geracao_bradesco
                 },
-                "Fibra 673947-1  ·  Conta contábil 506": {
+                "Fibra - Conta 673947-1": {
                     "nome": "Fibra", "conta": "673947-1", "slug": "fibra",
                     "processador": processar_nova_geracao_fibra
                 }
             }
-
-        banco_padrao = next(iter(configuracoes_bancos))
-        with coluna_bancos:
-            bancos_empresa = st.multiselect(
-                "Bancos incluídos",
-                list(configuracoes_bancos.keys()),
-                default=[banco_padrao],
-                key=f"org_banco_nova_geracao_{chave_estabelecimento}"
+            st.caption(
+                "Matriz selecionada — Itaú usa a conta 508, Bradesco a conta 9 "
+                "e Fibra a conta 506 na classificação."
             )
-        if not bancos_empresa:
-            st.info("Selecione pelo menos um banco para continuar.")
-            st.stop()
-
-        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
-        renderizar_area_upload(
-            "Planilha bancária consolidada",
-            f"Envie o arquivo da Nova Geração — {estabelecimento_nova}. O sistema localizará somente os bancos selecionados acima.",
-            ["XLSX", "XLS"]
-        )
-        arquivo_empresa = st.file_uploader(
-            "Planilha bancária consolidada",
-            type=["xlsx", "xls"],
-            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}",
-            help="Envie a planilha da Matriz ou da Filial. As contas selecionadas serão localizadas automaticamente.",
-            label_visibility="collapsed"
-        )
-
         url_base_classificacao, chave_base_classificacao, senha_admin_classificacao = (
             obter_config_classificacao_online()
         )
@@ -2265,7 +1997,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             except Exception as erro_base:
                 erro_base_classificacoes = str(erro_base)
 
-        with st.expander("Classificação automática e base inteligente — opcional"):
+        with st.expander("Base inteligente de Débito e Crédito"):
             if erro_base_classificacoes:
                 st.error(erro_base_classificacoes)
             elif url_base_classificacao and chave_base_classificacao:
@@ -2285,17 +2017,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 "A base de fornecedores é compartilhada entre Matriz e Filial, portanto as planilhas "
                 "antigas da Matriz não precisam ser enviadas novamente."
             )
-            renderizar_area_upload(
-                "Atualizar a base inteligente",
-                "Envie planilhas que já possuem Débito e Crédito classificados para ensinar novos padrões ao sistema.",
-                ["XLSX", "XLS", "ZIP"]
-            )
             arquivos_aprendizado = st.file_uploader(
                 "Planilhas classificadas para ensinar o sistema",
                 type=['xlsx', 'xls', 'zip'],
                 accept_multiple_files=True,
-                key='org_base_classificada_nova',
-                label_visibility="collapsed"
+                key='org_base_classificada_nova'
             )
             senha_aprendizado = st.text_input(
                 "Senha administrativa para atualizar a base",
@@ -2332,16 +2058,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 "Anexe somente a planilha final, depois que a conferência bancária estiver "
                 "concluída e os saldos estiverem batendo. O arquivo original não será alterado."
             )
-            renderizar_area_upload(
-                "Planilha final conferida",
-                "Selecione a planilha com os saldos já conciliados. As contas existentes serão preservadas.",
-                ["XLSX"]
-            )
             planilha_final_classificacao = st.file_uploader(
                 "Planilha final com os saldos conferidos",
                 type=['xlsx'],
-                key=f'org_planilha_final_classificacao_nova_{chave_estabelecimento}',
-                label_visibility="collapsed"
+                key=f'org_planilha_final_classificacao_nova_{chave_estabelecimento}'
             )
             if planilha_final_classificacao:
                 if erro_base_classificacoes:
@@ -2427,6 +2147,29 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             f"{erro_classificacao_final}"
                         )
 
+        banco_padrao = next(iter(configuracoes_bancos))
+        bancos_empresa = st.multiselect(
+            "Bancos",
+            list(configuracoes_bancos.keys()),
+            default=[banco_padrao],
+            key=f"org_banco_nova_geracao_{chave_estabelecimento}"
+        )
+        if not bancos_empresa:
+            st.info("Selecione pelo menos um banco para continuar.")
+            st.stop()
+
+        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
+        nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
+        st.caption(
+            f"O sistema localizará automaticamente as contas de {nomes_bancos} dentro da "
+            "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
+        )
+        arquivo_empresa = st.file_uploader(
+            f"Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
+            type=["xlsx", "xls"],
+            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
+        )
+
         if arquivo_empresa:
             try:
                 bytes_empresa = arquivo_empresa.getvalue()
@@ -2453,7 +2196,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
                     + "_".join(config['slug'] for config in configs_selecionadas)
                 )
-                st.markdown("#### Período dos lançamentos")
+                st.markdown("### Período dos lançamentos")
                 periodo_selecionado = st.date_input(
                     "Selecione a data inicial e a data final",
                     value=(data_minima, data_maxima),
@@ -2559,7 +2302,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
 
                 st.markdown("---")
-                st.markdown("#### Conferência com o extrato bancário")
+                st.markdown("### Conferência com o extrato bancário")
                 nomes_disponiveis_conferencia = [
                     config['nome'] for config in configs_selecionadas
                 ]
@@ -2599,11 +2342,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 ]
                 dados_conferencia_por_banco = {}
 
-                renderizar_area_upload(
-                    "Planilha corrigida para nova conferência — opcional",
-                    "Caso tenha corrigido contas ou valores, envie a nova versão. Se não enviar, será usada a planilha organizada acima.",
-                    ["XLSX", "XLS"]
-                )
                 planilha_atualizada_conferencia = st.file_uploader(
                     "Planilha organizada atualizada para conferência (opcional)",
                     type=["xlsx", "xls"],
@@ -2614,8 +2352,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     help=(
                         "Você pode anexar a planilha final com um ou vários bancos. "
                         "O sistema separará somente os bancos escolhidos acima."
-                    ),
-                    label_visibility="collapsed"
+                    )
                 )
                 if planilha_atualizada_conferencia:
                     try:
@@ -2675,10 +2412,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             if not df_retirados.empty else df_retirados.copy()
                         }
 
-                renderizar_area_upload(
-                    "Extratos para conferência",
-                    "Envie os extratos dos bancos escolhidos. Cada banco receberá um relatório diário separado.",
-                    ["PDF", "OFX", "CSV", "XLSX", "XLS"]
+                st.caption(
+                    "Anexe os extratos correspondentes aos bancos escolhidos. "
+                    "Será criado um relatório diário separado para cada banco."
                 )
                 extratos_conferencia = st.file_uploader(
                     "Envie o(s) extrato(s) bancário(s) para conferência",
@@ -2687,8 +2423,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     key=(
                         f"org_extratos_conferencia_nova_{chave_estabelecimento}_"
                         + "_".join(config['slug'] for config in configs_conferencia)
-                    ),
-                    label_visibility="collapsed"
+                    )
                 )
 
                 if extratos_conferencia:
@@ -2822,37 +2557,15 @@ elif st.session_state['pagina_ativa'] == 'razao':
     with col_voltar:
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_razao"): mudar_pagina('home'); st.rerun()
-    with col_tit:
-        renderizar_cabecalho_pagina(
-            "Auditoria de movimentos",
-            "Conciliação: Extrato x Razão",
-            "Compare entradas e saídas diariamente e encontre rapidamente datas com diferença."
-        )
-    renderizar_etapas(["Enviar extrato", "Enviar razão", "Analisar diferenças", "Exportar conferência"])
+    with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
+    
+    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas do Extrato com o Razão da Domínio.")
     st.markdown("""<div class="aviso-banner"><p>⚠️ <strong>Dica para o Razão da Domínio:</strong> Para evitar erros de leitura, abra o relatório <code>.xls</code> antigo no Excel e salve-o como <strong>CSV (separado por vírgulas)</strong> antes de anexar abaixo.</p></div>""", unsafe_allow_html=True)
 
-    st.markdown("#### 1. Arquivos para comparação")
+    st.markdown("##### 📁 Arquivos de Importação")
     col_up1, col_up2 = st.columns(2)
-    with col_up1:
-        renderizar_area_upload(
-            "Extrato bancário",
-            "Envie o extrato correspondente ao período que será analisado.",
-            ["PDF", "OFX", "CSV", "XLSX", "XLS"]
-        )
-        arq_extrato = st.file_uploader(
-            "Extrato bancário", type=["pdf", "ofx", "csv", "xlsx", "xls"],
-            key="up_extrato", label_visibility="collapsed"
-        )
-    with col_up2:
-        renderizar_area_upload(
-            "Razão da Domínio",
-            "Envie o razão do mesmo período, preferencialmente em CSV ou XLSX.",
-            ["CSV", "XLSX", "XLS"]
-        )
-        arq_razao = st.file_uploader(
-            "Razão da Domínio", type=["csv", "xlsx", "xls"],
-            key="up_razao", label_visibility="collapsed"
-        )
+    with col_up1: arq_extrato = st.file_uploader("1º - Envie o Extrato (PDF, OFX, Excel, CSV)", type=["pdf", "ofx", "csv", "xlsx", "xls"], key="up_extrato")
+    with col_up2: arq_razao = st.file_uploader("2º - Envie o Razão exportado (CSV ou XLSX)", type=["csv", "xlsx", "xls"], key="up_razao")
 
     if arq_extrato and arq_razao:
         try:
