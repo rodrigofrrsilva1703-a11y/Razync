@@ -154,8 +154,9 @@ st.markdown("""
         .metric-title { font-size: 10px; color: #8290a5; text-transform: uppercase; font-weight: 800; margin-bottom: 8px; letter-spacing: .08em; }
         .metric-value { font-size: 20px; color: var(--text); font-weight: 780; letter-spacing: -.02em; }
 
-        div[data-testid="stFileUploader"] { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: #161b22; }
-        div[data-testid="stFileUploaderDropzone"] { background: #0d1117; border: 1px dashed #484f58; border-radius: 6px; }
+        div[data-testid="stFileUploader"] { padding: 0; border: none; background: transparent; }
+        div[data-testid="stFileUploaderDropzone"] { background: #161b22; border: 1px dashed #484f58; border-radius: 6px; }
+        span[data-baseweb="tag"] { background: #21262d !important; color: #c9d1d9 !important; border: 1px solid #30363d !important; }
         div[data-baseweb="select"] > div, .stTextInput input, .stDateInput input, .stNumberInput input {
             background: #0d1117 !important; border-color: var(--border) !important; border-radius: 6px !important;
         }
@@ -1899,7 +1900,7 @@ st.sidebar.markdown(
         border-radius:12px;background:rgba(15,23,42,.4);">
         <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
         <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 13.1</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 13.2</div>
     </div>""",
     unsafe_allow_html=True
 )
@@ -2117,75 +2118,93 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "Organizador de Planilhas",
             "Escolha a empresa e siga as etapas para organizar, classificar e conferir os lançamentos bancários."
         )
-    renderizar_etapas(["Empresa", "Estabelecimento", "Planilha e bancos", "Período", "Download", "Conferência"])
-
     if 'empresa_organizador' not in st.session_state:
         st.session_state['empresa_organizador'] = None
 
-    st.markdown("#### 1. Selecione a empresa")
-    st.caption("As regras de leitura e organização são aplicadas de acordo com a empresa escolhida.")
-    col_emp1, col_emp2 = st.columns(2)
-    with col_emp1:
-        st.markdown("""<div class="tool-card"><span class="tool-tag">Disponível</span><div class="tool-icon">NG</div><p class="tool-title">Nova Geração</p><p class="tool-description">Organização de lançamentos da Matriz e da Filial, com Itaú, Bradesco e Fibra conforme cada estabelecimento.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.button("Selecionar Nova Geração  →", use_container_width=True, key="org_nova_geracao", type="primary"):
-            st.session_state['empresa_organizador'] = 'nova_geracao'
-            st.rerun()
-    with col_emp2:
-        st.markdown("""<div class="tool-card"><span class="tool-tag">Em breve</span><div class="tool-icon">＋</div><p class="tool-title">Nova empresa</p><p class="tool-description">Espaço reservado para adicionar outro cliente com regras próprias de leitura e organização.</p></div>""", unsafe_allow_html=True)
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        st.button("Em breve", use_container_width=True, disabled=True, key="org_empresa_2")
+    if st.session_state['empresa_organizador'] is None:
+        st.markdown("#### Selecione a empresa")
+        st.caption("As regras de leitura e organização são aplicadas de acordo com a empresa escolhida.")
+        col_emp1, col_emp2 = st.columns(2)
+        with col_emp1:
+            st.markdown("""<div class="tool-card"><span class="tool-tag">Disponível</span><div class="tool-icon">NG</div><p class="tool-title">Nova Geração</p><p class="tool-description">Organização de lançamentos da Matriz e da Filial, com Itaú, Bradesco e Fibra conforme cada estabelecimento.</p></div>""", unsafe_allow_html=True)
+            st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+            if st.button("Selecionar Nova Geração", use_container_width=True, key="org_nova_geracao", type="primary"):
+                st.session_state['empresa_organizador'] = 'nova_geracao'
+                st.rerun()
+        with col_emp2:
+            st.markdown("""<div class="tool-card"><span class="tool-tag">Em breve</span><div class="tool-icon">＋</div><p class="tool-title">Nova empresa</p><p class="tool-description">Espaço reservado para adicionar outro cliente com regras próprias de leitura e organização.</p></div>""", unsafe_allow_html=True)
+            st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+            st.button("Em breve", use_container_width=True, disabled=True, key="org_empresa_2")
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
-        st.markdown("---")
-        st.markdown("#### 2. Nova Geração — selecione o estabelecimento")
-        st.caption("A conta bancária usada na classificação muda automaticamente entre Matriz e Filial.")
-        estabelecimento_nova = st.radio(
-            "Área da empresa",
-            ["Matriz", "Filial"],
-            horizontal=True,
-            key="org_estabelecimento_nova_geracao",
-            help="Escolha a empresa antes de organizar ou classificar a planilha final."
-        )
+        col_empresa_titulo, col_trocar_empresa = st.columns([5, 1])
+        with col_empresa_titulo:
+            st.markdown("### Nova Geração")
+        with col_trocar_empresa:
+            if st.button("Trocar empresa", key="org_trocar_empresa", use_container_width=True):
+                st.session_state['empresa_organizador'] = None
+                st.rerun()
+        st.caption("Defina o estabelecimento e os bancos presentes na planilha.")
+        coluna_estabelecimento, coluna_bancos = st.columns([1, 2])
+        with coluna_estabelecimento:
+            estabelecimento_nova = st.selectbox(
+                "Estabelecimento",
+                ["Matriz", "Filial"],
+                key="org_estabelecimento_nova_geracao",
+                help="As contas contábeis dos bancos são ajustadas automaticamente."
+            )
         chave_estabelecimento = normalizar_texto(estabelecimento_nova)
         if chave_estabelecimento == 'filial':
             contas_dominio_estabelecimento = {'itau': '515', 'bradesco': '514'}
             configuracoes_bancos = {
-                "Itaú - Conta 98002-6": {
+                "Itaú 98002-6  ·  Conta contábil 515": {
                     "nome": "Itaú", "conta": "98002-6", "slug": "itau",
                     "processador": processar_nova_geracao_filial_itau
                 },
-                "Bradesco - Conta 3084-8": {
+                "Bradesco 3084-8  ·  Conta contábil 514": {
                     "nome": "Bradesco", "conta": "3084-8", "slug": "bradesco",
                     "processador": processar_nova_geracao_filial_bradesco
                 }
             }
-            st.caption(
-                "Filial selecionada — Itaú 98002-6 usa a conta 515 e "
-                "Bradesco 3084-8 usa a conta 514 na classificação."
-            )
         else:
             contas_dominio_estabelecimento = {
                 'itau': '508', 'bradesco': '9', 'fibra': '506'
             }
             configuracoes_bancos = {
-                "Itaú - Conta 99549-5": {
+                "Itaú 99549-5  ·  Conta contábil 508": {
                     "nome": "Itaú", "conta": "99549-5", "slug": "itau",
                     "processador": processar_nova_geracao_itau
                 },
-                "Bradesco - Conta 451990-6": {
+                "Bradesco 451990-6  ·  Conta contábil 9": {
                     "nome": "Bradesco", "conta": "451990-6", "slug": "bradesco",
                     "processador": processar_nova_geracao_bradesco
                 },
-                "Fibra - Conta 673947-1": {
+                "Fibra 673947-1  ·  Conta contábil 506": {
                     "nome": "Fibra", "conta": "673947-1", "slug": "fibra",
                     "processador": processar_nova_geracao_fibra
                 }
             }
-            st.caption(
-                "Matriz selecionada — Itaú usa a conta 508, Bradesco a conta 9 "
-                "e Fibra a conta 506 na classificação."
+
+        banco_padrao = next(iter(configuracoes_bancos))
+        with coluna_bancos:
+            bancos_empresa = st.multiselect(
+                "Bancos incluídos",
+                list(configuracoes_bancos.keys()),
+                default=[banco_padrao],
+                key=f"org_banco_nova_geracao_{chave_estabelecimento}"
             )
+        if not bancos_empresa:
+            st.info("Selecione pelo menos um banco para continuar.")
+            st.stop()
+
+        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
+        arquivo_empresa = st.file_uploader(
+            "Planilha bancária consolidada",
+            type=["xlsx", "xls"],
+            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}",
+            help="Envie a planilha da Matriz ou da Filial. As contas selecionadas serão localizadas automaticamente."
+        )
+
         url_base_classificacao, chave_base_classificacao, senha_admin_classificacao = (
             obter_config_classificacao_online()
         )
@@ -2197,7 +2216,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             except Exception as erro_base:
                 erro_base_classificacoes = str(erro_base)
 
-        with st.expander("Base inteligente de Débito e Crédito"):
+        with st.expander("Classificação automática e base inteligente — opcional"):
             if erro_base_classificacoes:
                 st.error(erro_base_classificacoes)
             elif url_base_classificacao and chave_base_classificacao:
@@ -2347,29 +2366,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             f"{erro_classificacao_final}"
                         )
 
-        banco_padrao = next(iter(configuracoes_bancos))
-        bancos_empresa = st.multiselect(
-            "3. Selecione os bancos que deseja organizar",
-            list(configuracoes_bancos.keys()),
-            default=[banco_padrao],
-            key=f"org_banco_nova_geracao_{chave_estabelecimento}"
-        )
-        if not bancos_empresa:
-            st.info("Selecione pelo menos um banco para continuar.")
-            st.stop()
-
-        configs_selecionadas = [configuracoes_bancos[banco] for banco in bancos_empresa]
-        nomes_bancos = ", ".join(config['nome'] for config in configs_selecionadas)
-        st.caption(
-            f"O sistema localizará automaticamente as contas de {nomes_bancos} dentro da "
-            "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
-        )
-        arquivo_empresa = st.file_uploader(
-            f"4. Envie a planilha bancária da Nova Geração — {estabelecimento_nova}",
-            type=["xlsx", "xls"],
-            key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
-        )
-
         if arquivo_empresa:
             try:
                 bytes_empresa = arquivo_empresa.getvalue()
@@ -2396,7 +2392,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     f"{data_minima.isoformat()}_{data_maxima.isoformat()}_"
                     + "_".join(config['slug'] for config in configs_selecionadas)
                 )
-                st.markdown("#### 5. Período dos lançamentos")
+                st.markdown("#### Período dos lançamentos")
                 periodo_selecionado = st.date_input(
                     "Selecione a data inicial e a data final",
                     value=(data_minima, data_maxima),
@@ -2502,7 +2498,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
 
                 st.markdown("---")
-                st.markdown("#### 6. Conferência com o extrato bancário")
+                st.markdown("#### Conferência com o extrato bancário")
                 nomes_disponiveis_conferencia = [
                     config['nome'] for config in configs_selecionadas
                 ]
