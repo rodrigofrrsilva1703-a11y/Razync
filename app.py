@@ -45,7 +45,7 @@ st.markdown("""
         }
 
         .stApp { background-color: var(--hc-bg); color: var(--hc-text); }
-        .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 100%; }
+        .block-container { padding-top: 3.25rem; padding-bottom: 3rem; max-width: 100%; }
         h1, h2, h3, h4 { color: var(--hc-text) !important; letter-spacing: -0.02em; }
         hr { border-color: var(--hc-border) !important; }
 
@@ -105,10 +105,11 @@ st.markdown("""
         .hc-brand-title {
             color: var(--hc-text);
             font-size: 30px;
-            line-height: 1.15;
+            line-height: 1.3;
             font-weight: 750;
             letter-spacing: -0.035em;
-            margin-top: 5px;
+            margin-top: 7px;
+            padding: 2px 0 3px;
         }
         .hc-brand-subtitle {
             color: var(--hc-muted);
@@ -140,7 +141,7 @@ st.markdown("""
         .st-key-home_card_organizador button {
             min-height: 166px !important;
             padding: 24px 20px !important;
-            background-color: var(--hc-surface) !important;
+            background: linear-gradient(180deg, rgba(19, 185, 232, 0.035) 0%, var(--hc-surface) 34%) !important;
             border: 1px solid var(--hc-border) !important;
             border-top: 2px solid rgba(19, 185, 232, 0.72) !important;
             border-radius: 9px !important;
@@ -153,7 +154,8 @@ st.markdown("""
             line-height: 1.55 !important;
             font-size: 12px !important;
             font-weight: 400 !important;
-            transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease !important;
+            transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease !important;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14) !important;
         }
         .st-key-home_card_extratos button p,
         .st-key-home_card_razao button p,
@@ -172,10 +174,11 @@ st.markdown("""
         .st-key-home_card_extratos button:hover,
         .st-key-home_card_razao button:hover,
         .st-key-home_card_organizador button:hover {
-            background-color: var(--hc-surface-hover) !important;
+            background: linear-gradient(180deg, rgba(19, 185, 232, 0.075) 0%, var(--hc-surface-hover) 38%) !important;
             border-color: var(--hc-accent) !important;
-            color: #b9c7d3 !important;
+            color: #c4d0da !important;
             transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22) !important;
         }
 
         [data-testid="stFileUploaderDropzone"] {
@@ -1904,7 +1907,7 @@ if st.session_state['pagina_ativa'] == 'home':
             '<div class="hc-brand-subtitle">Organização, conversão e conferência de lançamentos bancários em um só lugar.</div>',
             unsafe_allow_html=True
         )
-    st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 24px; border-bottom: 1px solid rgba(39, 51, 62, 0.55); margin-bottom: 22px;'></div>", unsafe_allow_html=True)
     col_t1, col_t2, col_t3 = st.columns(3)
 
     with col_t1:
