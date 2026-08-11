@@ -325,6 +325,52 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
+# CONTROLE DE ACESSO OPCIONAL
+# ==============================================================================
+def proteger_acesso_hub():
+    """Ativa a tela de acesso quando a senha está configurada nos Secrets."""
+    try:
+        secao_seguranca = st.secrets.get('security', {})
+        senha_configurada = str(
+            secao_seguranca.get('app_password', '')
+            or st.secrets.get('APP_PASSWORD', '')
+        )
+    except Exception:
+        senha_configurada = ''
+
+    if not senha_configurada:
+        return False
+    if st.session_state.get('_hc_acesso_autorizado', False):
+        return True
+
+    st.markdown("<div style='height: 8vh;'></div>", unsafe_allow_html=True)
+    coluna_esquerda, coluna_login, coluna_direita = st.columns([1.25, 1, 1.25])
+    with coluna_login:
+        st.image("assets/hc-icon.png", width=66)
+        st.markdown("## Hub Contábil")
+        st.caption("Acesso restrito. Informe a senha para continuar.")
+        with st.form('hc_formulario_acesso', clear_on_submit=True):
+            senha_informada = st.text_input(
+                "Senha de acesso",
+                type='password',
+                autocomplete='current-password'
+            )
+            entrar = st.form_submit_button(
+                "Entrar no sistema",
+                use_container_width=True
+            )
+        if entrar:
+            if hmac.compare_digest(str(senha_informada), senha_configurada):
+                st.session_state['_hc_acesso_autorizado'] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
+    st.stop()
+
+
+SEGURANCA_POR_SENHA_ATIVA = proteger_acesso_hub()
+
+# ==============================================================================
 # FUNÇÕES DE LIMPEZA E FORMATAÇÃO (MECÂNICAS)
 # ==============================================================================
 def limpar_caracteres_ilegais(val):
@@ -2322,6 +2368,16 @@ if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_
 if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
 if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
 st.sidebar.markdown("---")
+if SEGURANCA_POR_SENHA_ATIVA:
+    st.sidebar.markdown("---")
+    if st.sidebar.button(
+        "Sair do sistema",
+        use_container_width=True,
+        key="hc_encerrar_sessao"
+    ):
+        st.session_state['_hc_acesso_autorizado'] = False
+        st.rerun()
+
 st.sidebar.markdown("<p style='font-size: 10px; color: #6f8190; text-align: center;'>Hub Contábil · Operações bancárias</p>", unsafe_allow_html=True)
 
 # O marcador ativa o CSS uma única vez e desaparece nos reruns de filtros/uploads.
