@@ -1254,6 +1254,25 @@ def calcular_similaridade_nome_empresa(nome_a, nome_b):
     if not comuns:
         return 0.0
 
+    # Algumas palavras e siglas mudam a natureza contábil mesmo quando o nome
+    # principal é igual. Elas precisam coincidir exatamente na aproximação.
+    termos_criticos = {
+        'antecipado', 'antecipada', 'adiantamento', 'ferias', 'rescisao',
+        'salario', 'folha', 'inss', 'fgts', 'irrf', 'pis', 'cofins', 'csll',
+        'icms', 'iss', 'gnre', 'imposto', 'tributo', 'tarifa', 'juros',
+        'multa', 'aluguel', 'frete', 'transferencia', 'transf', 'devolucao',
+        'emprestimo', 'aplicacao', 'rendimento', 'filial', 'matriz'
+    }
+    if (tokens_a & termos_criticos) != (tokens_b & termos_criticos):
+        return 0.0
+
+    # Siglas curtas costumam identificar empresas, estados ou tipos de operação.
+    # BS e BD, por exemplo, não podem ser tratadas como simples erro de digitação.
+    siglas_a = {token for token in tokens_a if len(token) <= 3}
+    siglas_b = {token for token in tokens_b if len(token) <= 3}
+    if siglas_a != siglas_b:
+        return 0.0
+
     razao_caracteres = difflib.SequenceMatcher(None, a, b).ratio()
     cobertura = len(comuns) / min(len(tokens_a), len(tokens_b))
     uniao = tokens_a | tokens_b
@@ -1300,7 +1319,9 @@ def encontrar_conta_por_nome_historico(historico, natureza, evidencias_nomes):
         if len(contas) != 1:
             continue
         conta, evidencia = next(iter(contas.items()))
-        if len(evidencia['periodos']) < 2 or evidencia['ocorrencias'] < 2:
+        # Aproximação textual exige uma conta repetida nos três meses da base.
+        # Nome exatamente igual continua podendo ser confirmado em dois períodos.
+        if len(evidencia['periodos']) < 3 or evidencia['ocorrencias'] < 3:
             continue
         similaridade = calcular_similaridade_nome_empresa(nome_alvo, nome_base)
         if similaridade > melhor_por_conta.get(conta, 0.0):
