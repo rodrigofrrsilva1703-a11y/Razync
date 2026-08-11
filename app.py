@@ -254,6 +254,17 @@ def renderizar_area_upload(titulo, descricao, formatos):
         f'<span class="upload-format">{formato.upper()}</span>'
         for formato in formatos
     )
+    st.markdown(
+        f'''<div class="upload-guide">
+            <div class="upload-guide-icon">↑</div>
+            <div class="upload-guide-content">
+                <div class="upload-guide-title">{titulo}</div>
+                <div class="upload-guide-text">{descricao}</div>
+                <div class="upload-formats">{etiquetas}</div>
+            </div>
+        </div>''',
+        unsafe_allow_html=True
+    )
 
 def seletor_segmentado(rotulo, opcoes, chave, padrao=None):
     """Segmented control com compatibilidade para versões antigas do Streamlit."""
@@ -290,17 +301,6 @@ def renderizar_titulo_secao(titulo, descricao):
     st.markdown(
         f'''<div class="enterprise-section"><div class="enterprise-section-title">{titulo}</div>
         <p class="enterprise-section-text">{descricao}</p></div>''',
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        f'''<div class="upload-guide">
-            <div class="upload-guide-icon">↑</div>
-            <div class="upload-guide-content">
-                <div class="upload-guide-title">{titulo}</div>
-                <div class="upload-guide-text">{descricao}</div>
-                <div class="upload-formats">{etiquetas}</div>
-            </div>
-        </div>''',
         unsafe_allow_html=True
     )
 
