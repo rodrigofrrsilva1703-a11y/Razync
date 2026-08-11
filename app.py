@@ -213,6 +213,32 @@ st.markdown("""
         .operation-index { color: #4f8cff; font-size: 11px; font-weight: 800; letter-spacing: .08em; width: 34px; }
         .operation-name { color: #eef2f7; font-size: 14px; font-weight: 660; margin-bottom: 4px; }
         .operation-copy { color: #77818e; font-size: 11px; line-height: 1.45; }
+        .st-key-home_cards div[data-testid="stButton"] button,
+        .st-key-operation_group_cards div[data-testid="stButton"] button {
+            min-height: 104px; padding: 17px 18px !important; align-items: flex-start;
+            justify-content: flex-start !important; text-align: left !important;
+            flex-direction: column !important;
+            font-size: 14px !important; color: #e7eaee !important;
+            background: #0b0d10 !important; border-color: #252b33 !important;
+        }
+        .st-key-home_cards div[data-testid="stButton"] button:hover,
+        .st-key-operation_group_cards div[data-testid="stButton"] button:hover {
+            background: #101318 !important; border-color: #465263 !important;
+        }
+        .st-key-home_cards div[data-testid="stButton"] button[kind="primary"],
+        .st-key-operation_group_cards div[data-testid="stButton"] button[kind="primary"] {
+            background: #111824 !important; border-color: #35558a !important;
+        }
+        .st-key-home_tool_extratos button::after { content: "Padronizar PDF, OFX, CSV e Excel"; }
+        .st-key-home_tool_organizador button::after { content: "Organizar, conferir e classificar por empresa"; }
+        .st-key-home_tool_razao button::after { content: "Comparar extrato e razão contábil"; }
+        .st-key-grupo_movimentacao button::after { content: "Organizar planilha e conferir extratos"; }
+        .st-key-grupo_classificacao button::after { content: "Classificar contas e gerenciar a base"; }
+        .st-key-home_cards button::after,
+        .st-key-operation_group_cards button::after {
+            display: block; margin-top: 7px; color: #737d8a; font-size: 10px;
+            font-weight: 450; line-height: 1.4;
+        }
         .workspace-client { color: #9099a5; font-size: 11px; margin: -12px 0 18px; }
         .workspace-client b { color: #d6dae0; font-weight: 650; }
         .minimal-upload-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin: 16px 0 8px; }
@@ -234,6 +260,8 @@ st.markdown("""
             .enterprise-context { grid-template-columns: 1fr; }
             .enterprise-context-item { border-right: 0; border-bottom: 1px solid #242930; }
             .enterprise-context-item:last-child { border-bottom: 0; }
+            .st-key-home_cards div[data-testid="stHorizontalBlock"],
+            .st-key-operation_group_cards div[data-testid="stHorizontalBlock"] { flex-direction: column; }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -2393,7 +2421,7 @@ st.sidebar.markdown(
         border-radius:12px;background:rgba(15,23,42,.4);">
         <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
         <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 15.1 Minimal</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 15.2 Minimal</div>
     </div>""",
     unsafe_allow_html=True
 )
@@ -2408,25 +2436,20 @@ if st.session_state['pagina_ativa'] == 'home':
         <p class="enterprise-home-copy">Escolha um fluxo. Cada área mostra somente os controles necessários para concluir a tarefa.</p></div>''',
         unsafe_allow_html=True
     )
-    operacoes_home = [
-        ("01", "Conversor de extratos", "Padronize PDF, OFX, CSV ou Excel para o modelo da Domínio.", "extratos"),
-        ("02", "Organizador por empresa", "Organize, confira e classifique os arquivos da Nova Geração.", "organizador"),
-        ("03", "Conciliação com razão", "Compare extrato e razão contábil por data e valor.", "razao")
-    ]
-    for indice, nome, descricao, destino in operacoes_home:
-        coluna_info, coluna_acao = st.columns([7, 1.25])
-        with coluna_info:
-            st.markdown(
-                f'''<div class="operation-row"><div class="operation-index">{indice}</div><div>
-                <div class="operation-name">{nome}</div><div class="operation-copy">{descricao}</div>
-                </div></div>''', unsafe_allow_html=True
-            )
-        with coluna_acao:
-            if st.button("Abrir →", key=f'ent_home_{destino}', use_container_width=True,
-                         type='primary' if destino == 'organizador' else 'secondary'):
-                mudar_pagina(destino)
-                st.rerun()
-        st.markdown("<div style='height:7px'></div>", unsafe_allow_html=True)
+    with st.container(key='home_cards'):
+        card_extratos, card_organizador, card_razao = st.columns(3)
+        with card_extratos:
+            with st.container(key='home_tool_extratos'):
+                if st.button("Conversor de extratos", key='ent_home_extratos', use_container_width=True):
+                    mudar_pagina('extratos'); st.rerun()
+        with card_organizador:
+            with st.container(key='home_tool_organizador'):
+                if st.button("Organizador por empresa", key='ent_home_organizador', use_container_width=True, type='primary'):
+                    mudar_pagina('organizador'); st.rerun()
+        with card_razao:
+            with st.container(key='home_tool_razao'):
+                if st.button("Conciliação com razão", key='ent_home_razao', use_container_width=True):
+                    mudar_pagina('razao'); st.rerun()
 
 if False:
     st.markdown(
@@ -2640,21 +2663,44 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     st.markdown(
         '''<div class="enterprise-shell"><div class="page-kicker">Nova Geração</div>
         <div class="enterprise-title">Operações bancárias</div>
-        <p class="enterprise-subtitle">Selecione o estabelecimento e a tarefa que deseja executar.</p></div>''',
+        <p class="enterprise-subtitle">Selecione o estabelecimento, a área de trabalho e a operação.</p></div>''',
         unsafe_allow_html=True
     )
 
-    coluna_estabelecimento, coluna_operacao = st.columns(2)
-    with coluna_estabelecimento:
-        estabelecimento = st.selectbox(
-            "Estabelecimento", ["Matriz", "Filial"], key='ent_estabelecimento'
-        )
-    with coluna_operacao:
-        operacao = st.selectbox(
-            "Operação",
-            ["Organizar planilha", "Conferir extratos", "Classificar contas", "Gerenciar base"],
-            key='ent_operacao'
-        )
+    estabelecimento = st.selectbox(
+        "Estabelecimento", ["Matriz", "Filial"], key='ent_estabelecimento'
+    )
+    if 'ent_grupo_operacao' not in st.session_state:
+        st.session_state['ent_grupo_operacao'] = 'movimentacao'
+    st.markdown("<div class='page-kicker' style='margin:18px 0 8px;'>Área de trabalho</div>", unsafe_allow_html=True)
+    with st.container(key='operation_group_cards'):
+        card_movimento, card_classificacao = st.columns(2)
+        with card_movimento:
+            with st.container(key='grupo_movimentacao'):
+                if st.button(
+                    "Movimentação bancária", key='ent_card_movimentacao', use_container_width=True,
+                    type='primary' if st.session_state['ent_grupo_operacao'] == 'movimentacao' else 'secondary'
+                ):
+                    st.session_state['ent_grupo_operacao'] = 'movimentacao'
+                    st.rerun()
+        with card_classificacao:
+            with st.container(key='grupo_classificacao'):
+                if st.button(
+                    "Classificação contábil", key='ent_card_classificacao', use_container_width=True,
+                    type='primary' if st.session_state['ent_grupo_operacao'] == 'classificacao' else 'secondary'
+                ):
+                    st.session_state['ent_grupo_operacao'] = 'classificacao'
+                    st.rerun()
+
+    grupo_operacao = st.session_state['ent_grupo_operacao']
+    opcoes_operacao = (
+        ["Organizar planilha", "Conferir extratos"]
+        if grupo_operacao == 'movimentacao'
+        else ["Classificar contas", "Gerenciar base"]
+    )
+    operacao = seletor_segmentado(
+        "Operação", opcoes_operacao, f'ent_operacao_{grupo_operacao}', opcoes_operacao[0]
+    )
 
     chave_estabelecimento = normalizar_texto(estabelecimento)
     contas, configuracoes = obter_contexto_nova_geracao(estabelecimento)
