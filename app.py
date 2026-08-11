@@ -213,6 +213,14 @@ st.markdown("""
         .operation-index { color: #4f8cff; font-size: 11px; font-weight: 800; letter-spacing: .08em; width: 34px; }
         .operation-name { color: #eef2f7; font-size: 14px; font-weight: 660; margin-bottom: 4px; }
         .operation-copy { color: #77818e; font-size: 11px; line-height: 1.45; }
+        .nav-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        .nav-card { display: block; min-height: 112px; padding: 18px; border: 1px solid #252b33;
+            border-radius: 8px; background: #0b0d10; text-decoration: none !important;
+            transition: background .15s ease, border-color .15s ease, transform .15s ease; }
+        .nav-card:hover { background: #101318; border-color: #465263; transform: translateY(-1px); }
+        .nav-card-code { color: #596575; font-size: 9px; font-weight: 800; letter-spacing: .1em; margin-bottom: 22px; }
+        .nav-card-title { color: #e7eaee; font-size: 14px; font-weight: 650; margin-bottom: 5px; }
+        .nav-card-copy { color: #737d8a; font-size: 10px; line-height: 1.45; }
         .st-key-home_cards div[data-testid="stButton"] button,
         .st-key-operation_group_cards div[data-testid="stButton"] button {
             min-height: 104px; padding: 17px 18px !important; align-items: flex-start;
@@ -262,6 +270,7 @@ st.markdown("""
             .enterprise-context-item:last-child { border-bottom: 0; }
             .st-key-home_cards div[data-testid="stHorizontalBlock"],
             .st-key-operation_group_cards div[data-testid="stHorizontalBlock"] { flex-direction: column; }
+            .nav-card-grid { grid-template-columns: 1fr; }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -2379,7 +2388,12 @@ def operacao_conferir_nova(chave_estabelecimento, configs):
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
 if 'pagina_ativa' not in st.session_state: st.session_state['pagina_ativa'] = 'home'
-def mudar_pagina(nome_pagina): st.session_state['pagina_ativa'] = nome_pagina
+pagina_url = st.query_params.get('pagina', '')
+if pagina_url in {'home', 'extratos', 'organizador', 'razao'}:
+    st.session_state['pagina_ativa'] = pagina_url
+def mudar_pagina(nome_pagina):
+    st.session_state['pagina_ativa'] = nome_pagina
+    st.query_params['pagina'] = nome_pagina
 
 # ==============================================================================
 # BARRA LATERAL
@@ -2421,7 +2435,7 @@ st.sidebar.markdown(
         border-radius:12px;background:rgba(15,23,42,.4);">
         <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.08em;">Status</div>
         <div style="font-size:11px;color:#cbd5e1;margin-top:7px;">● Sistema operacional</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 15.2 Minimal</div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px;">Versão 15.3 Minimal</div>
     </div>""",
     unsafe_allow_html=True
 )
@@ -2436,20 +2450,13 @@ if st.session_state['pagina_ativa'] == 'home':
         <p class="enterprise-home-copy">Escolha um fluxo. Cada área mostra somente os controles necessários para concluir a tarefa.</p></div>''',
         unsafe_allow_html=True
     )
-    with st.container(key='home_cards'):
-        card_extratos, card_organizador, card_razao = st.columns(3)
-        with card_extratos:
-            with st.container(key='home_tool_extratos'):
-                if st.button("Conversor de extratos", key='ent_home_extratos', use_container_width=True):
-                    mudar_pagina('extratos'); st.rerun()
-        with card_organizador:
-            with st.container(key='home_tool_organizador'):
-                if st.button("Organizador por empresa", key='ent_home_organizador', use_container_width=True, type='primary'):
-                    mudar_pagina('organizador'); st.rerun()
-        with card_razao:
-            with st.container(key='home_tool_razao'):
-                if st.button("Conciliação com razão", key='ent_home_razao', use_container_width=True):
-                    mudar_pagina('razao'); st.rerun()
+    st.markdown(
+        '''<div class="nav-card-grid">
+        <a class="nav-card" href="?pagina=extratos" target="_self"><div class="nav-card-code">01</div><div class="nav-card-title">Conversor de extratos</div><div class="nav-card-copy">Padronizar PDF, OFX, CSV e Excel.</div></a>
+        <a class="nav-card" href="?pagina=organizador" target="_self"><div class="nav-card-code">02</div><div class="nav-card-title">Organizador por empresa</div><div class="nav-card-copy">Organizar, conferir e classificar os lançamentos.</div></a>
+        <a class="nav-card" href="?pagina=razao" target="_self"><div class="nav-card-code">03</div><div class="nav-card-title">Conciliação com razão</div><div class="nav-card-copy">Comparar extrato e razão contábil.</div></a>
+        </div>''', unsafe_allow_html=True
+    )
 
 if False:
     st.markdown(
@@ -2670,29 +2677,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     estabelecimento = st.selectbox(
         "Estabelecimento", ["Matriz", "Filial"], key='ent_estabelecimento'
     )
-    if 'ent_grupo_operacao' not in st.session_state:
-        st.session_state['ent_grupo_operacao'] = 'movimentacao'
-    st.markdown("<div class='page-kicker' style='margin:18px 0 8px;'>Área de trabalho</div>", unsafe_allow_html=True)
-    with st.container(key='operation_group_cards'):
-        card_movimento, card_classificacao = st.columns(2)
-        with card_movimento:
-            with st.container(key='grupo_movimentacao'):
-                if st.button(
-                    "Movimentação bancária", key='ent_card_movimentacao', use_container_width=True,
-                    type='primary' if st.session_state['ent_grupo_operacao'] == 'movimentacao' else 'secondary'
-                ):
-                    st.session_state['ent_grupo_operacao'] = 'movimentacao'
-                    st.rerun()
-        with card_classificacao:
-            with st.container(key='grupo_classificacao'):
-                if st.button(
-                    "Classificação contábil", key='ent_card_classificacao', use_container_width=True,
-                    type='primary' if st.session_state['ent_grupo_operacao'] == 'classificacao' else 'secondary'
-                ):
-                    st.session_state['ent_grupo_operacao'] = 'classificacao'
-                    st.rerun()
-
-    grupo_operacao = st.session_state['ent_grupo_operacao']
+    grupo_escolhido = seletor_segmentado(
+        "Área de trabalho", ["Movimentação bancária", "Classificação contábil"],
+        'ent_grupo_operacao_minimal', 'Movimentação bancária'
+    )
+    grupo_operacao = 'movimentacao' if grupo_escolhido == 'Movimentação bancária' else 'classificacao'
     opcoes_operacao = (
         ["Organizar planilha", "Conferir extratos"]
         if grupo_operacao == 'movimentacao'
