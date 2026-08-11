@@ -2299,8 +2299,13 @@ if 'animar_transicao' not in st.session_state:
 
 def mudar_pagina(nome_pagina):
     """Troca a ferramenta e anima somente o primeiro render da nova tela."""
-    if st.session_state.get('pagina_ativa') == nome_pagina:
+    pagina_anterior = st.session_state.get('pagina_ativa')
+    if pagina_anterior == nome_pagina:
         return
+    # Sempre inicia o Organizador pela escolha da empresa. A seleção permanece
+    # apenas durante o trabalho atual e não reaparece ao entrar novamente.
+    if nome_pagina == 'organizador':
+        st.session_state['empresa_organizador'] = None
     st.session_state['pagina_ativa'] = nome_pagina
     st.session_state['animar_transicao'] = True
 
