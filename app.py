@@ -2508,25 +2508,31 @@ def processar_mapa_autokraft(file_bytes, filename=''):
             if historico_credito and not texto_credito.startswith('total'):
                 valor_credito = abs(limpar_valor_monetario(linha.iloc[3]))
                 if valor_credito:
+                    historico_credito_final = limpar_caracteres_ilegais(
+                        historico_credito
+                    ).strip()
                     registros[banco_atual].append({
                         'DESCRIÇÃO': f'BANCO {banco_atual.upper()}',
                         'DATA': data_aba.to_pydatetime(),
                         'VALOR': valor_credito,
                         'DÉBITO': '',
                         'CRÉDITO': '',
-                        'HISTÓRICO': limpar_caracteres_ilegais(historico_credito).strip()
+                        'HISTÓRICO': f'Recebido: {historico_credito_final}'
                     })
 
             if historico_debito and not texto_debito.startswith('total'):
                 valor_debito = abs(limpar_valor_monetario(linha.iloc[5]))
                 if valor_debito:
+                    historico_debito_final = limpar_caracteres_ilegais(
+                        historico_debito
+                    ).strip()
                     registros[banco_atual].append({
                         'DESCRIÇÃO': f'BANCO {banco_atual.upper()}',
                         'DATA': data_aba.to_pydatetime(),
                         'VALOR': -valor_debito,
                         'DÉBITO': '',
                         'CRÉDITO': '',
-                        'HISTÓRICO': limpar_caracteres_ilegais(historico_debito).strip()
+                        'HISTÓRICO': f'Pago: {historico_debito_final}'
                     })
 
         abas_processadas.append(str(nome_aba))
