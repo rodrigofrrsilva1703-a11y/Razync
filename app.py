@@ -1460,7 +1460,9 @@ def processar_razao_dominio(file_bytes, filename):
     )
     return df_res.dropna(subset=['DATA_DT'])
 
-def renderizar_base_inteligente_empresa(empresa, nome_empresa, bancos_permitidos):
+def renderizar_base_inteligente_empresa(
+    empresa, nome_empresa, bancos_permitidos, contas_bancarias
+):
     """Base de Débito/Crédito isolada por empresa usando a mesma tabela Supabase."""
     url_base, chave_base, senha_admin = obter_config_classificacao_online()
     base = []
@@ -1476,6 +1478,13 @@ def renderizar_base_inteligente_empresa(empresa, nome_empresa, bancos_permitidos
         "O aprendizado desta área é exclusivo desta empresa. Padrões de outras "
         "empresas não são usados aqui. Envie planilhas já revisadas, com DÉBITO e "
         "CRÉDITO preenchidos, para ensinar novos lançamentos."
+    )
+    st.caption(
+        "Contas bancárias automáticas: "
+        + " | ".join(
+            f"{nome_banco_por_chave(banco)} {conta}"
+            for banco, conta in contas_bancarias.items()
+        )
     )
     if erro_base:
         st.warning(f"Não foi possível carregar a base online: {erro_base}")
@@ -1563,9 +1572,6 @@ def renderizar_base_inteligente_empresa(empresa, nome_empresa, bancos_permitidos
                 )
             else:
                 try:
-                    contas_bancarias = {
-                        banco: '' for banco in bancos_permitidos
-                    }
                     arquivo_classificado, resumo = executar_com_loading(
                         "Analisando históricos e classificando as contas...",
                         classificar_planilha_final,
@@ -3353,17 +3359,20 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             'autokraft_industrial': {
                 'empresa': '3 - Autokraft Industrial',
                 'slug': 'autokraft_industrial',
-                'arquivo': 'Autokraft_Industrial'
+                'arquivo': 'Autokraft_Industrial',
+                'contas_bancarias': {'itau': '508', 'daycoval': '2283'}
             },
             'autokraft_projetos': {
                 'empresa': '178 - Autokraft Projetos',
                 'slug': 'autokraft_projetos',
-                'arquivo': 'Autokraft_Projetos'
+                'arquivo': 'Autokraft_Projetos',
+                'contas_bancarias': {'itau': '508', 'daycoval': '505'}
             },
             'isa': {
                 'empresa': '343 - I.S.A',
                 'slug': 'isa',
-                'arquivo': 'ISA'
+                'arquivo': 'ISA',
+                'contas_bancarias': {'itau': '508', 'daycoval': '506'}
             }
         }
         configuracao_empresa_autokraft = configuracoes_autokraft_por_area[
@@ -3381,7 +3390,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             renderizar_base_inteligente_empresa(
                 slug_empresa_autokraft,
                 empresa_autokraft,
-                {'itau', 'daycoval'}
+                {'itau', 'daycoval'},
+                configuracao_empresa_autokraft['contas_bancarias']
             )
 
         with aba_operacoes_autokraft:
