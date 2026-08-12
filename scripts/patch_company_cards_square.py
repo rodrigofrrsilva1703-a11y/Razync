@@ -3,32 +3,27 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-# Altera somente o nome exibido da Filial. A chave interna continua separada
-# como nova_geracao_filial para preservar a Base Inteligente independente.
-old = '''        labels_estabelecimento = {
-            'matriz': 'Matriz',
-            'filial': 'Filial',
-        }
-'''
-new = '''        labels_estabelecimento = {
-            'matriz': 'Matriz',
-            'filial': '1396 - Nova Geração',
-        }
-'''
-if old in text:
-    text = text.replace(old, new, 1)
-else:
-    # Compatibilidade caso o bloco esteja escrito de outra forma: troca apenas
-    # o rótulo da filial no seletor, sem tocar nas chaves da base.
-    alvo = "'filial': 'Filial'"
-    if text.count(alvo) != 1:
-        raise SystemExit(f'Rótulo da Filial encontrado {text.count(alvo)} vezes.')
-    text = text.replace(alvo, "'filial': '1396 - Nova Geração'", 1)
+replacements = {
+    "if st.button('Filial', key=chave_card_filial, use_container_width=True):":
+        "if st.button('1396 - Nova Geração', key=chave_card_filial, use_container_width=True):",
+    "'Filial' if chave_estabelecimento == 'filial' else 'Matriz'":
+        "'1396 - Nova Geração' if chave_estabelecimento == 'filial' else 'Matriz'",
+    "'266 - Nova Geração Filial'\n            if chave_estabelecimento == 'filial'":
+        "'1396 - Nova Geração'\n            if chave_estabelecimento == 'filial'",
+    '"Filial selecionada — Itaú 98002-6 usa a conta 515 e "':
+        '"1396 - Nova Geração selecionada — Itaú 98002-6 usa a conta 515 e "',
+}
 
+for old, new in replacements.items():
+    if old not in text:
+        raise SystemExit(f'Trecho esperado não encontrado: {old}')
+    text = text.replace(old, new, 1)
+
+# Preserva a separação técnica da Base Inteligente.
 if "'nova_geracao_filial'" not in text:
-    raise SystemExit('A chave independente da Base Inteligente da Filial não foi preservada.')
-if '1396 - Nova Geração' not in text:
-    raise SystemExit('Novo nome da Filial não foi aplicado.')
+    raise SystemExit('A chave nova_geracao_filial foi perdida.')
+if "st.button('1396 - Nova Geração'" not in text:
+    raise SystemExit('O card da filial não recebeu o novo nome.')
 
 path.write_text(text, encoding='utf-8')
-print('Filial renomeada visualmente para 1396 - Nova Geração, mantendo sua base independente.')
+print('Filial exibida como 1396 - Nova Geração em toda a área, mantendo base separada.')
