@@ -187,27 +187,34 @@ st.markdown("""
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22) !important;
         }
 
-        /* Cards de empresas: quadrados, alinhados e com conteúdo contido. */
+        /* Cards de empresas: maiores, próximos e alinhados ao centro. */
         .st-key-org_empresa_card_nova,
         .st-key-org_empresa_card_autokraft {
-            width: 184px !important;
-            min-width: 184px !important;
-            max-width: 184px !important;
-            margin: 0 auto !important;
+            width: 210px !important;
+            min-width: 210px !important;
+            max-width: 210px !important;
             display: flex !important;
             justify-content: center !important;
         }
+        .st-key-org_empresa_card_nova {
+            margin-left: auto !important;
+            margin-right: 24px !important;
+        }
+        .st-key-org_empresa_card_autokraft {
+            margin-left: 24px !important;
+            margin-right: auto !important;
+        }
         .st-key-org_empresa_card_nova button,
         .st-key-org_empresa_card_autokraft button {
-            width: 184px !important;
-            min-width: 184px !important;
-            max-width: 184px !important;
-            height: 184px !important;
-            min-height: 184px !important;
-            max-height: 184px !important;
+            width: 210px !important;
+            min-width: 210px !important;
+            max-width: 210px !important;
+            height: 210px !important;
+            min-height: 210px !important;
+            max-height: 210px !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
-            padding: 12px 13px !important;
+            padding: 16px 16px !important;
             cursor: pointer !important;
             background: linear-gradient(145deg, #05090e 0%, #07131f 56%, #0a1d2d 100%) !important;
             border: 1px solid #17364f !important;
@@ -230,7 +237,7 @@ st.markdown("""
         .st-key-org_empresa_card_nova button p,
         .st-key-org_empresa_card_autokraft button p {
             width: 100% !important;
-            max-width: 154px !important;
+            max-width: 176px !important;
             white-space: pre-line !important;
             overflow-wrap: anywhere !important;
             margin: 0 auto !important;
@@ -239,9 +246,9 @@ st.markdown("""
         .st-key-org_empresa_card_nova button strong,
         .st-key-org_empresa_card_autokraft button strong {
             display: inline-block !important;
-            max-width: 150px !important;
+            max-width: 172px !important;
             color: #f2f8fc !important;
-            font-size: 15px !important;
+            font-size: 16px !important;
             line-height: 1.2 !important;
             font-weight: 700 !important;
         }
