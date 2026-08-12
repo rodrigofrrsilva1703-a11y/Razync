@@ -5053,8 +5053,9 @@ elif st.session_state['pagina_ativa'] == 'razao':
     with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
     
     st.caption(
-        "Acompanhe a conferência diária comparando Entradas e Saídas. "
-        "As diferenças são calculadas no sentido Razão − Extrato."
+        "A conciliação considera a natureza contábil inversa: saída no extrato "
+        "é comparada com entrada/débito no Razão; entrada no extrato é comparada "
+        "com saída/crédito no Razão."
     )
     st.markdown("""<div class="aviso-banner"><p><strong>Formatos aceitos:</strong> CSV, XLSX e XLS antigo da Domínio. Quando necessário, o sistema recupera e normaliza o arquivo automaticamente antes da leitura.</p></div>""", unsafe_allow_html=True)
 
@@ -5146,18 +5147,21 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
                 # ---------------- CÁLCULOS DE DIFERENÇAS ----------------
                 df_conciliacao = df_conciliacao.sort_values('DATA_DT')
-                # Sentido correto da análise: RAZÃO - EXTRATO.
-                # Valor positivo = há mais no Razão do que no Extrato.
-                # Valor negativo = há mais no Extrato do que no Razão.
-                df_conciliacao['DIF_ENTRADAS'] = (
-                    df_conciliacao['ENTRADAS_RAZAO'] - df_conciliacao['ENTRADAS_EXTRATO']
+                # Natureza espelhada entre banco e contabilidade:
+                # SAÍDA no extrato deve bater com ENTRADA/DÉBITO no Razão.
+                # ENTRADA no extrato deve bater com SAÍDA/CRÉDITO no Razão.
+                df_conciliacao['DIF_SAIDAS_EXT_ENTRADAS_RAZAO'] = (
+                    df_conciliacao['ENTRADAS_RAZAO'] - df_conciliacao['SAIDAS_EXTRATO']
                 )
-                df_conciliacao['DIF_SAIDAS'] = (
-                    df_conciliacao['SAIDAS_RAZAO'] - df_conciliacao['SAIDAS_EXTRATO']
+                df_conciliacao['DIF_ENTRADAS_EXT_SAIDAS_RAZAO'] = (
+                    df_conciliacao['SAIDAS_RAZAO'] - df_conciliacao['ENTRADAS_EXTRATO']
                 )
                 
                 df_conciliacao['STATUS'] = df_conciliacao.apply(
-                    lambda row: "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 else "❌ Divergente", 
+                    lambda row: "✅ Batendo" if (
+                        abs(row['DIF_SAIDAS_EXT_ENTRADAS_RAZAO']) < 0.01
+                        and abs(row['DIF_ENTRADAS_EXT_SAIDAS_RAZAO']) < 0.01
+                    ) else "❌ Divergente",
                     axis=1
                 )
                 
@@ -5171,19 +5175,31 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 tot_sai_raz = df_conciliacao['SAIDAS_RAZAO'].sum()
                 
                 rc1, rc2, rc3, rc4 = st.columns(4)
-                with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Entradas (Extrato)</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_ent_ext)}</div></div>', unsafe_allow_html=True)
-                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Entradas (Razão)</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_ent_raz)}</div></div>', unsafe_allow_html=True)
-                with rc3: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Saídas (Extrato)</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_sai_ext))}</div></div>', unsafe_allow_html=True)
-                with rc4: st.markdown(f'<div class="metric-card"><div class="metric-title">Total Saídas (Razão)</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_sai_raz))}</div></div>', unsafe_allow_html=True)
+                with rc1: st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas do Extrato</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(abs(tot_sai_ext))}</div></div>', unsafe_allow_html=True)
+                with rc2: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas/Débitos do Razão</div><div class="metric-value" style="color: #f85149;">{formatar_moeda(tot_ent_raz)}</div></div>', unsafe_allow_html=True)
+                with rc3: st.markdown(f'<div class="metric-card"><div class="metric-title">Entradas do Extrato</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_ent_ext)}</div></div>', unsafe_allow_html=True)
+                with rc4: st.markdown(f'<div class="metric-card"><div class="metric-title">Saídas/Créditos do Razão</div><div class="metric-value" style="color: #3fb950;">{formatar_moeda(tot_sai_raz)}</div></div>', unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 # ---------------- TABELA DE EXIBIÇÃO ----------------
-                df_exibicao = df_conciliacao[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS', 'STATUS']].copy()
-                df_exibicao.columns = ['Data', 'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas (R$)', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas (R$)', 'Status']
+                df_exibicao = df_conciliacao[[
+                    'DATA_EXIBICAO',
+                    'SAIDAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_SAIDAS_EXT_ENTRADAS_RAZAO',
+                    'ENTRADAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_ENTRADAS_EXT_SAIDAS_RAZAO',
+                    'STATUS'
+                ]].copy()
+                df_exibicao.columns = [
+                    'Data',
+                    'Saídas Extrato (R$)', 'Entradas/Débitos Razão (R$)', 'Dif. Saída Ext. x Entrada Razão (R$)',
+                    'Entradas Extrato (R$)', 'Saídas/Créditos Razão (R$)', 'Dif. Entrada Ext. x Saída Razão (R$)',
+                    'Status'
+                ]
                 colunas_monetarias_conciliacao = [
-                    'Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas (R$)',
-                    'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas (R$)'
+                    'Saídas Extrato (R$)', 'Entradas/Débitos Razão (R$)',
+                    'Dif. Saída Ext. x Entrada Razão (R$)',
+                    'Entradas Extrato (R$)', 'Saídas/Créditos Razão (R$)',
+                    'Dif. Entrada Ext. x Saída Razão (R$)'
                 ]
                 
                 st.dataframe(
@@ -5200,15 +5216,23 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 buf_audit = io.BytesIO()
                 with pd.ExcelWriter(buf_audit, engine='openpyxl') as writer:
                     df_exib_excel = df_exibicao.copy()
-                    for col in ['Entradas Ext. (R$)', 'Entradas Razão (R$)', 'Dif. Entradas (R$)', 'Saídas Ext. (R$)', 'Saídas Razão (R$)', 'Dif. Saídas (R$)']:
+                    for col in colunas_monetarias_conciliacao:
                         df_exib_excel[col] = df_exib_excel[col].apply(formatar_moeda)
                         
                     sanitizar_dataframe(df_exib_excel).to_excel(writer, sheet_name="Resumo Geral", index=False)
                     
                     df_divergencias = df_conciliacao[df_conciliacao['STATUS'] == '❌ Divergente'].copy()
                     if not df_divergencias.empty:
-                        df_div_export = df_divergencias[['DATA_EXIBICAO', 'ENTRADAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_ENTRADAS', 'SAIDAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_SAIDAS']].copy()
-                        df_div_export.columns = ['Data', 'Entradas Extrato', 'Entradas Razao', 'Diferenca Entradas', 'Saidas Extrato', 'Saidas Razao', 'Diferenca Saidas']
+                        df_div_export = df_divergencias[[
+                            'DATA_EXIBICAO',
+                            'SAIDAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_SAIDAS_EXT_ENTRADAS_RAZAO',
+                            'ENTRADAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_ENTRADAS_EXT_SAIDAS_RAZAO'
+                        ]].copy()
+                        df_div_export.columns = [
+                            'Data',
+                            'Saidas Extrato', 'Entradas Debitos Razao', 'Diferenca Saida Ext x Entrada Razao',
+                            'Entradas Extrato', 'Saidas Creditos Razao', 'Diferenca Entrada Ext x Saida Razao'
+                        ]
                         for col in df_div_export.columns[1:]: df_div_export[col] = df_div_export[col].apply(formatar_moeda)
                         sanitizar_dataframe(df_div_export).to_excel(writer, sheet_name="Dias Divergentes", index=False)
 
