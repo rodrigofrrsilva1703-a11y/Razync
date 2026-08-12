@@ -3,94 +3,43 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-old = '''def processar_extrato_conferencia_empresa(file_bytes, filename):
-    """Lê o extrato usado na conferência com os mesmos motores do conversor."""
-    extensao = os.path.splitext(filename)[1].lower()
-    if extensao == '.ofx':
-        return processar_ofx(file_bytes, filename)
-    if extensao in ['.csv', '.xlsx', '.xls']:
-        return processar_planilha_universal(file_bytes, filename)
-    if extensao == '.pdf':
-        caminho_temporario = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
-                temporario.write(file_bytes)
-                caminho_temporario = temporario.name
-            return processar_arquivo_pdf(caminho_temporario, filename)
-        finally:
-            if caminho_temporario and os.path.exists(caminho_temporario):
-                os.remove(caminho_temporario)
-    return []
-'''
-new = '''def processar_extrato_conferencia_empresa(file_bytes, filename):
-    """Lê o extrato usado na conferência sem transformar linhas de saldo em movimento."""
-    extensao = os.path.splitext(filename)[1].lower()
+inicio = text.find('def processar_pdf_itau_detalhado(')
+fim = text.find('\ndef processar_pdf_daycoval_detalhado(', inicio)
+if inicio < 0 or fim < 0:
+    raise SystemExit('Parser específico do Itaú não localizado.')
 
-    def remover_linhas_de_saldo(lancamentos):
-        termos_saldo = [
-            'saldo anterior',
-            'saldo aplic',
-            'saldo total disponivel',
-            'saldo movimentacao conta',
-            'sdo aplic aut mais ap',
-            'saldo final',
-            'saldo do dia',
-            'saldo total',
-            'saldo disponivel',
-            'saldo em conta',
-        ]
-        filtrados = []
-        for item in lancamentos or []:
-            historico = normalizar_texto(texto_celula_seguro(item.get('HISTÓRICO', '')))
-            if any(termo in historico for termo in termos_saldo):
-                continue
-            valor = limpar_valor_monetario(item.get('VALOR', 0))
-            if abs(valor) < 0.005:
-                continue
-            filtrados.append(item)
-        return filtrados
+bloco = text[inicio:fim]
 
-    if extensao == '.ofx':
-        return remover_linhas_de_saldo(processar_ofx(file_bytes, filename))
-    if extensao in ['.csv', '.xlsx', '.xls']:
-        return remover_linhas_de_saldo(processar_planilha_universal(file_bytes, filename))
-    if extensao == '.pdf':
-        caminho_temporario = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
-                temporario.write(file_bytes)
-                caminho_temporario = temporario.name
+# O Itaú pode ter lançamentos realmente idênticos no mesmo dia (mesma data,
+# valor e histórico). Não podemos deduplicar por conteúdo, pois isso altera o
+# total diário e faz a conferência divergir do saldo oficial do PDF.
+bloco_novo = bloco.replace('    vistos = set()\n', '')
+bloco_novo = bloco_novo.replace(
+    '''        chave = (data_str, round(valor, 2), historico)\n        if chave in vistos:\n            continue\n        vistos.add(chave)\n''',
+    ''
+)
 
-            # Para PDF Itaú detalhado, força o parser específico também na conferência.
-            # Assim os saldos de aplicação, saldo anterior, saldo disponível e saldo
-            # de movimentação nunca entram no total comparado com a planilha.
-            reader = PdfReader(caminho_temporario, strict=False)
-            texto_amostra = '\\n'.join((pagina.extract_text() or '') for pagina in reader.pages[:2])
-            banco = identificar_banco_inteligente(texto_amostra, filename)
-            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
-                lancamentos = processar_pdf_itau_detalhado(reader, banco)
-            else:
-                lancamentos = processar_arquivo_pdf(caminho_temporario, filename)
-            return remover_linhas_de_saldo(lancamentos)
-        finally:
-            if caminho_temporario and os.path.exists(caminho_temporario):
-                os.remove(caminho_temporario)
-    return []
-'''
+if bloco_novo == bloco:
+    raise SystemExit('A deduplicação antiga do parser Itaú não foi encontrada.')
+if 'vistos' in bloco_novo:
+    raise SystemExit('Ainda existe deduplicação por conteúdo dentro do parser Itaú.')
 
-if text.count(old) != 1:
-    raise SystemExit(f'Função de conferência encontrada {text.count(old)} vezes.')
-text = text.replace(old, new, 1)
+text = text[:inicio] + bloco_novo + text[fim:]
 
+# Mantém as proteções já existentes contra linhas que são apenas saldos.
 for termo in [
+    "'saldo anterior'",
     "'saldo aplic'",
+    "'saldo total disponivel dia'",
     "'saldo movimentacao conta'",
     "'sdo aplic aut mais ap'",
-    'processar_pdf_itau_detalhado(reader, banco)',
-    "texto_amostra = '\\n'.join",
 ]:
-    if termo not in text:
-        raise SystemExit(f'Validação da correção falhou: {termo}')
+    if termo not in bloco_novo:
+        raise SystemExit(f'Proteção de saldo foi perdida: {termo}')
+
+# Confirma que a conferência continua forçando o parser específico do Itaú.
+if 'processar_pdf_itau_detalhado(reader, banco)' not in text:
+    raise SystemExit('A conferência deixou de usar o parser específico do Itaú.')
 
 path.write_text(text, encoding='utf-8')
-print('Conferência Itaú corrigida: parser específico e linhas de saldo removidas.')
+print('Parser Itaú preserva lançamentos repetidos legítimos e continua ignorando linhas de saldo.')
