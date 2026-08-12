@@ -3312,15 +3312,26 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         empresa_autokraft = configuracao_empresa_autokraft['empresa']
         slug_empresa_autokraft = configuracao_empresa_autokraft["slug"]
 
-        aba_operacoes_autokraft, aba_base_autokraft = st.tabs([
-            "Organizar e conferir",
-            "Base inteligente de Débito e Crédito"
-        ])
-        with aba_operacoes_autokraft:
-            st.caption(
-                f"Ferramentas ativas para {empresa_autokraft}. O sistema lê automaticamente "
-                "cada aba diária, ignora saldos e totais e separa os lançamentos por banco."
+        ferramenta_autokraft = st.radio(
+            "Ferramenta",
+            ["Organizar e conferir", "Base inteligente de Débito e Crédito"],
+            horizontal=True,
+            key=f"ferramenta_{slug_empresa_autokraft}",
+            label_visibility="collapsed"
+        )
+
+        if ferramenta_autokraft == "Base inteligente de Débito e Crédito":
+            renderizar_base_inteligente_empresa(
+                slug_empresa_autokraft,
+                empresa_autokraft,
+                {'itau', 'daycoval'}
             )
+            st.stop()
+
+        st.caption(
+            f"Ferramentas ativas para {empresa_autokraft}. O sistema lê automaticamente "
+            "cada aba diária, ignora saldos e totais e separa os lançamentos por banco."
+        )
         bancos_autokraft = st.multiselect(
             "Bancos para organizar",
             ["Itaú", "Daycoval"],
@@ -3439,13 +3450,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         st.markdown(f"#### Conferência — {empresa_autokraft}")
         renderizar_conferencia_autokraft(slug_empresa_autokraft)
-
-        with aba_base_autokraft:
-            renderizar_base_inteligente_empresa(
-                slug_empresa_autokraft,
-                empresa_autokraft,
-                {'itau', 'daycoval'}
-            )
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         estabelecimento_nova = st.radio(
