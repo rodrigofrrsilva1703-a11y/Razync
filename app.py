@@ -191,14 +191,14 @@ st.markdown("""
         .st-key-org_empresa_card_nova button,
         .st-key-org_empresa_card_autokraft button {
             width: 100% !important;
-            height: 156px !important;
-            min-height: 156px !important;
-            padding: 20px 22px !important;
+            height: 132px !important;
+            min-height: 132px !important;
+            padding: 14px 16px !important;
             cursor: pointer !important;
             background: linear-gradient(145deg, #05090e 0%, #07131f 56%, #0a1d2d 100%) !important;
             border: 1px solid #17364f !important;
             border-left: 3px solid #147eaf !important;
-            border-radius: 10px !important;
+            border-radius: 7px !important;
             color: #91a9bb !important;
             display: flex !important;
             align-items: center !important;
@@ -206,7 +206,7 @@ st.markdown("""
             text-align: center !important;
             white-space: pre-line !important;
             line-height: 1.55 !important;
-            font-size: 12px !important;
+            font-size: 11px !important;
             font-weight: 400 !important;
             box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24) !important;
             transition: transform 160ms ease, border-color 160ms ease,
@@ -220,7 +220,7 @@ st.markdown("""
         .st-key-org_empresa_card_nova button strong,
         .st-key-org_empresa_card_autokraft button strong {
             color: #f2f8fc !important;
-            font-size: 18px !important;
+            font-size: 16px !important;
             line-height: 1.3 !important;
             font-weight: 700 !important;
         }
