@@ -187,36 +187,41 @@ st.markdown("""
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22) !important;
         }
 
-        /* Cards de empresas: compactos, quadrados e centralizados. */
+        /* Cards de empresas: quadrados, alinhados e com conteúdo contido. */
         .st-key-org_empresa_card_nova,
         .st-key-org_empresa_card_autokraft {
-            width: 168px !important;
-            max-width: 168px !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
+            width: 184px !important;
+            min-width: 184px !important;
+            max-width: 184px !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            justify-content: center !important;
         }
         .st-key-org_empresa_card_nova button,
         .st-key-org_empresa_card_autokraft button {
-            width: 168px !important;
-            min-width: 168px !important;
-            max-width: 168px !important;
-            height: 168px !important;
-            min-height: 168px !important;
-            max-height: 168px !important;
-            padding: 14px 14px !important;
+            width: 184px !important;
+            min-width: 184px !important;
+            max-width: 184px !important;
+            height: 184px !important;
+            min-height: 184px !important;
+            max-height: 184px !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            padding: 12px 13px !important;
             cursor: pointer !important;
             background: linear-gradient(145deg, #05090e 0%, #07131f 56%, #0a1d2d 100%) !important;
             border: 1px solid #17364f !important;
             border-left: 3px solid #147eaf !important;
-            border-radius: 7px !important;
+            border-radius: 8px !important;
             color: #91a9bb !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
             text-align: center !important;
-            white-space: pre-line !important;
-            line-height: 1.55 !important;
-            font-size: 11px !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.28 !important;
+            font-size: 10.5px !important;
             font-weight: 400 !important;
             box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24) !important;
             transition: transform 160ms ease, border-color 160ms ease,
@@ -224,14 +229,20 @@ st.markdown("""
         }
         .st-key-org_empresa_card_nova button p,
         .st-key-org_empresa_card_autokraft button p {
+            width: 100% !important;
+            max-width: 154px !important;
             white-space: pre-line !important;
-            margin: 0 !important;
+            overflow-wrap: anywhere !important;
+            margin: 0 auto !important;
+            line-height: 1.28 !important;
         }
         .st-key-org_empresa_card_nova button strong,
         .st-key-org_empresa_card_autokraft button strong {
+            display: inline-block !important;
+            max-width: 150px !important;
             color: #f2f8fc !important;
-            font-size: 16px !important;
-            line-height: 1.3 !important;
+            font-size: 15px !important;
+            line-height: 1.2 !important;
             font-weight: 700 !important;
         }
         .st-key-org_empresa_card_nova button:hover,
@@ -3098,7 +3109,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         with col_emp1:
             if st.button(
                 "🏢\n\n**266 - Nova Geração**\n\n"
-                "Organização, conferência e classificação dos movimentos bancários.",
+                "Organização bancária e conferência.",
                 use_container_width=True,
                 key="org_empresa_card_nova"
             ):
@@ -3107,7 +3118,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         with col_emp2:
             if st.button(
                 "🏭\n\n**Grupo Autokraft**\n\n"
-                "Mapas diários e conferência dos bancos Itaú e Daycoval.",
+                "Mapas bancários e conferência.",
                 use_container_width=True,
                 key="org_empresa_card_autokraft"
             ):
