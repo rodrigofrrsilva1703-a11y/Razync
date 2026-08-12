@@ -369,10 +369,10 @@ st.markdown("""
             background: rgba(19, 185, 232, 0.065) !important;
         }
         [data-testid="stCaptionContainer"] p {
-            color: #c8d7e2 !important;
-            font-size: 13.5px !important;
-            line-height: 1.55 !important;
-            font-weight: 500 !important;
+            color: #d6e4ee !important;
+            font-size: 16px !important;
+            line-height: 1.6 !important;
+            font-weight: 550 !important;
             margin: 0 !important;
         }
 
