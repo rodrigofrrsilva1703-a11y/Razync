@@ -3671,11 +3671,56 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             renderizar_conferencia_autokraft(slug_empresa_autokraft)
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
+        st.markdown("<div class='ng-area-label'>Área da empresa</div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stRadio"]:has(input[name="org_estabelecimento_nova_geracao"]) > label {
+                display: none !important;
+            }
+            div[data-testid="stRadio"]:has(input[name="org_estabelecimento_nova_geracao"]) [role="radiogroup"] {
+                gap: 8px !important;
+                flex-wrap: nowrap !important;
+            }
+            div[data-testid="stRadio"]:has(input[name="org_estabelecimento_nova_geracao"]) label[data-baseweb="radio"] {
+                min-height: 34px !important;
+                padding: 5px 12px !important;
+                margin: 0 !important;
+                border: 1px solid rgba(59,130,246,.34) !important;
+                border-radius: 8px !important;
+                background: linear-gradient(135deg, #080d16 0%, #0a1628 100%) !important;
+                box-shadow: none !important;
+                cursor: pointer !important;
+                transition: border-color .15s ease, background .15s ease !important;
+            }
+            div[data-testid="stRadio"]:has(input[name="org_estabelecimento_nova_geracao"]) label[data-baseweb="radio"]:has(input:checked) {
+                border-color: #2563eb !important;
+                background: linear-gradient(135deg, #0b1424 0%, #0d2344 100%) !important;
+            }
+            div[data-testid="stRadio"]:has(input[name="org_estabelecimento_nova_geracao"]) label[data-baseweb="radio"] > div:first-child {
+                display: none !important;
+            }
+            div[data-testid="stRadio"]:has(input[name="org_estabelecimento_nova_geracao"]) label[data-baseweb="radio"] p {
+                font-size: 12px !important;
+                line-height: 18px !important;
+                font-weight: 600 !important;
+                margin: 0 !important;
+            }
+            .ng-area-label {
+                font-size: 12px;
+                opacity: .72;
+                margin: 0 0 5px 1px;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
         estabelecimento_nova = st.radio(
             "Área da empresa",
             ["Matriz", "Filial"],
             horizontal=True,
             key="org_estabelecimento_nova_geracao",
+            label_visibility="collapsed",
             help="Escolha a empresa antes de organizar ou classificar a planilha final."
         )
         chave_estabelecimento = normalizar_texto(estabelecimento_nova)
