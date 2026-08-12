@@ -3859,15 +3859,24 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         elif st.button("← Voltar", use_container_width=True, key="btn_voltar_home_org"):
             mudar_pagina('home')
             st.rerun()
+    estabelecimento_ng_atual = st.session_state.get(
+        'org_estabelecimento_nova_geracao_card', 'matriz'
+    )
+    titulo_nova_geracao_atual = (
+        '1396 - Nova Geração'
+        if estabelecimento_ng_atual == 'filial'
+        else '266 - Nova Geração'
+    )
+
     with col_tit:
         st.title({
-            'nova_geracao': '266 - Nova Geração',
+            'nova_geracao': titulo_nova_geracao_atual,
             'autokraft_industrial': '3 - Autokraft Industrial',
             'autokraft_projetos': '178 - Autokraft Projetos',
             'isa': '343 - I.S.A'
         }.get(empresa_organizador, 'Organizador de Planilhas'))
     st.caption({
-        'nova_geracao': 'Organize, confira e classifique os movimentos da 266 - Nova Geração.',
+        'nova_geracao': f'Organize, confira e classifique os movimentos da {titulo_nova_geracao_atual}.',
         'autokraft_industrial': 'Organize os mapas diários e confira os extratos da 3 - Autokraft Industrial.',
         'autokraft_projetos': 'Organize os mapas diários e confira os extratos da 178 - Autokraft Projetos.',
         'isa': 'Organize os mapas diários e confira os extratos da 343 - I.S.A.'
