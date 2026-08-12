@@ -3741,6 +3741,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 st.rerun()
 
         chave_estabelecimento = st.session_state['org_estabelecimento_nova_geracao_card']
+        nome_estabelecimento_nova = (
+            'Filial' if chave_estabelecimento == 'filial' else 'Matriz'
+        )
         empresa_base_nova = (
             'nova_geracao_filial'
             if chave_estabelecimento == 'filial'
@@ -3971,7 +3974,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 "planilha consolidada pelas colunas CONTA, DATA, VALOR, LACTO, HISTORICO e DOC."
             )
             arquivo_empresa = st.file_uploader(
-                f"Envie a planilha bancária da 266 - Nova Geração — {estabelecimento_nova}",
+                f"Envie a planilha bancária da 266 - Nova Geração — {nome_estabelecimento_nova}",
                 type=["xlsx", "xls"],
                 key=f"org_upload_nova_geracao_multibanco_{chave_estabelecimento}"
             )
@@ -4108,7 +4111,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         "Baixar Modelo Domínio com abas por banco (.XLSX)",
                         data=arquivo_final,
                         file_name=(
-                            f"Nova_Geracao_{estabelecimento_nova}_{nome_saida_banco}_"
+                            f"Nova_Geracao_{nome_estabelecimento_nova}_{nome_saida_banco}_"
                             f"{data_inicial.strftime('%d%m%Y')}_a_{data_final.strftime('%d%m%Y')}_"
                             "Modelo_Dominio.xlsx"
                         ),
