@@ -187,13 +187,23 @@ st.markdown("""
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22) !important;
         }
 
-        /* Cards de empresas: preto azulado e completamente clicáveis. */
+        /* Cards de empresas: compactos, quadrados e centralizados. */
+        .st-key-org_empresa_card_nova,
+        .st-key-org_empresa_card_autokraft {
+            width: 168px !important;
+            max-width: 168px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
         .st-key-org_empresa_card_nova button,
         .st-key-org_empresa_card_autokraft button {
-            width: 100% !important;
-            height: 132px !important;
-            min-height: 132px !important;
-            padding: 14px 16px !important;
+            width: 168px !important;
+            min-width: 168px !important;
+            max-width: 168px !important;
+            height: 168px !important;
+            min-height: 168px !important;
+            max-height: 168px !important;
+            padding: 14px 14px !important;
             cursor: pointer !important;
             background: linear-gradient(145deg, #05090e 0%, #07131f 56%, #0a1d2d 100%) !important;
             border: 1px solid #17364f !important;
