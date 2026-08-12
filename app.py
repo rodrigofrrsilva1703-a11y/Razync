@@ -2279,18 +2279,13 @@ def classificar_planilha_final(
     for item in base_classificacoes:
         banco = item.get('banco', '')
         assinatura = item.get('assinatura', '')
-        natureza = assinatura.split('|', 1)[0] if assinatura else ''
         debito_item = texto_celula_seguro(item.get('debito'))
         credito_item = texto_celula_seguro(item.get('credito'))
         conta_banco_item = texto_celula_seguro(contas_bancarias.get(banco, ''))
 
-        if natureza == 'pago':
-            contrapartida = debito_item
-        elif natureza == 'recebido':
-            contrapartida = credito_item
-        elif banco in contas_bancarias and conta_banco_item:
-            # Planilhas Autokraft aprendidas não trazem PAGO/RECEBIDO no histórico.
-            # Se a conta do banco está no crédito, é uma saída; se está no débito, é entrada.
+        # Para padrões já aprendidos, a posição REAL da conta bancária é mais
+        # confiável que palavras como "pago" ou "recebido" presentes no histórico.
+        if banco in contas_bancarias and conta_banco_item:
             if credito_item == conta_banco_item and debito_item:
                 natureza = 'pago'
                 contrapartida = debito_item
@@ -2298,9 +2293,20 @@ def classificar_planilha_final(
                 natureza = 'recebido'
                 contrapartida = credito_item
             else:
+                natureza = assinatura.split('|', 1)[0] if assinatura else ''
                 contrapartida = ''
         else:
+            natureza = assinatura.split('|', 1)[0] if assinatura else ''
             contrapartida = ''
+
+        # Normaliza também a assinatura existente para a natureza real inferida
+        # pela posição da conta do banco. Isso reaproveita a base antiga sem zerar.
+        if assinatura and natureza in {'pago', 'recebido'}:
+            partes_assinatura = assinatura.split('|', 1)
+            sufixo_assinatura = partes_assinatura[1] if len(partes_assinatura) > 1 else ''
+            assinatura = (
+                f"{natureza}|{sufixo_assinatura}" if sufixo_assinatura else natureza
+            )
         if banco not in contas_bancarias or not assinatura or not contrapartida:
             continue
         candidatos_por_banco.setdefault(banco, {}).setdefault(assinatura, set()).add(
@@ -2407,19 +2413,30 @@ def classificar_planilha_final(
                 continue
 
             assinatura = criar_assinatura_classificacao(historico)
-            natureza = assinatura.split('|', 1)[0] if assinatura else ''
 
-            # Fallback essencial para as planilhas Autokraft: nelas o histórico
-            # costuma ser apenas a descrição original, enquanto o sinal do VALOR
-            # informa com segurança se foi entrada ou saída.
-            if natureza not in {'pago', 'recebido'} and col_valor is not None:
-                valor_linha = limpar_valor_monetario(
-                    ws.cell(numero_linha, col_valor).value
+            # REGRA PRINCIPAL: o sinal do VALOR decide a natureza.
+            # Nunca usamos uma palavra perdida no histórico para decidir se o banco
+            # entra no débito ou no crédito.
+            valor_linha = (
+                limpar_valor_monetario(ws.cell(numero_linha, col_valor).value)
+                if col_valor is not None else 0.0
+            )
+            if valor_linha < 0:
+                natureza = 'pago'
+            elif valor_linha > 0:
+                natureza = 'recebido'
+            else:
+                natureza = assinatura.split('|', 1)[0] if assinatura else ''
+
+            # A assinatura usada para procurar a contrapartida também recebe a
+            # natureza definida pelo sinal, evitando que "pago" dentro do histórico
+            # faça um recebimento buscar padrões de pagamento (e vice-versa).
+            if assinatura and natureza in {'pago', 'recebido'}:
+                partes_assinatura = assinatura.split('|', 1)
+                sufixo_assinatura = partes_assinatura[1] if len(partes_assinatura) > 1 else ''
+                assinatura = (
+                    f"{natureza}|{sufixo_assinatura}" if sufixo_assinatura else natureza
                 )
-                if valor_linha < 0:
-                    natureza = 'pago'
-                elif valor_linha > 0:
-                    natureza = 'recebido'
 
             conta_banco = contas_bancarias[banco_linha]
             if natureza == 'pago':
@@ -2558,15 +2575,17 @@ def extrair_pendencias_revisao_inteligente(file_bytes, contas_bancarias):
                 continue
 
             assinatura = criar_assinatura_classificacao(historico)
-            natureza = assinatura.split('|', 1)[0] if assinatura else ''
             valor = 0.0
             if col_valor is not None:
                 valor = limpar_valor_monetario(ws.cell(numero_linha, col_valor).value)
-            if natureza not in {'pago', 'recebido'}:
-                if valor < 0:
-                    natureza = 'pago'
-                elif valor > 0:
-                    natureza = 'recebido'
+
+            # A Revisão Inteligente segue exatamente a mesma regra da classificação.
+            if valor < 0:
+                natureza = 'pago'
+            elif valor > 0:
+                natureza = 'recebido'
+            else:
+                natureza = assinatura.split('|', 1)[0] if assinatura else ''
 
             if natureza == 'pago':
                 coluna_destino = col_debito
