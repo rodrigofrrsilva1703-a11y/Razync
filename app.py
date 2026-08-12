@@ -209,30 +209,30 @@ st.markdown("""
             line-height: 1.18 !important;
         }
 
-        /* Cards de empresas: levemente maiores e alinhados à esquerda. */
+        /* Cards de empresas: alinhados à esquerda com espaçamento responsivo. */
         .st-key-org_empresa_card_nova,
         .st-key-org_empresa_card_autokraft {
-            width: 224px !important;
-            min-width: 224px !important;
-            max-width: 224px !important;
+            width: 218px !important;
+            min-width: 218px !important;
+            max-width: 218px !important;
             display: flex !important;
             justify-content: flex-start !important;
             margin: 0 !important;
         }
         .st-key-org_empresa_card_nova {
-            margin-right: 10px !important;
+            margin-right: 18px !important;
         }
         .st-key-org_empresa_card_autokraft {
             margin-left: 0 !important;
         }
         .st-key-org_empresa_card_nova button,
         .st-key-org_empresa_card_autokraft button {
-            width: 224px !important;
-            min-width: 224px !important;
-            max-width: 224px !important;
-            height: 224px !important;
-            min-height: 224px !important;
-            max-height: 224px !important;
+            width: 218px !important;
+            min-width: 218px !important;
+            max-width: 218px !important;
+            height: 218px !important;
+            min-height: 218px !important;
+            max-height: 218px !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
             padding: 16px 16px !important;
@@ -258,7 +258,7 @@ st.markdown("""
         .st-key-org_empresa_card_nova button p,
         .st-key-org_empresa_card_autokraft button p {
             width: 100% !important;
-            max-width: 188px !important;
+            max-width: 182px !important;
             white-space: pre-line !important;
             overflow-wrap: anywhere !important;
             margin: 0 auto !important;
@@ -267,7 +267,7 @@ st.markdown("""
         .st-key-org_empresa_card_nova button strong,
         .st-key-org_empresa_card_autokraft button strong {
             display: inline-block !important;
-            max-width: 184px !important;
+            max-width: 178px !important;
             color: #f2f8fc !important;
             font-size: 16px !important;
             line-height: 1.2 !important;
@@ -281,6 +281,25 @@ st.markdown("""
             color: #bfd1de !important;
             transform: translateY(-2px) !important;
             box-shadow: 0 15px 34px rgba(0, 79, 122, 0.22) !important;
+        }
+
+        @media (max-width: 1150px) {
+            .st-key-org_empresa_card_nova,
+            .st-key-org_empresa_card_autokraft {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 218px !important;
+            }
+            .st-key-org_empresa_card_nova button,
+            .st-key-org_empresa_card_autokraft button {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 218px !important;
+                aspect-ratio: 1 / 1 !important;
+                height: auto !important;
+                min-height: 190px !important;
+                max-height: 218px !important;
+            }
         }
 
         [data-testid="stFileUploaderDropzone"] {
@@ -3132,7 +3151,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if empresa_organizador is None:
         st.markdown("##### Empresas disponíveis")
-        col_emp1, col_emp2, _espaco_empresas = st.columns([1, 1, 4])
+        col_emp1, col_gap_empresas, col_emp2, _espaco_empresas = st.columns([1.15, 0.10, 1.15, 3.60])
         with col_emp1:
             if st.button(
                 "🏢\n\n**266 - Nova Geração**\n\n"
