@@ -258,7 +258,7 @@ st.markdown("""
             background: #050b12 !important;
             border: 1px solid #12324a !important;
             border-radius: 8px !important;
-            color: #91a9bb !important;
+            color: #f2f8fc !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -359,6 +359,22 @@ st.markdown("""
             margin-bottom: 20px;
         }
         .aviso-banner p { margin: 0; color: #c5d0da; font-size: 14px; }
+
+        /* Textos explicativos das ferramentas: mais visíveis e fáceis de localizar. */
+        [data-testid="stCaptionContainer"] {
+            margin: 8px 0 14px !important;
+            padding: 10px 13px !important;
+            border-left: 3px solid rgba(19, 185, 232, 0.78) !important;
+            border-radius: 6px !important;
+            background: rgba(19, 185, 232, 0.065) !important;
+        }
+        [data-testid="stCaptionContainer"] p {
+            color: #c8d7e2 !important;
+            font-size: 13.5px !important;
+            line-height: 1.55 !important;
+            font-weight: 500 !important;
+            margin: 0 !important;
+        }
 
         .stTextInput { margin-top: -2px; }
 
@@ -3489,15 +3505,15 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         )
 
         cards_empresas = [
-            (col_emp1, 'nova_geracao', 'org_empresa_card_nova', '🏢', '266 - Nova Geração', 'Organização bancária e conferência.'),
-            (col_emp2, 'autokraft_industrial', 'org_empresa_card_autokraft_industrial', '🏭', '3 - Autokraft Industrial', 'Mapas bancários e conferência.'),
-            (col_emp3, 'autokraft_projetos', 'org_empresa_card_autokraft_projetos', '📐', '178 - Autokraft Projetos', 'Mapas bancários e conferência.'),
-            (col_emp4, 'isa', 'org_empresa_card_isa', '🏢', '343 - I.S.A', 'Mapas bancários e conferência.'),
+            (col_emp1, 'nova_geracao', 'org_empresa_card_nova', '266 - Nova Geração'),
+            (col_emp2, 'autokraft_industrial', 'org_empresa_card_autokraft_industrial', '3 - Autokraft Industrial'),
+            (col_emp3, 'autokraft_projetos', 'org_empresa_card_autokraft_projetos', '178 - Autokraft Projetos'),
+            (col_emp4, 'isa', 'org_empresa_card_isa', '343 - I.S.A'),
         ]
-        for coluna_card, chave_empresa, chave_card, icone, titulo_card, descricao_card in cards_empresas:
+        for coluna_card, chave_empresa, chave_card, titulo_card in cards_empresas:
             with coluna_card:
                 if st.button(
-                    f"{icone}\n\n**{titulo_card}**\n\n{descricao_card}",
+                    f"**{titulo_card}**",
                     use_container_width=True,
                     key=chave_card
                 ):
