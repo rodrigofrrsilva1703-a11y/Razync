@@ -3,37 +3,32 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-old = '''        if base_empresa:
-            linhas = []
-            for item in base_empresa:
-                linhas.append({
-                    'Banco': nome_banco_por_chave(item.get('banco', '')),
-                    'Débito': item.get('debito', ''),
-                    'Crédito': item.get('credito', ''),
-                    'Ocorrências': item.get('ocorrencias', 0),
-                    'Períodos': len(item.get('periodos') or []),
-                    'Exemplo': item.get('exemplo_historico', '')
-                })
-            st.dataframe(pd.DataFrame(linhas), use_container_width=True, height=300)
-        else:
-            st.info("Esta empresa ainda não possui padrões aprendidos.")
-
+# Altera somente o nome exibido da Filial. A chave interna continua separada
+# como nova_geracao_filial para preservar a Base Inteligente independente.
+old = '''        labels_estabelecimento = {
+            'matriz': 'Matriz',
+            'filial': 'Filial',
+        }
 '''
-new = '''        if not base_empresa:
-            st.info("Esta empresa ainda não possui padrões aprendidos.")
-
+new = '''        labels_estabelecimento = {
+            'matriz': 'Matriz',
+            'filial': '1396 - Nova Geração',
+        }
 '''
-if text.count(old) != 1:
-    raise SystemExit(f'Relatório visual da Base Inteligente encontrado {text.count(old)} vezes.')
-text = text.replace(old, new, 1)
+if old in text:
+    text = text.replace(old, new, 1)
+else:
+    # Compatibilidade caso o bloco esteja escrito de outra forma: troca apenas
+    # o rótulo da filial no seletor, sem tocar nas chaves da base.
+    alvo = "'filial': 'Filial'"
+    if text.count(alvo) != 1:
+        raise SystemExit(f'Rótulo da Filial encontrado {text.count(alvo)} vezes.')
+    text = text.replace(alvo, "'filial': '1396 - Nova Geração'", 1)
 
-# Garante que a listagem detalhada não volte a aparecer nessa área.
-bloco_inicio = text.find('def renderizar_base_inteligente_empresa(')
-bloco_fim = text.find('# ==============================================================================', bloco_inicio)
-bloco = text[bloco_inicio:bloco_fim]
-for trecho in ["'Ocorrências':", "'Períodos':", "'Exemplo':"]:
-    if trecho in bloco:
-        raise SystemExit(f'Coluna de relatório ainda presente na Base Inteligente: {trecho}')
+if "'nova_geracao_filial'" not in text:
+    raise SystemExit('A chave independente da Base Inteligente da Filial não foi preservada.')
+if '1396 - Nova Geração' not in text:
+    raise SystemExit('Novo nome da Filial não foi aplicado.')
 
 path.write_text(text, encoding='utf-8')
-print('Relatório detalhado da Base Inteligente removido; permanecem apenas status e ações.')
+print('Filial renomeada visualmente para 1396 - Nova Geração, mantendo sua base independente.')
