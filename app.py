@@ -1061,7 +1061,7 @@ def processar_pdf_itau_detalhado(reader, banco_identificado):
     textos = [(pagina.extract_text() or '') for pagina in reader.pages]
     texto_total = '\n'.join(textos)
     texto_norm = normalizar_texto(texto_total)
-    if banco_identificado != 'BANCO ITAÚ' and 'itau' not in texto_norm:
+    if banco_identificado not in {'BANCO ITAU', 'BANCO ITAÚ'} and 'itau' not in texto_norm:
         return []
     if 'lancamentos do periodo' not in texto_norm or 'razao social' not in texto_norm:
         return []
@@ -1126,7 +1126,7 @@ def processar_pdf_itau_detalhado(reader, banco_identificado):
             continue
         vistos.add(chave)
         lancamentos.append({
-            'DESCRIÇÃO': banco_identificado or 'BANCO ITAÚ',
+            'DESCRIÇÃO': banco_identificado or 'BANCO ITAU',
             'DATA': data_str,
             'VALOR': valor,
             'DÉBITO': '',
@@ -1224,7 +1224,7 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
             if lancamentos_daycoval:
                 return lancamentos_daycoval
 
-        if banco_identificado == 'BANCO ITAÚ':
+        if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:
             lancamentos_itau = processar_pdf_itau_detalhado(
                 reader, banco_identificado
             )
