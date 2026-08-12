@@ -5052,7 +5052,10 @@ elif st.session_state['pagina_ativa'] == 'razao':
         if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_razao"): mudar_pagina('home'); st.rerun()
     with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
     
-    st.caption("Acompanhe a conferência diária comparando diretamente as Entradas e Saídas do Extrato com o Razão da Domínio.")
+    st.caption(
+        "Acompanhe a conferência diária comparando Entradas e Saídas. "
+        "As diferenças são calculadas no sentido Razão − Extrato."
+    )
     st.markdown("""<div class="aviso-banner"><p><strong>Formatos aceitos:</strong> CSV, XLSX e XLS antigo da Domínio. Quando necessário, o sistema recupera e normaliza o arquivo automaticamente antes da leitura.</p></div>""", unsafe_allow_html=True)
 
     st.markdown("##### 📁 Arquivos de Importação")
@@ -5143,8 +5146,15 @@ elif st.session_state['pagina_ativa'] == 'razao':
 
                 # ---------------- CÁLCULOS DE DIFERENÇAS ----------------
                 df_conciliacao = df_conciliacao.sort_values('DATA_DT')
-                df_conciliacao['DIF_ENTRADAS'] = df_conciliacao['ENTRADAS_EXTRATO'] - df_conciliacao['ENTRADAS_RAZAO']
-                df_conciliacao['DIF_SAIDAS'] = df_conciliacao['SAIDAS_EXTRATO'] - df_conciliacao['SAIDAS_RAZAO']
+                # Sentido correto da análise: RAZÃO - EXTRATO.
+                # Valor positivo = há mais no Razão do que no Extrato.
+                # Valor negativo = há mais no Extrato do que no Razão.
+                df_conciliacao['DIF_ENTRADAS'] = (
+                    df_conciliacao['ENTRADAS_RAZAO'] - df_conciliacao['ENTRADAS_EXTRATO']
+                )
+                df_conciliacao['DIF_SAIDAS'] = (
+                    df_conciliacao['SAIDAS_RAZAO'] - df_conciliacao['SAIDAS_EXTRATO']
+                )
                 
                 df_conciliacao['STATUS'] = df_conciliacao.apply(
                     lambda row: "✅ Batendo" if abs(row['DIF_ENTRADAS']) < 0.01 and abs(row['DIF_SAIDAS']) < 0.01 else "❌ Divergente", 
