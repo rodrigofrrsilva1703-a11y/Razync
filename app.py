@@ -1174,7 +1174,6 @@ def processar_pdf_itau_detalhado(reader, banco_identificado):
     ]
     padrao_valor = re.compile(r'(?<!\d)([-+]?\s*\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)')
     lancamentos = []
-    vistos = set()
 
     for data_str, conteudo in blocos:
         conteudo_norm = normalizar_texto(conteudo)
@@ -1199,10 +1198,6 @@ def processar_pdf_itau_detalhado(reader, banco_identificado):
         if not historico:
             historico = 'MOVIMENTO BANCARIO'
 
-        chave = (data_str, round(valor, 2), historico)
-        if chave in vistos:
-            continue
-        vistos.add(chave)
         lancamentos.append({
             'DESCRIÇÃO': banco_identificado or 'BANCO ITAU',
             'DATA': data_str,
