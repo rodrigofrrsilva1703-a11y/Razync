@@ -2085,10 +2085,25 @@ def classificar_planilha_final(
         banco = item.get('banco', '')
         assinatura = item.get('assinatura', '')
         natureza = assinatura.split('|', 1)[0] if assinatura else ''
+        debito_item = texto_celula_seguro(item.get('debito'))
+        credito_item = texto_celula_seguro(item.get('credito'))
+        conta_banco_item = texto_celula_seguro(contas_bancarias.get(banco, ''))
+
         if natureza == 'pago':
-            contrapartida = texto_celula_seguro(item.get('debito'))
+            contrapartida = debito_item
         elif natureza == 'recebido':
-            contrapartida = texto_celula_seguro(item.get('credito'))
+            contrapartida = credito_item
+        elif banco in contas_bancarias and conta_banco_item:
+            # Planilhas Autokraft aprendidas não trazem PAGO/RECEBIDO no histórico.
+            # Se a conta do banco está no crédito, é uma saída; se está no débito, é entrada.
+            if credito_item == conta_banco_item and debito_item:
+                natureza = 'pago'
+                contrapartida = debito_item
+            elif debito_item == conta_banco_item and credito_item:
+                natureza = 'recebido'
+                contrapartida = credito_item
+            else:
+                contrapartida = ''
         else:
             contrapartida = ''
         if banco not in contas_bancarias or not assinatura or not contrapartida:
@@ -2173,6 +2188,7 @@ def classificar_planilha_final(
         col_hist = mapa_colunas['historico']
         col_debito = mapa_colunas['debito']
         col_credito = mapa_colunas['credito']
+        col_valor = mapa_colunas.get('valor')
         col_descricao = mapa_colunas.get('descricao')
         banco_aba = identificar_chave_banco_empresa(ws.title) or banco_arquivo
 
@@ -2197,6 +2213,19 @@ def classificar_planilha_final(
 
             assinatura = criar_assinatura_classificacao(historico)
             natureza = assinatura.split('|', 1)[0] if assinatura else ''
+
+            # Fallback essencial para as planilhas Autokraft: nelas o histórico
+            # costuma ser apenas a descrição original, enquanto o sinal do VALOR
+            # informa com segurança se foi entrada ou saída.
+            if natureza not in {'pago', 'recebido'} and col_valor is not None:
+                valor_linha = limpar_valor_monetario(
+                    ws.cell(numero_linha, col_valor).value
+                )
+                if valor_linha < 0:
+                    natureza = 'pago'
+                elif valor_linha > 0:
+                    natureza = 'recebido'
+
             conta_banco = contas_bancarias[banco_linha]
             if natureza == 'pago':
                 if not credito_atual:
@@ -2219,8 +2248,20 @@ def classificar_planilha_final(
                     resumo['parciais_completados'] += 1
                 continue
 
-            candidatos = candidatos_por_banco.get(banco_linha, {}).get(assinatura, set())
-            conta_segura = mapas_seguros.get(banco_linha, {}).get(assinatura)
+            candidatos_banco = candidatos_por_banco.get(banco_linha, {})
+            mapas_banco = mapas_seguros.get(banco_linha, {})
+            candidatos = candidatos_banco.get(assinatura, set())
+            conta_segura = mapas_banco.get(assinatura)
+
+            # Quando a base foi aprendida a partir de histórico cru da Autokraft,
+            # a assinatura fica "outro|...". Mantemos o restante da assinatura e
+            # localizamos esse padrão também.
+            if not candidatos and assinatura:
+                partes_assinatura = assinatura.split('|', 1)
+                sufixo_assinatura = partes_assinatura[1] if len(partes_assinatura) > 1 else ''
+                assinatura_outro = f"outro|{sufixo_assinatura}" if sufixo_assinatura else assinatura
+                candidatos = candidatos_banco.get(assinatura_outro, set())
+                conta_segura = mapas_banco.get(assinatura_outro)
             if 'antecipad' in normalizar_texto(historico):
                 ws.cell(numero_linha, coluna_contrapartida).value = 532
                 resumo['automaticos'] += 1
