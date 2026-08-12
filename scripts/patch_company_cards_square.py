@@ -3,116 +3,95 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-old_css = '''            .st-key-ng_card_matriz button,
-            .st-key-ng_card_filial button {
-                width: 100% !important;
-                height: 42px !important;
-                min-height: 42px !important;
-                max-height: 42px !important;
-                padding: 6px 12px !important;
-                border-radius: 8px !important;
-                border: 1px solid #12324a !important;
-                background: #050b12 !important;
-                box-shadow: none !important;
-                transform: none !important;
-                font-size: 12px !important;
-                font-weight: 600 !important;
-            }
+old = '''def processar_extrato_conferencia_empresa(file_bytes, filename):
+    """Lê o extrato usado na conferência com os mesmos motores do conversor."""
+    extensao = os.path.splitext(filename)[1].lower()
+    if extensao == '.ofx':
+        return processar_ofx(file_bytes, filename)
+    if extensao in ['.csv', '.xlsx', '.xls']:
+        return processar_planilha_universal(file_bytes, filename)
+    if extensao == '.pdf':
+        caminho_temporario = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
+                temporario.write(file_bytes)
+                caminho_temporario = temporario.name
+            return processar_arquivo_pdf(caminho_temporario, filename)
+        finally:
+            if caminho_temporario and os.path.exists(caminho_temporario):
+                os.remove(caminho_temporario)
+    return []
 '''
-new_css = '''            .st-key-ng_card_matriz button,
-            .st-key-ng_card_filial button {
-                width: 100% !important;
-                height: 52px !important;
-                min-height: 52px !important;
-                max-height: 52px !important;
-                padding: 6px 10px !important;
-                border-radius: 8px !important;
-                border: 1px solid #12324a !important;
-                background: #050b12 !important;
-                box-shadow: none !important;
-                transform: none !important;
-                font-size: 12px !important;
-                line-height: 1.25 !important;
-                font-weight: 600 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                text-align: center !important;
-                white-space: normal !important;
-            }
+new = '''def processar_extrato_conferencia_empresa(file_bytes, filename):
+    """Lê o extrato usado na conferência sem transformar linhas de saldo em movimento."""
+    extensao = os.path.splitext(filename)[1].lower()
+
+    def remover_linhas_de_saldo(lancamentos):
+        termos_saldo = [
+            'saldo anterior',
+            'saldo aplic',
+            'saldo total disponivel',
+            'saldo movimentacao conta',
+            'sdo aplic aut mais ap',
+            'saldo final',
+            'saldo do dia',
+            'saldo total',
+            'saldo disponivel',
+            'saldo em conta',
+        ]
+        filtrados = []
+        for item in lancamentos or []:
+            historico = normalizar_texto(texto_celula_seguro(item.get('HISTÓRICO', '')))
+            if any(termo in historico for termo in termos_saldo):
+                continue
+            valor = limpar_valor_monetario(item.get('VALOR', 0))
+            if abs(valor) < 0.005:
+                continue
+            filtrados.append(item)
+        return filtrados
+
+    if extensao == '.ofx':
+        return remover_linhas_de_saldo(processar_ofx(file_bytes, filename))
+    if extensao in ['.csv', '.xlsx', '.xls']:
+        return remover_linhas_de_saldo(processar_planilha_universal(file_bytes, filename))
+    if extensao == '.pdf':
+        caminho_temporario = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
+                temporario.write(file_bytes)
+                caminho_temporario = temporario.name
+
+            # Para PDF Itaú detalhado, força o parser específico também na conferência.
+            # Assim os saldos de aplicação, saldo anterior, saldo disponível e saldo
+            # de movimentação nunca entram no total comparado com a planilha.
+            reader = PdfReader(caminho_temporario, strict=False)
+            texto_amostra = '\n'.join((pagina.extract_text() or '') for pagina in reader.pages[:2])
+            banco = identificar_banco_inteligente(texto_amostra, filename)
+            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
+                lancamentos = processar_pdf_itau_detalhado(reader, banco)
+            else:
+                lancamentos = processar_arquivo_pdf(caminho_temporario, filename)
+            return remover_linhas_de_saldo(lancamentos)
+        finally:
+            if caminho_temporario and os.path.exists(caminho_temporario):
+                os.remove(caminho_temporario)
+    return []
 '''
-if text.count(old_css) != 1:
-    raise SystemExit(f'CSS normal dos cards encontrado {text.count(old_css)} vezes.')
-text = text.replace(old_css, new_css, 1)
 
-old_active = '''            .st-key-ng_card_matriz_ativo button,
-            .st-key-ng_card_filial_ativo button {
-                width: 100% !important;
-                height: 42px !important;
-                min-height: 42px !important;
-                max-height: 42px !important;
-                padding: 6px 12px !important;
-                border-radius: 8px !important;
-                border: 1px solid #1d6f9b !important;
-                background: #0b1f33 !important;
-                box-shadow: none !important;
-                transform: none !important;
-                font-size: 12px !important;
-                font-weight: 700 !important;
-            }
-'''
-new_active = '''            .st-key-ng_card_matriz_ativo button,
-            .st-key-ng_card_filial_ativo button {
-                width: 100% !important;
-                height: 52px !important;
-                min-height: 52px !important;
-                max-height: 52px !important;
-                padding: 6px 10px !important;
-                border-radius: 8px !important;
-                border: 1px solid #1d6f9b !important;
-                background: #0b1f33 !important;
-                box-shadow: none !important;
-                transform: none !important;
-                font-size: 12px !important;
-                line-height: 1.25 !important;
-                font-weight: 700 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                text-align: center !important;
-                white-space: normal !important;
-            }
-'''
-if text.count(old_active) != 1:
-    raise SystemExit(f'CSS ativo dos cards encontrado {text.count(old_active)} vezes.')
-text = text.replace(old_active, new_active, 1)
+if text.count(old) != 1:
+    raise SystemExit(f'Função de conferência encontrada {text.count(old)} vezes.')
+text = text.replace(old, new, 1)
 
-old_cols = "        col_matriz, col_filial, col_restante = st.columns([0.14, 0.14, 0.72], gap='small')\n"
-new_cols = "        col_matriz, col_filial, col_restante = st.columns([0.19, 0.19, 0.62], gap='small')\n"
-if text.count(old_cols) != 1:
-    raise SystemExit(f'Layout dos cards encontrado {text.count(old_cols)} vezes.')
-text = text.replace(old_cols, new_cols, 1)
-
-old_button = "            if st.button('Matriz', key=chave_card_matriz, use_container_width=True):\n"
-new_button = "            if st.button('266 - Nova Geração Matriz', key=chave_card_matriz, use_container_width=True):\n"
-if text.count(old_button) != 1:
-    raise SystemExit(f'Botão Matriz encontrado {text.count(old_button)} vezes.')
-text = text.replace(old_button, new_button, 1)
-
-old_nome = "            '1396 - Nova Geração Filial' if chave_estabelecimento == 'filial' else 'Matriz'\n"
-new_nome = "            '1396 - Nova Geração Filial' if chave_estabelecimento == 'filial' else '266 - Nova Geração Matriz'\n"
-if text.count(old_nome) != 1:
-    raise SystemExit(f'Nome interno visual da Matriz encontrado {text.count(old_nome)} vezes.')
-text = text.replace(old_nome, new_nome, 1)
-
-for check in [
-    "st.button('266 - Nova Geração Matriz'",
-    "st.button('1396 - Nova Geração Filial'",
-    'height: 52px',
-    "st.columns([0.19, 0.19, 0.62], gap='small')",
+# Teste estático baseado no extrato Itaú que causou o erro: essas linhas nunca
+# podem aparecer como lançamentos na conferência.
+for termo in [
+    "'saldo aplic'",
+    "'saldo movimentacao conta'",
+    "'sdo aplic aut mais ap'",
+    'processar_pdf_itau_detalhado(reader, banco)',
 ]:
-    if check not in text:
-        raise SystemExit(f'Validação falhou: {check}')
+    if termo not in text:
+        raise SystemExit(f'Validação da correção falhou: {termo}')
 
 path.write_text(text, encoding='utf-8')
-print('Cards Matriz/Filial alinhados, com mesmo tamanho e nomes completos.')
+print('Conferência Itaú corrigida: usa parser específico e remove qualquer linha de saldo.')
