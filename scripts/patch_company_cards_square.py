@@ -65,7 +65,7 @@ new = '''def processar_extrato_conferencia_empresa(file_bytes, filename):
             # Assim os saldos de aplicação, saldo anterior, saldo disponível e saldo
             # de movimentação nunca entram no total comparado com a planilha.
             reader = PdfReader(caminho_temporario, strict=False)
-            texto_amostra = '\n'.join((pagina.extract_text() or '') for pagina in reader.pages[:2])
+            texto_amostra = '\\n'.join((pagina.extract_text() or '') for pagina in reader.pages[:2])
             banco = identificar_banco_inteligente(texto_amostra, filename)
             if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
                 lancamentos = processar_pdf_itau_detalhado(reader, banco)
@@ -82,16 +82,15 @@ if text.count(old) != 1:
     raise SystemExit(f'Função de conferência encontrada {text.count(old)} vezes.')
 text = text.replace(old, new, 1)
 
-# Teste estático baseado no extrato Itaú que causou o erro: essas linhas nunca
-# podem aparecer como lançamentos na conferência.
 for termo in [
     "'saldo aplic'",
     "'saldo movimentacao conta'",
     "'sdo aplic aut mais ap'",
     'processar_pdf_itau_detalhado(reader, banco)',
+    "texto_amostra = '\\n'.join",
 ]:
     if termo not in text:
         raise SystemExit(f'Validação da correção falhou: {termo}')
 
 path.write_text(text, encoding='utf-8')
-print('Conferência Itaú corrigida: usa parser específico e remove qualquer linha de saldo.')
+print('Conferência Itaú corrigida: parser específico e linhas de saldo removidas.')
