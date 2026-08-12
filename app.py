@@ -4092,17 +4092,23 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             .st-key-ng_card_matriz button,
             .st-key-ng_card_filial button {
                 width: 100% !important;
-                height: 42px !important;
-                min-height: 42px !important;
-                max-height: 42px !important;
-                padding: 6px 12px !important;
+                height: 52px !important;
+                min-height: 52px !important;
+                max-height: 52px !important;
+                padding: 6px 10px !important;
                 border-radius: 8px !important;
                 border: 1px solid #12324a !important;
                 background: #050b12 !important;
                 box-shadow: none !important;
                 transform: none !important;
                 font-size: 12px !important;
+                line-height: 1.25 !important;
                 font-weight: 600 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                text-align: center !important;
+                white-space: normal !important;
             }
             .st-key-ng_card_matriz button:hover,
             .st-key-ng_card_filial button:hover {
@@ -4114,29 +4120,35 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             .st-key-ng_card_matriz_ativo button,
             .st-key-ng_card_filial_ativo button {
                 width: 100% !important;
-                height: 42px !important;
-                min-height: 42px !important;
-                max-height: 42px !important;
-                padding: 6px 12px !important;
+                height: 52px !important;
+                min-height: 52px !important;
+                max-height: 52px !important;
+                padding: 6px 10px !important;
                 border-radius: 8px !important;
                 border: 1px solid #1d6f9b !important;
                 background: #0b1f33 !important;
                 box-shadow: none !important;
                 transform: none !important;
                 font-size: 12px !important;
+                line-height: 1.25 !important;
                 font-weight: 700 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                text-align: center !important;
+                white-space: normal !important;
             }
             </style>
             """,
             unsafe_allow_html=True
         )
 
-        col_matriz, col_filial, col_restante = st.columns([0.14, 0.14, 0.72], gap='small')
+        col_matriz, col_filial, col_restante = st.columns([0.19, 0.19, 0.62], gap='small')
         selecionado_ng = st.session_state['org_estabelecimento_nova_geracao_card']
 
         with col_matriz:
             chave_card_matriz = 'ng_card_matriz_ativo' if selecionado_ng == 'matriz' else 'ng_card_matriz'
-            if st.button('Matriz', key=chave_card_matriz, use_container_width=True):
+            if st.button('266 - Nova Geração Matriz', key=chave_card_matriz, use_container_width=True):
                 st.session_state['org_estabelecimento_nova_geracao_card'] = 'matriz'
                 st.rerun()
 
@@ -4148,7 +4160,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         chave_estabelecimento = st.session_state['org_estabelecimento_nova_geracao_card']
         nome_estabelecimento_nova = (
-            '1396 - Nova Geração Filial' if chave_estabelecimento == 'filial' else 'Matriz'
+            '1396 - Nova Geração Filial' if chave_estabelecimento == 'filial' else '266 - Nova Geração Matriz'
         )
         empresa_base_nova = (
             'nova_geracao_filial'
