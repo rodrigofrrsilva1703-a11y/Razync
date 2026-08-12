@@ -272,8 +272,8 @@ st.markdown("""
             transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease !important;
         }
         .st-key-org_empresa_card_nova button p,
-        .st-key-org_empresa_card_autokraft_industrial button,
-        .st-key-org_empresa_card_autokraft_projetos button,
+        .st-key-org_empresa_card_autokraft_industrial button p,
+        .st-key-org_empresa_card_autokraft_projetos button p,
         .st-key-org_empresa_card_isa button p {
             width: 100% !important;
             max-width: 182px !important;
@@ -283,8 +283,8 @@ st.markdown("""
             line-height: 1.28 !important;
         }
         .st-key-org_empresa_card_nova button strong,
-        .st-key-org_empresa_card_autokraft_industrial button,
-        .st-key-org_empresa_card_autokraft_projetos button,
+        .st-key-org_empresa_card_autokraft_industrial button strong,
+        .st-key-org_empresa_card_autokraft_projetos button strong,
         .st-key-org_empresa_card_isa button strong {
             display: inline-block !important;
             max-width: 178px !important;
@@ -294,8 +294,8 @@ st.markdown("""
             font-weight: 700 !important;
         }
         .st-key-org_empresa_card_nova button:hover,
-        .st-key-org_empresa_card_autokraft_industrial button,
-        .st-key-org_empresa_card_autokraft_projetos button,
+        .st-key-org_empresa_card_autokraft_industrial button:hover,
+        .st-key-org_empresa_card_autokraft_projetos button:hover,
         .st-key-org_empresa_card_isa button:hover {
             background: #081725 !important;
             border-color: #1d6f9b !important;
