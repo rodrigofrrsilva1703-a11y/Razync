@@ -1701,19 +1701,7 @@ def renderizar_base_inteligente_empresa(
             except Exception as erro:
                 st.error(f"Não foi possível atualizar a base: {erro}")
 
-        if base_empresa:
-            linhas = []
-            for item in base_empresa:
-                linhas.append({
-                    'Banco': nome_banco_por_chave(item.get('banco', '')),
-                    'Débito': item.get('debito', ''),
-                    'Crédito': item.get('credito', ''),
-                    'Ocorrências': item.get('ocorrencias', 0),
-                    'Períodos': len(item.get('periodos') or []),
-                    'Exemplo': item.get('exemplo_historico', '')
-                })
-            st.dataframe(pd.DataFrame(linhas), use_container_width=True, height=300)
-        else:
+        if not base_empresa:
             st.info("Esta empresa ainda não possui padrões aprendidos.")
 
         st.markdown("---")
