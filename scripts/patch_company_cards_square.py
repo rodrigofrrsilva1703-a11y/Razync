@@ -13,15 +13,18 @@ if text.count(old_key) != 1:
     raise SystemExit(f'Chave do estabelecimento encontrada {text.count(old_key)} vezes.')
 text = text.replace(old_key, new_key, 1)
 
-old_upload = '''                f"Envie a planilha bancária da 266 - Nova Geração — {estabelecimento_nova}",
-'''
-new_upload = '''                f"Envie a planilha bancária da 266 - Nova Geração — {nome_estabelecimento_nova}",
-'''
-if text.count(old_upload) != 1:
-    raise SystemExit(f'Referência antiga estabelecimento_nova encontrada {text.count(old_upload)} vezes.')
-text = text.replace(old_upload, new_upload, 1)
+substituicoes = {
+    'f"Envie a planilha bancária da 266 - Nova Geração — {estabelecimento_nova}"':
+        'f"Envie a planilha bancária da 266 - Nova Geração — {nome_estabelecimento_nova}"',
+    'f"Nova_Geracao_{estabelecimento_nova}_{nome_saida_banco}_"':
+        'f"Nova_Geracao_{nome_estabelecimento_nova}_{nome_saida_banco}_"',
+}
+for antigo, novo in substituicoes.items():
+    quantidade = text.count(antigo)
+    if quantidade != 1:
+        raise SystemExit(f'Referência {antigo!r} encontrada {quantidade} vezes.')
+    text = text.replace(antigo, novo, 1)
 
-# Garante que a variável antiga não seja mais usada como expressão/template.
 referencias_antigas = [
     '{estabelecimento_nova}',
     'normalizar_texto(estabelecimento_nova)',
@@ -43,4 +46,4 @@ for check in checks:
         raise SystemExit(f'Validação falhou: {check!r}')
 
 path.write_text(text, encoding='utf-8')
-print('NameError corrigido: upload usa nome derivado dos cards Matriz/Filial.')
+print('NameError eliminado: todas as referências antigas foram substituídas.')
