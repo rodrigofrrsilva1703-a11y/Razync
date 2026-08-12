@@ -3,171 +3,171 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-marcador = '\ndef processar_extrato_conferencia_empresa(file_bytes, filename):\n'
+# -----------------------------------------------------------------------------
+# 1) Cria um ÚNICO ponto de entrada para qualquer extrato enviado pelo usuário.
+#    Ele recebe bytes + nome original e encaminha para os parsers centrais.
+# -----------------------------------------------------------------------------
+marcador = '\ndef gerar_txt_dominio(df):\n'
 if marcador not in text:
-    raise SystemExit('Função de conferência não localizada.')
+    raise SystemExit('Ponto após processar_arquivo_pdf não localizado.')
 
-parser_bradesco = r'''
-def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
-    """Lê extrato mensal/por período Bradesco, inclusive Últimos Lançamentos."""
-    lancamentos = []
-    data_atual = None
-    partes_historico = []
-    dentro_saldos_invest = False
+funcao_unificada = r'''
+def processar_extrato_unificado(file_bytes, filename):
+    """Leitor único de extratos usado por todas as ferramentas do Razync."""
+    extensao = os.path.splitext(filename)[1].lower()
+    if extensao == '.ofx':
+        return processar_ofx(file_bytes, filename)
+    if extensao in ['.csv', '.xlsx', '.xls']:
+        return processar_planilha_universal(file_bytes, filename)
+    if extensao != '.pdf':
+        return []
 
-    regex_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s*(.*)$')
-    regex_moeda = re.compile(r'-?\d{1,3}(?:\.\d{3})*,\d{2}')
-    ignorar_prefixos = (
-        'extrato de:', 'agência | conta', 'agencia | conta', 'data lançamento',
-        'data lancamento', 'folha ', 'extrato mensal / por período',
-        'extrato mensal / por periodo', 'nova geração comercial',
-        'nova geracao comercial', 'nome do usuário:', 'nome do usuario:',
-        'data da operação:', 'data da operacao:', 'os dados acima têm como base',
-        'os dados acima tem como base',
-    )
-
-    for pagina in reader.pages:
-        texto = pagina.extract_text() or ''
-        for linha_bruta in texto.splitlines():
-            linha = re.sub(r'\s+', ' ', linha_bruta).strip()
-            if not linha:
-                continue
-
-            normalizada = normalizar_texto(linha)
-            if normalizada.startswith('saldos invest facil'):
-                dentro_saldos_invest = True
-                partes_historico = []
-                continue
-            if dentro_saldos_invest:
-                continue
-            if normalizada.startswith(ignorar_prefixos):
-                continue
-            if normalizada.startswith('ultimos lancamentos'):
-                partes_historico = []
-                continue
-            if normalizada.startswith('total '):
-                partes_historico = []
-                continue
-
-            match_data = regex_data.match(linha)
-            if match_data:
-                data_atual = match_data.group(1)
-                linha = match_data.group(2).strip()
-                normalizada = normalizar_texto(linha)
-                if not linha:
-                    continue
-                if normalizada.startswith('saldo anterior'):
-                    partes_historico = []
-                    continue
-
-            if not data_atual:
-                continue
-            if normalizada.startswith('saldo anterior'):
-                partes_historico = []
-                continue
-
-            moedas = regex_moeda.findall(linha)
-            if len(moedas) >= 2:
-                valor_txt = moedas[-2]
-                valor = limpar_valor_monetario(valor_txt)
-                inicio_valor = linha.rfind(valor_txt)
-                trecho_historico = linha[:inicio_valor].strip()
-                historico = re.sub(
-                    r'\s+', ' ',
-                    ' '.join(partes_historico + ([trecho_historico] if trecho_historico else []))
-                ).strip()
-                partes_historico = []
-
-                hist_norm = normalizar_texto(historico)
-                if not historico or hist_norm.startswith(('saldo ', 'total ')):
-                    continue
-                if abs(valor) < 0.005:
-                    continue
-                try:
-                    datetime.strptime(data_atual, '%d/%m/%Y')
-                except ValueError:
-                    continue
-
-                lancamentos.append({
-                    'DESCRIÇÃO': banco,
-                    'DATA': data_atual,
-                    'VALOR': valor,
-                    'DÉBITO': '',
-                    'CRÉDITO': '',
-                    'HISTÓRICO': limpar_caracteres_ilegais(historico),
-                })
-            else:
-                partes_historico.append(linha)
-                if len(partes_historico) > 6:
-                    partes_historico = partes_historico[-6:]
-
-    return lancamentos
+    caminho_temporario = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
+            temporario.write(file_bytes)
+            caminho_temporario = temporario.name
+        # O nome ORIGINAL é sempre passado. Isso evita que um arquivo temporário
+        # faça o identificador perder banco/conta e cair no parser errado.
+        return processar_arquivo_pdf(caminho_temporario, filename)
+    finally:
+        if caminho_temporario and os.path.exists(caminho_temporario):
+            os.remove(caminho_temporario)
 '''
 
-if 'def processar_pdf_bradesco_mensal(' not in text:
-    text = text.replace(marcador, parser_bradesco + marcador, 1)
+if 'def processar_extrato_unificado(' not in text:
+    text = text.replace(marcador, funcao_unificada + marcador, 1)
 
-old_central = '''        if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:
-            lancamentos_itau = processar_pdf_itau_detalhado(
-                reader, banco_identificado
+# -----------------------------------------------------------------------------
+# 2) A Conferência passa pelo mesmo leitor único e apenas remove linhas-resumo.
+# -----------------------------------------------------------------------------
+inicio_conf = text.find('def processar_extrato_conferencia_empresa(file_bytes, filename):')
+fim_conf = text.find('\ndef conciliar_empresa_com_extrato(', inicio_conf)
+if inicio_conf < 0 or fim_conf < 0:
+    raise SystemExit('Função de conferência não localizada para unificação.')
+
+nova_conf = r'''def processar_extrato_conferencia_empresa(file_bytes, filename):
+    """Lê a conferência pelo mesmo motor central usado em todo o Razync."""
+    termos_saldo = [
+        'saldo anterior', 'saldo aplic', 'saldo invest', 'saldo total disponivel',
+        'saldo movimentacao conta', 'sdo aplic aut mais ap', 'saldo final',
+        'saldo do dia', 'saldo total', 'saldo disponivel', 'saldo em conta',
+    ]
+    filtrados = []
+    for item in processar_extrato_unificado(file_bytes, filename) or []:
+        historico = normalizar_texto(texto_celula_seguro(item.get('HISTÓRICO', '')))
+        if any(termo in historico for termo in termos_saldo):
+            continue
+        valor = limpar_valor_monetario(item.get('VALOR', 0))
+        if abs(valor) < 0.005:
+            continue
+        filtrados.append(item)
+    return filtrados
+'''
+text = text[:inicio_conf] + nova_conf + text[fim_conf:]
+
+# -----------------------------------------------------------------------------
+# 3) Conversor de Extratos: remove caminhos próprios de PDF/OFX/Excel.
+# -----------------------------------------------------------------------------
+old_converter = '''                if extensao == '.ofx':
+                    lancamentos = executar_com_loading(
+                        f"Lendo {arquivo.name}...", processar_ofx, file_bytes, arquivo.name
+                    )
+                elif extensao in ['.csv', '.xlsx', '.xls']:
+                    lancamentos = executar_com_loading(
+                        f"Lendo {arquivo.name}...",
+                        processar_planilha_universal,
+                        file_bytes,
+                        arquivo.name
+                    )
+                elif extensao == '.pdf':
+                    caminho_temp = f"temp_{arquivo.name}"
+                    with open(caminho_temp, "wb") as f: f.write(file_bytes)
+                    data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
+                    lancamentos = executar_com_loading(
+                        f"Analisando {arquivo.name}...", processar_arquivo_pdf, caminho_temp
+                    )
+                    if os.path.exists(caminho_temp): os.remove(caminho_temp)
+'''
+new_converter = '''                if extensao == '.pdf':
+                    caminho_periodo = None
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_periodo:
+                            temp_periodo.write(file_bytes)
+                            caminho_periodo = temp_periodo.name
+                        data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_periodo)
+                    finally:
+                        if caminho_periodo and os.path.exists(caminho_periodo):
+                            os.remove(caminho_periodo)
+
+                lancamentos = executar_com_loading(
+                    f"Analisando {arquivo.name}...",
+                    processar_extrato_unificado,
+                    file_bytes,
+                    arquivo.name
+                )
+'''
+if old_converter not in text:
+    raise SystemExit('Bloco antigo do Conversor não localizado.')
+text = text.replace(old_converter, new_converter, 1)
+
+# -----------------------------------------------------------------------------
+# 4) Conciliação com Razão: usa exatamente o mesmo leitor único.
+# -----------------------------------------------------------------------------
+old_razao = '''            lancamentos_ext = []
+            if ext_ext == '.ofx':
+                lancamentos_ext = executar_com_loading(
+                    "Lendo o extrato bancário...", processar_ofx, ext_bytes, arq_extrato.name
+                )
+            elif ext_ext in ['.csv', '.xlsx', '.xls']:
+                lancamentos_ext = executar_com_loading(
+                    "Lendo o extrato bancário...",
+                    processar_planilha_universal,
+                    ext_bytes,
+                    arq_extrato.name
+                )
+            elif ext_ext == '.pdf':
+                tmp_ext = f"temp_ext_conc_{arq_extrato.name}"
+                with open(tmp_ext, "wb") as f: f.write(ext_bytes)
+                lancamentos_ext = executar_com_loading(
+                    "Analisando o extrato bancário...", processar_arquivo_pdf, tmp_ext
+                )
+                if os.path.exists(tmp_ext): os.remove(tmp_ext)
+'''
+new_razao = '''            lancamentos_ext = executar_com_loading(
+                "Analisando o extrato bancário...",
+                processar_extrato_unificado,
+                ext_bytes,
+                arq_extrato.name
             )
-            if lancamentos_itau:
-                return lancamentos_itau
-
-        # Primeiro tenta o analisador estrutural único, independente do banco.
 '''
-new_central = '''        if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:
-            lancamentos_itau = processar_pdf_itau_detalhado(
-                reader, banco_identificado
-            )
-            if lancamentos_itau:
-                return lancamentos_itau
+if old_razao not in text:
+    raise SystemExit('Bloco antigo da Conciliação com Razão não localizado.')
+text = text.replace(old_razao, new_razao, 1)
 
-        if banco_identificado == 'BANCO BRADESCO':
-            lancamentos_bradesco = processar_pdf_bradesco_mensal(
-                reader, banco_identificado
-            )
-            if lancamentos_bradesco:
-                return lancamentos_bradesco
-
-        # Primeiro tenta o analisador estrutural único, independente do banco.
-'''
-if old_central in text:
-    text = text.replace(old_central, new_central, 1)
-elif new_central not in text:
-    raise SystemExit('Ponto central de seleção dos parsers PDF não foi localizado.')
-
-old_conf = '''            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
-                lancamentos = processar_pdf_itau_detalhado(reader, banco)
-            else:
-                lancamentos = processar_arquivo_pdf(caminho_temporario, filename)
-'''
-new_conf = '''            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
-                lancamentos = processar_pdf_itau_detalhado(reader, banco)
-            elif banco == 'BANCO BRADESCO':
-                lancamentos = processar_pdf_bradesco_mensal(reader, banco)
-            else:
-                lancamentos = processar_arquivo_pdf(caminho_temporario, filename)
-'''
-if old_conf in text:
-    text = text.replace(old_conf, new_conf, 1)
-
+# -----------------------------------------------------------------------------
+# 5) Garantias: Itaú, Bradesco e Daycoval continuam no leitor PDF central.
+# -----------------------------------------------------------------------------
 checks = [
-    'def processar_pdf_itau_detalhado(',
-    'def processar_pdf_daycoval_detalhado(',
-    'def processar_pdf_bradesco_mensal(',
+    'def processar_extrato_unificado(',
+    'return processar_arquivo_pdf(caminho_temporario, filename)',
     "if banco_identificado == 'BANCO DAYCOVAL':",
     "if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:",
     "if banco_identificado == 'BANCO BRADESCO':",
-    'lancamentos_bradesco = processar_pdf_bradesco_mensal(',
-    'reader, banco_identificado',
-    "normalizada.startswith('ultimos lancamentos')",
-    "normalizada.startswith('total ')",
-    'moedas[-2]',
+    'processar_pdf_itau_detalhado(',
+    'processar_pdf_bradesco_mensal(',
+    'processar_pdf_daycoval_detalhado(',
+    'for item in processar_extrato_unificado(file_bytes, filename) or []:',
 ]
 for check in checks:
     if check not in text:
-        raise SystemExit(f'Validação dos leitores centrais falhou: {check}')
+        raise SystemExit(f'Validação da unificação falhou: {check}')
+
+# Não pode restar nos dois fluxos principais chamada direta ao PDF por arquivo temporário.
+if 'processar_arquivo_pdf, caminho_temp' in text:
+    raise SystemExit('Conversor ainda possui chamada direta antiga ao leitor PDF.')
+if 'processar_arquivo_pdf, tmp_ext' in text:
+    raise SystemExit('Conciliação com Razão ainda possui chamada direta antiga ao leitor PDF.')
 
 path.write_text(text, encoding='utf-8')
-print('Correções Itaú/Bradesco centralizadas no leitor PDF usado por todas as ferramentas.')
+print('Leitor de extratos unificado em Conversor, Conferência e Conciliação com Razão.')
