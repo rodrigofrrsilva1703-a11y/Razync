@@ -3,11 +3,6 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-# -----------------------------------------------------------------------------
-# 1) Parser específico Bradesco mensal / por período.
-#    Ele percorre o PDF inteiro, NÃO encerra no primeiro "Total" e continua na
-#    seção "Últimos Lançamentos", onde o Bradesco pode colocar o último dia do mês.
-# -----------------------------------------------------------------------------
 marcador = '\ndef processar_extrato_conferencia_empresa(file_bytes, filename):\n'
 if marcador not in text:
     raise SystemExit('Função de conferência não localizada.')
@@ -51,7 +46,6 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 partes_historico = []
                 continue
             if normalizada.startswith('total '):
-                # Não encerra: o último dia do mês pode vir depois deste Total.
                 partes_historico = []
                 continue
 
@@ -74,8 +68,6 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
 
             moedas = regex_moeda.findall(linha)
             if len(moedas) >= 2:
-                # No layout Bradesco: ... Dcto. Movimento Saldo.
-                # O penúltimo monetário é o movimento e o último é o saldo.
                 valor_txt = moedas[-2]
                 valor = limpar_valor_monetario(valor_txt)
                 inicio_valor = linha.rfind(valor_txt)
@@ -115,11 +107,6 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
 if 'def processar_pdf_bradesco_mensal(' not in text:
     text = text.replace(marcador, parser_bradesco + marcador, 1)
 
-# -----------------------------------------------------------------------------
-# 2) CENTRALIZA a correção no processar_arquivo_pdf().
-#    Assim Conversor de Extratos, organizadores, conferências e qualquer fluxo
-#    que use o leitor padrão recebem os MESMOS parsers específicos.
-# -----------------------------------------------------------------------------
 old_central = '''        if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:
             lancamentos_itau = processar_pdf_itau_detalhado(
                 reader, banco_identificado
@@ -136,9 +123,6 @@ new_central = '''        if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:
             if lancamentos_itau:
                 return lancamentos_itau
 
-        # O Bradesco mensal pode continuar depois da primeira linha Total em uma
-        # seção Últimos Lançamentos. Tratar aqui torna a correção global para todas
-        # as ferramentas que usam processar_arquivo_pdf().
         if banco_identificado == 'BANCO BRADESCO':
             lancamentos_bradesco = processar_pdf_bradesco_mensal(
                 reader, banco_identificado
@@ -153,10 +137,6 @@ if old_central in text:
 elif new_central not in text:
     raise SystemExit('Ponto central de seleção dos parsers PDF não foi localizado.')
 
-# -----------------------------------------------------------------------------
-# 3) A conferência continua podendo chamar o parser específico diretamente,
-#    mas o fallback sempre passa pelo leitor central já corrigido.
-# -----------------------------------------------------------------------------
 old_conf = '''            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
                 lancamentos = processar_pdf_itau_detalhado(reader, banco)
             else:
@@ -172,7 +152,6 @@ new_conf = '''            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
 if old_conf in text:
     text = text.replace(old_conf, new_conf, 1)
 
-# Validações para garantir que não alteramos/removemos os leitores já existentes.
 checks = [
     'def processar_pdf_itau_detalhado(',
     'def processar_pdf_daycoval_detalhado(',
@@ -180,7 +159,8 @@ checks = [
     "if banco_identificado == 'BANCO DAYCOVAL':",
     "if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:",
     "if banco_identificado == 'BANCO BRADESCO':",
-    'processar_pdf_bradesco_mensal(reader, banco_identificado)',
+    'lancamentos_bradesco = processar_pdf_bradesco_mensal(',
+    'reader, banco_identificado',
     "normalizada.startswith('ultimos lancamentos')",
     "normalizada.startswith('total ')",
     'moedas[-2]',
