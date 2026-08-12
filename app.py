@@ -2565,7 +2565,7 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
 
     return diario, faltando_planilha, a_mais_planilha, ignorados
 
-def renderizar_conferencia_autokraft():
+def renderizar_conferencia_autokraft(prefixo_chaves='autokraft'):
     """Exibe a conferência independente da planilha final do Grupo Autokraft."""
     st.markdown("---")
     st.markdown("### Conferência com o extrato bancário")
@@ -2581,7 +2581,7 @@ def renderizar_conferencia_autokraft():
     conferir_todos = st.checkbox(
         "Conferir os dois bancos",
         value=False,
-        key="autokraft_conferir_todos"
+        key=f"{prefixo_chaves}_conferir_todos"
     )
     if conferir_todos:
         bancos_escolhidos = ['Itaú', 'Daycoval']
@@ -2591,7 +2591,7 @@ def renderizar_conferencia_autokraft():
             "Bancos que serão conferidos",
             ['Itaú', 'Daycoval'],
             default=['Itaú'],
-            key="autokraft_bancos_conferencia"
+            key=f"{prefixo_chaves}_bancos_conferencia"
         )
 
     if not bancos_escolhidos:
@@ -2606,7 +2606,7 @@ def renderizar_conferencia_autokraft():
         planilha_final = st.file_uploader(
             "Planilha final organizada",
             type=['xlsx', 'xls'],
-            key="autokraft_planilha_final_conferencia",
+            key=f"{prefixo_chaves}_planilha_final_conferencia",
             help="Pode ser o arquivo baixado pelo organizador com uma ou duas abas bancárias."
         )
     with coluna_extratos:
@@ -2615,7 +2615,7 @@ def renderizar_conferencia_autokraft():
             type=['pdf', 'ofx', 'csv', 'xlsx', 'xls'],
             accept_multiple_files=True,
             key=(
-                "autokraft_extratos_conferencia_"
+                f"{prefixo_chaves}_extratos_conferencia_"
                 + "_".join(config['slug'] for config in configs_escolhidas)
             ),
             help="Envie os extratos correspondentes ao mesmo período da planilha final."
@@ -2658,7 +2658,7 @@ def renderizar_conferencia_autokraft():
             min_value=data_minima,
             max_value=data_maxima,
             format="DD/MM/YYYY",
-            key="autokraft_periodo_conferencia"
+            key=f"{prefixo_chaves}_periodo_conferencia"
         )
         if not isinstance(periodo, (tuple, list)) or len(periodo) != 2:
             st.info("Selecione também a data final para concluir o período.")
@@ -3131,16 +3131,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         }[empresa_autokraft]
         slug_empresa_autokraft = configuracao_empresa_autokraft["slug"]
 
-        # Evita reaproveitar uploads e seleções de conferência de outra empresa.
-        if st.session_state.get('_autokraft_empresa_ativa') != slug_empresa_autokraft:
-            for chave_estado in [
-                'autokraft_conferir_todos', 'autokraft_bancos_conferencia',
-                'autokraft_planilha_final_conferencia', 'autokraft_extrato_itau',
-                'autokraft_extrato_daycoval'
-            ]:
-                st.session_state.pop(chave_estado, None)
-            st.session_state['_autokraft_empresa_ativa'] = slug_empresa_autokraft
-
         st.caption(
             f"Ferramentas ativas para {empresa_autokraft}. O sistema lê automaticamente "
             "cada aba diária, ignora saldos e totais e separa os lançamentos por banco."
@@ -3262,7 +3252,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
 
         st.markdown(f"#### Conferência — {empresa_autokraft}")
-        renderizar_conferencia_autokraft()
+        renderizar_conferencia_autokraft(slug_empresa_autokraft)
 
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         estabelecimento_nova = st.radio(
