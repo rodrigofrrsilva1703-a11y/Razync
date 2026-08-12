@@ -2191,7 +2191,7 @@ def classificar_planilha_final(
                 identificar_chave_banco_empresa(ws.cell(numero_linha, col_descricao).value)
                 if col_descricao is not None else ''
             ) or banco_aba
-            if banco_linha not in {'itau', 'bradesco', 'fibra'}:
+            if banco_linha not in contas_bancarias:
                 resumo['banco_nao_identificado'] += 1
                 continue
 
