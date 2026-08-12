@@ -209,31 +209,30 @@ st.markdown("""
             line-height: 1.18 !important;
         }
 
-        /* Cards de empresas: maiores, próximos e alinhados ao centro. */
+        /* Cards de empresas: levemente maiores e alinhados à esquerda. */
         .st-key-org_empresa_card_nova,
         .st-key-org_empresa_card_autokraft {
-            width: 210px !important;
-            min-width: 210px !important;
-            max-width: 210px !important;
+            width: 224px !important;
+            min-width: 224px !important;
+            max-width: 224px !important;
             display: flex !important;
-            justify-content: center !important;
+            justify-content: flex-start !important;
+            margin: 0 !important;
         }
         .st-key-org_empresa_card_nova {
-            margin-left: auto !important;
-            margin-right: 24px !important;
+            margin-right: 10px !important;
         }
         .st-key-org_empresa_card_autokraft {
-            margin-left: 24px !important;
-            margin-right: auto !important;
+            margin-left: 0 !important;
         }
         .st-key-org_empresa_card_nova button,
         .st-key-org_empresa_card_autokraft button {
-            width: 210px !important;
-            min-width: 210px !important;
-            max-width: 210px !important;
-            height: 210px !important;
-            min-height: 210px !important;
-            max-height: 210px !important;
+            width: 224px !important;
+            min-width: 224px !important;
+            max-width: 224px !important;
+            height: 224px !important;
+            min-height: 224px !important;
+            max-height: 224px !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
             padding: 16px 16px !important;
@@ -259,7 +258,7 @@ st.markdown("""
         .st-key-org_empresa_card_nova button p,
         .st-key-org_empresa_card_autokraft button p {
             width: 100% !important;
-            max-width: 176px !important;
+            max-width: 188px !important;
             white-space: pre-line !important;
             overflow-wrap: anywhere !important;
             margin: 0 auto !important;
@@ -268,7 +267,7 @@ st.markdown("""
         .st-key-org_empresa_card_nova button strong,
         .st-key-org_empresa_card_autokraft button strong {
             display: inline-block !important;
-            max-width: 172px !important;
+            max-width: 184px !important;
             color: #f2f8fc !important;
             font-size: 16px !important;
             line-height: 1.2 !important;
@@ -366,16 +365,13 @@ st.markdown("""
             0% {
                 opacity: 0;
                 transform: translate3d(0, 16px, 0) scale(0.992);
-                filter: blur(2px);
             }
             62% {
                 opacity: 1;
-                filter: blur(0);
             }
             100% {
                 opacity: 1;
                 transform: translate3d(0, 0, 0) scale(1);
-                filter: blur(0);
             }
         }
         .hc-page-transition-marker {
@@ -385,7 +381,7 @@ st.markdown("""
             animation: hc-page-enter 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
             transform-origin: 50% 18%;
             backface-visibility: hidden;
-            will-change: opacity, transform, filter;
+            will-change: opacity, transform;
         }
 
         /* Microinterações discretas deixam os controles mais responsivos. */
@@ -2080,6 +2076,7 @@ def classificar_planilha_final(
     wb.save(saida)
     return saida.getvalue(), resumo
 
+@st.cache_data(show_spinner=False, max_entries=12)
 def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao_banco):
     """Localiza uma conta na planilha consolidada e transforma seus lançamentos."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -2218,6 +2215,7 @@ def processar_nova_geracao_filial_bradesco(file_bytes):
         file_bytes, 'Bradesco', '3084-8', 'BANCO BRADESCO'
     )
 
+@st.cache_data(show_spinner=False, max_entries=12)
 def processar_mapa_autokraft(file_bytes, filename=''):
     """Converte as abas diárias do mapa Autokraft para o Modelo Domínio."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -3134,7 +3132,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if empresa_organizador is None:
         st.markdown("##### Empresas disponíveis")
-        col_emp1, col_emp2 = st.columns(2)
+        col_emp1, col_emp2, _espaco_empresas = st.columns([1, 1, 4])
         with col_emp1:
             if st.button(
                 "🏢\n\n**266 - Nova Geração**\n\n"
