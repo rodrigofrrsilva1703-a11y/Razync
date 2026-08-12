@@ -3,18 +3,18 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-# Adiciona um parser específico para o extrato mensal do Bradesco. Esse layout
-# possui uma segunda seção chamada "Últimos Lançamentos" depois de uma linha
-# "Total"; nela pode estar o último dia do mês (como 30/04), que não pode ser
-# descartado. A leitura percorre o PDF inteiro e usa sempre o penúltimo valor
-# monetário como movimento e o último como saldo acumulado.
+# -----------------------------------------------------------------------------
+# 1) Parser específico Bradesco mensal / por período.
+#    Ele percorre o PDF inteiro, NÃO encerra no primeiro "Total" e continua na
+#    seção "Últimos Lançamentos", onde o Bradesco pode colocar o último dia do mês.
+# -----------------------------------------------------------------------------
 marcador = '\ndef processar_extrato_conferencia_empresa(file_bytes, filename):\n'
 if marcador not in text:
     raise SystemExit('Função de conferência não localizada.')
 
 parser_bradesco = r'''
 def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
-    """Lê o extrato mensal/por período do Bradesco, inclusive Últimos Lançamentos."""
+    """Lê extrato mensal/por período Bradesco, inclusive Últimos Lançamentos."""
     lancamentos = []
     data_atual = None
     partes_historico = []
@@ -51,8 +51,7 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 partes_historico = []
                 continue
             if normalizada.startswith('total '):
-                # Não encerra a leitura: o Bradesco pode trazer o último dia do
-                # mês logo depois, na seção "Últimos Lançamentos".
+                # Não encerra: o último dia do mês pode vir depois deste Total.
                 partes_historico = []
                 continue
 
@@ -68,21 +67,22 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                     continue
 
             if not data_atual:
-                # Continuação no começo de página: mantém a data da página anterior.
                 continue
-
             if normalizada.startswith('saldo anterior'):
                 partes_historico = []
                 continue
 
             moedas = regex_moeda.findall(linha)
             if len(moedas) >= 2:
+                # No layout Bradesco: ... Dcto. Movimento Saldo.
+                # O penúltimo monetário é o movimento e o último é o saldo.
                 valor_txt = moedas[-2]
                 valor = limpar_valor_monetario(valor_txt)
                 inicio_valor = linha.rfind(valor_txt)
                 trecho_historico = linha[:inicio_valor].strip()
                 historico = re.sub(
-                    r'\s+', ' ', ' '.join(partes_historico + ([trecho_historico] if trecho_historico else []))
+                    r'\s+', ' ',
+                    ' '.join(partes_historico + ([trecho_historico] if trecho_historico else []))
                 ).strip()
                 partes_historico = []
 
@@ -91,19 +91,18 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                     continue
                 if abs(valor) < 0.005:
                     continue
-
                 try:
-                    data = datetime.strptime(data_atual, '%d/%m/%Y')
+                    datetime.strptime(data_atual, '%d/%m/%Y')
                 except ValueError:
                     continue
 
                 lancamentos.append({
                     'DESCRIÇÃO': banco,
-                    'DATA': data,
+                    'DATA': data_atual,
                     'VALOR': valor,
                     'DÉBITO': '',
                     'CRÉDITO': '',
-                    'HISTÓRICO': historico,
+                    'HISTÓRICO': limpar_caracteres_ilegais(historico),
                 })
             else:
                 partes_historico.append(linha)
@@ -116,33 +115,79 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
 if 'def processar_pdf_bradesco_mensal(' not in text:
     text = text.replace(marcador, parser_bradesco + marcador, 1)
 
-old = """            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
+# -----------------------------------------------------------------------------
+# 2) CENTRALIZA a correção no processar_arquivo_pdf().
+#    Assim Conversor de Extratos, organizadores, conferências e qualquer fluxo
+#    que use o leitor padrão recebem os MESMOS parsers específicos.
+# -----------------------------------------------------------------------------
+old_central = '''        if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:
+            lancamentos_itau = processar_pdf_itau_detalhado(
+                reader, banco_identificado
+            )
+            if lancamentos_itau:
+                return lancamentos_itau
+
+        # Primeiro tenta o analisador estrutural único, independente do banco.
+'''
+new_central = '''        if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:
+            lancamentos_itau = processar_pdf_itau_detalhado(
+                reader, banco_identificado
+            )
+            if lancamentos_itau:
+                return lancamentos_itau
+
+        # O Bradesco mensal pode continuar depois da primeira linha Total em uma
+        # seção Últimos Lançamentos. Tratar aqui torna a correção global para todas
+        # as ferramentas que usam processar_arquivo_pdf().
+        if banco_identificado == 'BANCO BRADESCO':
+            lancamentos_bradesco = processar_pdf_bradesco_mensal(
+                reader, banco_identificado
+            )
+            if lancamentos_bradesco:
+                return lancamentos_bradesco
+
+        # Primeiro tenta o analisador estrutural único, independente do banco.
+'''
+if old_central in text:
+    text = text.replace(old_central, new_central, 1)
+elif new_central not in text:
+    raise SystemExit('Ponto central de seleção dos parsers PDF não foi localizado.')
+
+# -----------------------------------------------------------------------------
+# 3) A conferência continua podendo chamar o parser específico diretamente,
+#    mas o fallback sempre passa pelo leitor central já corrigido.
+# -----------------------------------------------------------------------------
+old_conf = '''            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
                 lancamentos = processar_pdf_itau_detalhado(reader, banco)
             else:
                 lancamentos = processar_arquivo_pdf(caminho_temporario, filename)
-"""
-new = """            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
+'''
+new_conf = '''            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
                 lancamentos = processar_pdf_itau_detalhado(reader, banco)
             elif banco == 'BANCO BRADESCO':
                 lancamentos = processar_pdf_bradesco_mensal(reader, banco)
             else:
                 lancamentos = processar_arquivo_pdf(caminho_temporario, filename)
-"""
-if old not in text:
-    raise SystemExit('Bloco de seleção do parser PDF não localizado.')
-text = text.replace(old, new, 1)
+'''
+if old_conf in text:
+    text = text.replace(old_conf, new_conf, 1)
 
+# Validações para garantir que não alteramos/removemos os leitores já existentes.
 checks = [
+    'def processar_pdf_itau_detalhado(',
+    'def processar_pdf_daycoval_detalhado(',
     'def processar_pdf_bradesco_mensal(',
-    "elif banco == 'BANCO BRADESCO':",
-    'processar_pdf_bradesco_mensal(reader, banco)',
+    "if banco_identificado == 'BANCO DAYCOVAL':",
+    "if banco_identificado in {'BANCO ITAU', 'BANCO ITAÚ'}:",
+    "if banco_identificado == 'BANCO BRADESCO':",
+    'processar_pdf_bradesco_mensal(reader, banco_identificado)',
     "normalizada.startswith('ultimos lancamentos')",
     "normalizada.startswith('total ')",
     'moedas[-2]',
 ]
 for check in checks:
     if check not in text:
-        raise SystemExit(f'Validação Bradesco falhou: {check}')
+        raise SystemExit(f'Validação dos leitores centrais falhou: {check}')
 
 path.write_text(text, encoding='utf-8')
-print('Parser Bradesco ajustado para preservar o último dia do mês após a seção Total.')
+print('Correções Itaú/Bradesco centralizadas no leitor PDF usado por todas as ferramentas.')
