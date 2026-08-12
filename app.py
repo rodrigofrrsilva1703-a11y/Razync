@@ -1460,6 +1460,88 @@ def processar_razao_dominio(file_bytes, filename):
     )
     return df_res.dropna(subset=['DATA_DT'])
 
+def renderizar_base_inteligente_empresa(empresa, nome_empresa, bancos_permitidos):
+    """Base de Débito/Crédito isolada por empresa usando a mesma tabela Supabase."""
+    url_base, chave_base, senha_admin = obter_config_classificacao_online()
+    base = []
+    erro_base = ''
+    if url_base and chave_base:
+        try:
+            base = carregar_classificacoes_online(empresa)
+        except Exception as erro:
+            erro_base = str(erro)
+
+    st.markdown(f"#### Base inteligente — {nome_empresa}")
+    st.caption(
+        "O aprendizado desta área é exclusivo desta empresa. Padrões de outras "
+        "empresas não são usados aqui. Envie planilhas já revisadas, com DÉBITO e "
+        "CRÉDITO preenchidos, para ensinar novos lançamentos."
+    )
+    if erro_base:
+        st.warning(f"Não foi possível carregar a base online: {erro_base}")
+    elif not url_base or not chave_base:
+        st.warning("A conexão com a base online ainda não está configurada.")
+    else:
+        base_empresa = [item for item in base if item.get('banco') in bancos_permitidos]
+        c1, c2 = st.columns(2)
+        c1.metric("Padrões desta empresa", len(base_empresa))
+        c2.metric(
+            "Bancos com aprendizado",
+            len({item.get('banco') for item in base_empresa if item.get('banco')})
+        )
+
+        arquivos_base = st.file_uploader(
+            "Planilhas já classificadas",
+            type=['xlsx', 'xls', 'zip'],
+            accept_multiple_files=True,
+            key=f"base_upload_{empresa}",
+            help="Use somente arquivos revisados desta empresa."
+        )
+        senha_digitada = st.text_input(
+            "Senha administrativa para gravar aprendizado",
+            type="password",
+            key=f"base_senha_{empresa}"
+        ) if senha_admin else ''
+
+        pode_gravar = bool(arquivos_base) and (
+            not senha_admin or hmac.compare_digest(str(senha_digitada), str(senha_admin))
+        )
+        if arquivos_base and senha_admin and senha_digitada and not pode_gravar:
+            st.error("Senha administrativa inválida.")
+
+        if st.button(
+            "Aprender com planilhas revisadas",
+            key=f"base_aprender_{empresa}",
+            disabled=not pode_gravar,
+            use_container_width=True
+        ):
+            try:
+                registros = importar_arquivos_classificados(arquivos_base, empresa)
+                registros = [r for r in registros if r.get('banco') in bancos_permitidos]
+                if not registros:
+                    st.warning("Nenhum padrão válido foi encontrado para os bancos desta empresa.")
+                else:
+                    quantidade = salvar_classificacoes_online(registros, empresa)
+                    st.success(f"{quantidade} padrões da {nome_empresa} foram gravados/atualizados.")
+                    st.rerun()
+            except Exception as erro:
+                st.error(f"Não foi possível atualizar a base: {erro}")
+
+        if base_empresa:
+            linhas = []
+            for item in base_empresa:
+                linhas.append({
+                    'Banco': nome_banco_por_chave(item.get('banco', '')),
+                    'Débito': item.get('debito', ''),
+                    'Crédito': item.get('credito', ''),
+                    'Ocorrências': item.get('ocorrencias', 0),
+                    'Períodos': len(item.get('periodos') or []),
+                    'Exemplo': item.get('exemplo_historico', '')
+                })
+            st.dataframe(pd.DataFrame(linhas), use_container_width=True, height=300)
+        else:
+            st.info("Esta empresa ainda não possui padrões aprendidos.")
+
 # ==============================================================================
 # ORGANIZADORES ESPECÍFICOS POR EMPRESA
 # ==============================================================================
@@ -1757,10 +1839,12 @@ def carregar_classificacoes_online(empresa='nova_geracao'):
         deslocamento += limite
     return registros
 
-def salvar_classificacoes_online(registros):
+def salvar_classificacoes_online(registros, empresa='nova_geracao'):
     if not registros:
         return 0
-    existentes = {item['id']: item for item in carregar_classificacoes_online()}
+    existentes = {
+        item['id']: item for item in carregar_classificacoes_online(empresa)
+    }
     for registro in registros:
         anterior = existentes.get(registro['id'], {})
         registro['ocorrencias'] = max(
@@ -1778,8 +1862,8 @@ def salvar_classificacoes_online(registros):
         )
     return len(registros)
 
-def ler_planilha_classificada(file_bytes, filename):
-    """Lê planilha com um ou vários bancos e extrai Débito/Crédito já revisados."""
+def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
+    """Lê planilha revisada e cria padrões exclusivos da empresa informada."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     registros = []
     banco_arquivo = identificar_chave_banco_empresa(filename)
@@ -1818,7 +1902,7 @@ def ler_planilha_classificada(file_bytes, filename):
                 if col_descricao is not None else ''
             ) or banco_aba or banco_arquivo
             assinatura = criar_assinatura_classificacao(historico)
-            if banco_linha not in {'itau', 'bradesco', 'fibra'} or not assinatura:
+            if banco_linha not in {'itau', 'bradesco', 'fibra', 'daycoval'} or not assinatura:
                 continue
             data_lancamento = (
                 pd.to_datetime(linha[col_data], dayfirst=True, errors='coerce')
@@ -1829,11 +1913,11 @@ def ler_planilha_classificada(file_bytes, filename):
                 else normalizar_texto(filename)
             )
             identificador = hashlib.sha256(
-                f"nova_geracao|{banco_linha}|{assinatura}|{debito}|{credito}".encode('utf-8')
+                f"{empresa}|{banco_linha}|{assinatura}|{debito}|{credito}".encode('utf-8')
             ).hexdigest()
             registros.append({
                 'id': identificador,
-                'empresa': 'nova_geracao',
+                'empresa': empresa,
                 'banco': banco_linha,
                 'assinatura': assinatura,
                 'debito': debito,
@@ -1844,8 +1928,8 @@ def ler_planilha_classificada(file_bytes, filename):
             })
     return registros
 
-def importar_arquivos_classificados(arquivos):
-    """Aceita XLSX individual, vários XLSX ou ZIP contendo planilhas."""
+def importar_arquivos_classificados(arquivos, empresa='nova_geracao'):
+    """Aceita XLSX/ZIP e mantém o aprendizado isolado por empresa."""
     registros = []
     for arquivo in arquivos:
         conteudo = arquivo.getvalue()
@@ -1862,10 +1946,10 @@ def importar_arquivos_classificados(arquivos):
                     if membro.file_size > 20 * 1024 * 1024:
                         raise ValueError(f'A planilha {membro.filename} ultrapassa 20 MB.')
                     registros.extend(ler_planilha_classificada(
-                        pacote.read(membro), os.path.basename(membro.filename)
+                        pacote.read(membro), os.path.basename(membro.filename), empresa
                     ))
         else:
-            registros.extend(ler_planilha_classificada(conteudo, nome))
+            registros.extend(ler_planilha_classificada(conteudo, nome, empresa))
 
     agrupados = {}
     for registro in registros:
@@ -3228,10 +3312,15 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         empresa_autokraft = configuracao_empresa_autokraft['empresa']
         slug_empresa_autokraft = configuracao_empresa_autokraft["slug"]
 
-        st.caption(
-            f"Ferramentas ativas para {empresa_autokraft}. O sistema lê automaticamente "
-            "cada aba diária, ignora saldos e totais e separa os lançamentos por banco."
-        )
+        aba_operacoes_autokraft, aba_base_autokraft = st.tabs([
+            "Organizar e conferir",
+            "Base inteligente de Débito e Crédito"
+        ])
+        with aba_operacoes_autokraft:
+            st.caption(
+                f"Ferramentas ativas para {empresa_autokraft}. O sistema lê automaticamente "
+                "cada aba diária, ignora saldos e totais e separa os lançamentos por banco."
+            )
         bancos_autokraft = st.multiselect(
             "Bancos para organizar",
             ["Itaú", "Daycoval"],
@@ -3351,6 +3440,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.markdown(f"#### Conferência — {empresa_autokraft}")
         renderizar_conferencia_autokraft(slug_empresa_autokraft)
 
+        with aba_base_autokraft:
+            renderizar_base_inteligente_empresa(
+                slug_empresa_autokraft,
+                empresa_autokraft,
+                {'itau', 'daycoval'}
+            )
+
     if st.session_state['empresa_organizador'] == 'nova_geracao':
         estabelecimento_nova = st.radio(
             "Área da empresa",
@@ -3405,7 +3501,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         erro_base_classificacoes = ''
         if url_base_classificacao and chave_base_classificacao:
             try:
-                base_classificacoes = carregar_classificacoes_online()
+                base_classificacoes = carregar_classificacoes_online('nova_geracao')
             except Exception as erro_base:
                 erro_base_classificacoes = str(erro_base)
 
