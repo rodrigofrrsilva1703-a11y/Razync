@@ -1304,6 +1304,13 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
             if lancamentos_itau:
                 return lancamentos_itau
 
+        if banco_identificado == 'BANCO BRADESCO':
+            lancamentos_bradesco = processar_pdf_bradesco_mensal(
+                reader, banco_identificado
+            )
+            if lancamentos_bradesco:
+                return lancamentos_bradesco
+
         # Primeiro tenta o analisador estrutural único, independente do banco.
         lancamentos_layout = processar_pdf_layout_universal(reader, banco_identificado)
         if lancamentos_layout:
