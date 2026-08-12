@@ -3,77 +3,95 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-old = '''    if st.session_state['empresa_organizador'] == 'autokraft':
-        empresa_autokraft = st.selectbox(
-            "Empresa",
-            [
-                "3 - Autokraft Industrial",
-                "178 - Autokraft Projetos",
-                "343 - I.S.A"
-            ],
-            key="org_empresa_autokraft"
-        )
-
-        configuracao_empresa_autokraft = {'''
-
-new = '''    if st.session_state['empresa_organizador'] == 'autokraft':
-        empresas_autokraft = [
-            ("3 - Autokraft Industrial", "3", "Autokraft Industrial", "🏭"),
-            ("178 - Autokraft Projetos", "178", "Autokraft Projetos", "📐"),
-            ("343 - I.S.A", "343", "I.S.A", "🏢"),
-        ]
-        if st.session_state.get("org_empresa_autokraft") not in [item[0] for item in empresas_autokraft]:
-            st.session_state["org_empresa_autokraft"] = empresas_autokraft[0][0]
-
-        st.markdown("##### Selecione a empresa")
-        colunas_empresas_autokraft = st.columns([1, 1, 1, 3])
-        for indice, (nome_empresa, numero_empresa, nome_curto, icone) in enumerate(empresas_autokraft):
-            selecionada = st.session_state["org_empresa_autokraft"] == nome_empresa
-            with colunas_empresas_autokraft[indice]:
-                if st.button(
-                    f"{icone}  **{numero_empresa}**\\n{nome_curto}" + ("\\n✓ Selecionada" if selecionada else ""),
-                    key=f"org_autokraft_card_{indice}",
-                    use_container_width=True,
-                    type="primary" if selecionada else "secondary"
-                ):
-                    st.session_state["org_empresa_autokraft"] = nome_empresa
-                    st.rerun()
-
-        empresa_autokraft = st.session_state["org_empresa_autokraft"]
-
-        configuracao_empresa_autokraft = {'''
-
-if text.count(old) != 1:
-    raise SystemExit(f'Seleção Autokraft encontrada {text.count(old)} vezes; alteração cancelada.')
-text = text.replace(old, new, 1)
-
-css_marker = '''        /* Cards de empresas: maiores, próximos e alinhados ao centro. */'''
-css = '''        /* Cards pequenos para selecionar as empresas dentro do Grupo Autokraft. */
-        .st-key-org_autokraft_card_0 button,
-        .st-key-org_autokraft_card_1 button,
-        .st-key-org_autokraft_card_2 button {
-            min-height: 88px !important;
-            height: 88px !important;
-            padding: 8px 10px !important;
-            border-radius: 8px !important;
-            white-space: pre-line !important;
-            line-height: 1.18 !important;
-            font-size: 11px !important;
-            text-align: center !important;
-            overflow: hidden !important;
+# 1) Cards principais: um pouco maiores e alinhados à esquerda.
+old_css = '''        /* Cards de empresas: maiores, próximos e alinhados ao centro. */
+        .st-key-org_empresa_card_nova,
+        .st-key-org_empresa_card_autokraft {
+            width: 210px !important;
+            min-width: 210px !important;
+            max-width: 210px !important;
+            display: flex !important;
+            justify-content: center !important;
         }
-        .st-key-org_autokraft_card_0 button p,
-        .st-key-org_autokraft_card_1 button p,
-        .st-key-org_autokraft_card_2 button p {
-            white-space: pre-line !important;
-            margin: 0 !important;
-            line-height: 1.18 !important;
+        .st-key-org_empresa_card_nova {
+            margin-left: auto !important;
+            margin-right: 24px !important;
         }
-
+        .st-key-org_empresa_card_autokraft {
+            margin-left: 24px !important;
+            margin-right: auto !important;
+        }
+        .st-key-org_empresa_card_nova button,
+        .st-key-org_empresa_card_autokraft button {
+            width: 210px !important;
+            min-width: 210px !important;
+            max-width: 210px !important;
+            height: 210px !important;
+            min-height: 210px !important;
+            max-height: 210px !important;
 '''
-if css_marker not in text:
-    raise SystemExit('Ponto de CSS dos cards não encontrado; alteração cancelada.')
-text = text.replace(css_marker, css + css_marker, 1)
+new_css = '''        /* Cards de empresas: levemente maiores e alinhados à esquerda. */
+        .st-key-org_empresa_card_nova,
+        .st-key-org_empresa_card_autokraft {
+            width: 224px !important;
+            min-width: 224px !important;
+            max-width: 224px !important;
+            display: flex !important;
+            justify-content: flex-start !important;
+            margin: 0 !important;
+        }
+        .st-key-org_empresa_card_nova {
+            margin-right: 10px !important;
+        }
+        .st-key-org_empresa_card_autokraft {
+            margin-left: 0 !important;
+        }
+        .st-key-org_empresa_card_nova button,
+        .st-key-org_empresa_card_autokraft button {
+            width: 224px !important;
+            min-width: 224px !important;
+            max-width: 224px !important;
+            height: 224px !important;
+            min-height: 224px !important;
+            max-height: 224px !important;
+'''
+if text.count(old_css) != 1:
+    raise SystemExit(f'CSS principal encontrado {text.count(old_css)} vezes; alteração cancelada.')
+text = text.replace(old_css, new_css, 1)
+text = text.replace('max-width: 176px !important;', 'max-width: 188px !important;', 1)
+text = text.replace('max-width: 172px !important;', 'max-width: 184px !important;', 1)
+
+old_cols = '''        col_emp1, col_emp2 = st.columns(2)
+'''
+new_cols = '''        col_emp1, col_emp2, _espaco_empresas = st.columns([1, 1, 4])
+'''
+if text.count(old_cols) != 1:
+    raise SystemExit(f'Layout dos cards encontrado {text.count(old_cols)} vezes; alteração cancelada.')
+text = text.replace(old_cols, new_cols, 1)
+
+# 2) Cache dos processamentos de Excel que são repetidos a cada interação do Streamlit.
+old_nova = '''def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao_banco):
+'''
+new_nova = '''@st.cache_data(show_spinner=False, max_entries=12)
+def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao_banco):
+'''
+if text.count(old_nova) != 1:
+    raise SystemExit(f'Processador Nova Geração encontrado {text.count(old_nova)} vezes; alteração cancelada.')
+text = text.replace(old_nova, new_nova, 1)
+
+old_ak = '''def processar_mapa_autokraft(file_bytes, filename=''):
+'''
+new_ak = '''@st.cache_data(show_spinner=False, max_entries=12)
+def processar_mapa_autokraft(file_bytes, filename=''):
+'''
+if text.count(old_ak) != 1:
+    raise SystemExit(f'Processador Autokraft encontrado {text.count(old_ak)} vezes; alteração cancelada.')
+text = text.replace(old_ak, new_ak, 1)
+
+# 3) Reduz o custo visual da transição de página, evitando blur pesado no navegador.
+text = text.replace('                filter: blur(2px);\n', '', 1)
+text = text.replace('                filter: blur(0);\n', '', 2)
+text = text.replace('            will-change: opacity, transform, filter;\n', '            will-change: opacity, transform;\n', 1)
 
 path.write_text(text, encoding='utf-8')
-print('Lista Autokraft substituída por três cards pequenos lado a lado.')
+print('Cards alinhados à esquerda, ampliados e processamentos pesados cacheados.')
