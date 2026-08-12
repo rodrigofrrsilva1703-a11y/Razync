@@ -1356,6 +1356,28 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
         print(f"Erro no processamento PDF universal: {e}")
     return lancamentos
 
+def processar_extrato_unificado(file_bytes, filename):
+    """Leitor único de extratos usado por todas as ferramentas do Razync."""
+    extensao = os.path.splitext(filename)[1].lower()
+    if extensao == '.ofx':
+        return processar_ofx(file_bytes, filename)
+    if extensao in ['.csv', '.xlsx', '.xls']:
+        return processar_planilha_universal(file_bytes, filename)
+    if extensao != '.pdf':
+        return []
+
+    caminho_temporario = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
+            temporario.write(file_bytes)
+            caminho_temporario = temporario.name
+        # O nome ORIGINAL é sempre passado. Isso evita que um arquivo temporário
+        # faça o identificador perder banco/conta e cair no parser errado.
+        return processar_arquivo_pdf(caminho_temporario, filename)
+    finally:
+        if caminho_temporario and os.path.exists(caminho_temporario):
+            os.remove(caminho_temporario)
+
 def gerar_txt_dominio(df):
     linhas_txt = []
     for _, row in df.iterrows():
@@ -3350,61 +3372,22 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
     return lancamentos
 
 def processar_extrato_conferencia_empresa(file_bytes, filename):
-    """Lê o extrato usado na conferência sem transformar linhas de saldo em movimento."""
-    extensao = os.path.splitext(filename)[1].lower()
-
-    def remover_linhas_de_saldo(lancamentos):
-        termos_saldo = [
-            'saldo anterior',
-            'saldo aplic',
-            'saldo total disponivel',
-            'saldo movimentacao conta',
-            'sdo aplic aut mais ap',
-            'saldo final',
-            'saldo do dia',
-            'saldo total',
-            'saldo disponivel',
-            'saldo em conta',
-        ]
-        filtrados = []
-        for item in lancamentos or []:
-            historico = normalizar_texto(texto_celula_seguro(item.get('HISTÓRICO', '')))
-            if any(termo in historico for termo in termos_saldo):
-                continue
-            valor = limpar_valor_monetario(item.get('VALOR', 0))
-            if abs(valor) < 0.005:
-                continue
-            filtrados.append(item)
-        return filtrados
-
-    if extensao == '.ofx':
-        return remover_linhas_de_saldo(processar_ofx(file_bytes, filename))
-    if extensao in ['.csv', '.xlsx', '.xls']:
-        return remover_linhas_de_saldo(processar_planilha_universal(file_bytes, filename))
-    if extensao == '.pdf':
-        caminho_temporario = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
-                temporario.write(file_bytes)
-                caminho_temporario = temporario.name
-
-            # Para PDF Itaú detalhado, força o parser específico também na conferência.
-            # Assim os saldos de aplicação, saldo anterior, saldo disponível e saldo
-            # de movimentação nunca entram no total comparado com a planilha.
-            reader = PdfReader(caminho_temporario, strict=False)
-            texto_amostra = '\n'.join((pagina.extract_text() or '') for pagina in reader.pages[:2])
-            banco = identificar_banco_inteligente(texto_amostra, filename)
-            if banco in {'BANCO ITAU', 'BANCO ITAÚ'}:
-                lancamentos = processar_pdf_itau_detalhado(reader, banco)
-            elif banco == 'BANCO BRADESCO':
-                lancamentos = processar_pdf_bradesco_mensal(reader, banco)
-            else:
-                lancamentos = processar_arquivo_pdf(caminho_temporario, filename)
-            return remover_linhas_de_saldo(lancamentos)
-        finally:
-            if caminho_temporario and os.path.exists(caminho_temporario):
-                os.remove(caminho_temporario)
-    return []
+    """Lê a conferência pelo mesmo motor central usado em todo o Razync."""
+    termos_saldo = [
+        'saldo anterior', 'saldo aplic', 'saldo invest', 'saldo total disponivel',
+        'saldo movimentacao conta', 'sdo aplic aut mais ap', 'saldo final',
+        'saldo do dia', 'saldo total', 'saldo disponivel', 'saldo em conta',
+    ]
+    filtrados = []
+    for item in processar_extrato_unificado(file_bytes, filename) or []:
+        historico = normalizar_texto(texto_celula_seguro(item.get('HISTÓRICO', '')))
+        if any(termo in historico for termo in termos_saldo):
+            continue
+        valor = limpar_valor_monetario(item.get('VALOR', 0))
+        if abs(valor) < 0.005:
+            continue
+        filtrados.append(item)
+    return filtrados
 
 def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados=None):
     """Compara movimentos por dia e faz pareamento individual por data e centavos."""
@@ -3844,25 +3827,23 @@ elif st.session_state['pagina_ativa'] == 'extratos':
                 file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
                 lancamentos, data_ini_doc, data_fim_doc = [], None, None
                 
-                if extensao == '.ofx':
-                    lancamentos = executar_com_loading(
-                        f"Lendo {arquivo.name}...", processar_ofx, file_bytes, arquivo.name
-                    )
-                elif extensao in ['.csv', '.xlsx', '.xls']:
-                    lancamentos = executar_com_loading(
-                        f"Lendo {arquivo.name}...",
-                        processar_planilha_universal,
-                        file_bytes,
-                        arquivo.name
-                    )
-                elif extensao == '.pdf':
-                    caminho_temp = f"temp_{arquivo.name}"
-                    with open(caminho_temp, "wb") as f: f.write(file_bytes)
-                    data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_temp)
-                    lancamentos = executar_com_loading(
-                        f"Analisando {arquivo.name}...", processar_arquivo_pdf, caminho_temp
-                    )
-                    if os.path.exists(caminho_temp): os.remove(caminho_temp)
+                if extensao == '.pdf':
+                    caminho_periodo = None
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_periodo:
+                            temp_periodo.write(file_bytes)
+                            caminho_periodo = temp_periodo.name
+                        data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_periodo)
+                    finally:
+                        if caminho_periodo and os.path.exists(caminho_periodo):
+                            os.remove(caminho_periodo)
+
+                lancamentos = executar_com_loading(
+                    f"Analisando {arquivo.name}...",
+                    processar_extrato_unificado,
+                    file_bytes,
+                    arquivo.name
+                )
                     
                 if lancamentos:
                     df_temp = pd.DataFrame(lancamentos)
@@ -5082,25 +5063,12 @@ elif st.session_state['pagina_ativa'] == 'razao':
     if arq_extrato and arq_razao:
         try:
             ext_bytes, ext_ext = arq_extrato.getvalue(), os.path.splitext(arq_extrato.name)[1].lower()
-            lancamentos_ext = []
-            if ext_ext == '.ofx':
-                lancamentos_ext = executar_com_loading(
-                    "Lendo o extrato bancário...", processar_ofx, ext_bytes, arq_extrato.name
-                )
-            elif ext_ext in ['.csv', '.xlsx', '.xls']:
-                lancamentos_ext = executar_com_loading(
-                    "Lendo o extrato bancário...",
-                    processar_planilha_universal,
-                    ext_bytes,
-                    arq_extrato.name
-                )
-            elif ext_ext == '.pdf':
-                tmp_ext = f"temp_ext_conc_{arq_extrato.name}"
-                with open(tmp_ext, "wb") as f: f.write(ext_bytes)
-                lancamentos_ext = executar_com_loading(
-                    "Analisando o extrato bancário...", processar_arquivo_pdf, tmp_ext
-                )
-                if os.path.exists(tmp_ext): os.remove(tmp_ext)
+            lancamentos_ext = executar_com_loading(
+                "Analisando o extrato bancário...",
+                processar_extrato_unificado,
+                ext_bytes,
+                arq_extrato.name
+            )
                 
             raz_bytes, raz_name = arq_razao.getvalue(), arq_razao.name
             
