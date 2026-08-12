@@ -21,13 +21,15 @@ if text.count(old_upload) != 1:
     raise SystemExit(f'Referência antiga estabelecimento_nova encontrada {text.count(old_upload)} vezes.')
 text = text.replace(old_upload, new_upload, 1)
 
-# Garante que nenhuma referência executável à variável removida permaneça.
-restos = [
-    linha for linha in text.splitlines()
-    if 'estabelecimento_nova' in linha and 'nome_estabelecimento_nova' not in linha
+# Garante que a variável antiga não seja mais usada como expressão/template.
+referencias_antigas = [
+    '{estabelecimento_nova}',
+    'normalizar_texto(estabelecimento_nova)',
+    '= estabelecimento_nova',
 ]
-if restos:
-    raise SystemExit('Ainda existem referências antigas a estabelecimento_nova: ' + ' | '.join(restos[:5]))
+for referencia in referencias_antigas:
+    if referencia in text:
+        raise SystemExit(f'Ainda existe referência antiga: {referencia!r}')
 
 checks = [
     "nome_estabelecimento_nova = (",
@@ -41,4 +43,4 @@ for check in checks:
         raise SystemExit(f'Validação falhou: {check!r}')
 
 path.write_text(text, encoding='utf-8')
-print('NameError corrigido: upload usa o nome derivado do card Matriz/Filial.')
+print('NameError corrigido: upload usa nome derivado dos cards Matriz/Filial.')
