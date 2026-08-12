@@ -3,153 +3,268 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-# ----------------------------------------------------------------------------
-# A natureza do lançamento bancário deve vir SEMPRE do sinal do VALOR:
-#   valor < 0  => pago / saída  => conta do banco no CRÉDITO
-#   valor > 0  => recebido      => conta do banco no DÉBITO
-# O texto do histórico não pode inverter essa decisão.
-# ----------------------------------------------------------------------------
-old_base = '''        assinatura = item.get('assinatura', '')
-        natureza = assinatura.split('|', 1)[0] if assinatura else ''
-        debito_item = texto_celula_seguro(item.get('debito'))
-        credito_item = texto_celula_seguro(item.get('credito'))
-        conta_banco_item = texto_celula_seguro(contas_bancarias.get(banco, ''))
+old_css = '''        /* Cards de empresas: alinhados à esquerda com espaçamento responsivo. */
+        .st-key-org_empresa_card_nova,
+        .st-key-org_empresa_card_autokraft_industrial,
+        .st-key-org_empresa_card_autokraft_projetos,
+        .st-key-org_empresa_card_isa {
+            width: 218px !important;
+            min-width: 218px !important;
+            max-width: 218px !important;
+            display: flex !important;
+            justify-content: flex-start !important;
+            margin: 0 !important;
+        }
+        .st-key-org_empresa_card_nova {
+            margin-right: 18px !important;
+        }
+        .st-key-org_empresa_card_autokraft_industrial,
+        .st-key-org_empresa_card_autokraft_projetos,
+        .st-key-org_empresa_card_isa {
+            margin-left: 0 !important;
+        }
+        .st-key-org_empresa_card_nova button,
+        .st-key-org_empresa_card_autokraft_industrial button,
+        .st-key-org_empresa_card_autokraft_projetos button,
+        .st-key-org_empresa_card_isa button {
+            width: 218px !important;
+            min-width: 218px !important;
+            max-width: 218px !important;
+            height: 218px !important;
+            min-height: 218px !important;
+            max-height: 218px !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            padding: 16px 16px !important;
+            cursor: pointer !important;
+            background: #050b12 !important;
+            border: 1px solid #12324a !important;
+            border-radius: 8px !important;
+            color: #f2f8fc !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.28 !important;
+            font-size: 10.5px !important;
+            font-weight: 400 !important;
+            box-shadow: none !important;
+            transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease !important;
+        }
+        .st-key-org_empresa_card_nova button p,
+        .st-key-org_empresa_card_autokraft_industrial button p,
+        .st-key-org_empresa_card_autokraft_projetos button p,
+        .st-key-org_empresa_card_isa button p {
+            width: 100% !important;
+            max-width: 182px !important;
+            white-space: pre-line !important;
+            overflow-wrap: anywhere !important;
+            margin: 0 auto !important;
+            line-height: 1.28 !important;
+        }
+        .st-key-org_empresa_card_nova button strong,
+        .st-key-org_empresa_card_autokraft_industrial button strong,
+        .st-key-org_empresa_card_autokraft_projetos button strong,
+        .st-key-org_empresa_card_isa button strong {
+            display: inline-block !important;
+            max-width: 178px !important;
+            color: #f2f8fc !important;
+            font-size: 16px !important;
+            line-height: 1.2 !important;
+            font-weight: 700 !important;
+        }
+        .st-key-org_empresa_card_nova button:hover,
+        .st-key-org_empresa_card_autokraft_industrial button:hover,
+        .st-key-org_empresa_card_autokraft_projetos button:hover,
+        .st-key-org_empresa_card_isa button:hover {
+            background: #081725 !important;
+            border-color: #1d6f9b !important;
+            color: #bfd1de !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
 
-        if natureza == 'pago':
-            contrapartida = debito_item
-        elif natureza == 'recebido':
-            contrapartida = credito_item
-        elif banco in contas_bancarias and conta_banco_item:
-            # Planilhas Autokraft aprendidas não trazem PAGO/RECEBIDO no histórico.
-            # Se a conta do banco está no crédito, é uma saída; se está no débito, é entrada.
-            if credito_item == conta_banco_item and debito_item:
-                natureza = 'pago'
-                contrapartida = debito_item
-            elif debito_item == conta_banco_item and credito_item:
-                natureza = 'recebido'
-                contrapartida = credito_item
-            else:
-                contrapartida = ''
-        else:
-            contrapartida = ''
+        @media (max-width: 1150px) {
+            .st-key-org_empresa_card_nova,
+            .st-key-org_empresa_card_autokraft_industrial,
+        .st-key-org_empresa_card_autokraft_projetos,
+        .st-key-org_empresa_card_isa {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 218px !important;
+            }
+            .st-key-org_empresa_card_nova button,
+            .st-key-org_empresa_card_autokraft_industrial button,
+        .st-key-org_empresa_card_autokraft_projetos button,
+        .st-key-org_empresa_card_isa button {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 218px !important;
+                aspect-ratio: 1 / 1 !important;
+                height: auto !important;
+                min-height: 190px !important;
+                max-height: 218px !important;
+            }
+        }
 '''
-new_base = '''        assinatura = item.get('assinatura', '')
-        debito_item = texto_celula_seguro(item.get('debito'))
-        credito_item = texto_celula_seguro(item.get('credito'))
-        conta_banco_item = texto_celula_seguro(contas_bancarias.get(banco, ''))
 
-        # Para padrões já aprendidos, a posição REAL da conta bancária é mais
-        # confiável que palavras como "pago" ou "recebido" presentes no histórico.
-        if banco in contas_bancarias and conta_banco_item:
-            if credito_item == conta_banco_item and debito_item:
-                natureza = 'pago'
-                contrapartida = debito_item
-            elif debito_item == conta_banco_item and credito_item:
-                natureza = 'recebido'
-                contrapartida = credito_item
-            else:
-                natureza = assinatura.split('|', 1)[0] if assinatura else ''
-                contrapartida = ''
-        else:
-            natureza = assinatura.split('|', 1)[0] if assinatura else ''
-            contrapartida = ''
+new_css = '''        /* Cards de empresas: visual premium, compacto e responsivo. */
+        .st-key-org_empresa_card_nova,
+        .st-key-org_empresa_card_autokraft_industrial,
+        .st-key-org_empresa_card_autokraft_projetos,
+        .st-key-org_empresa_card_isa {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 260px !important;
+            display: flex !important;
+            justify-content: flex-start !important;
+            margin: 0 !important;
+        }
 
-        # Normaliza também a assinatura existente para a natureza real inferida
-        # pela posição da conta do banco. Isso reaproveita a base antiga sem zerar.
-        if assinatura and natureza in {'pago', 'recebido'}:
-            partes_assinatura = assinatura.split('|', 1)
-            sufixo_assinatura = partes_assinatura[1] if len(partes_assinatura) > 1 else ''
-            assinatura = (
-                f"{natureza}|{sufixo_assinatura}" if sufixo_assinatura else natureza
-            )
+        .st-key-org_empresa_card_nova button,
+        .st-key-org_empresa_card_autokraft_industrial button,
+        .st-key-org_empresa_card_autokraft_projetos button,
+        .st-key-org_empresa_card_isa button {
+            position: relative !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 260px !important;
+            height: 154px !important;
+            min-height: 154px !important;
+            max-height: 154px !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            padding: 22px 20px 20px !important;
+            cursor: pointer !important;
+            background:
+                radial-gradient(circle at top left, rgba(19, 185, 232, 0.10), transparent 42%),
+                linear-gradient(145deg, #07101a 0%, #050a10 72%) !important;
+            border: 1px solid rgba(40, 104, 145, 0.50) !important;
+            border-top: 2px solid rgba(19, 185, 232, 0.78) !important;
+            border-radius: 14px !important;
+            color: #f5f9fc !important;
+            display: flex !important;
+            align-items: flex-end !important;
+            justify-content: flex-start !important;
+            text-align: left !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            box-shadow: none !important;
+            transition:
+                background 160ms ease,
+                border-color 160ms ease,
+                transform 160ms ease !important;
+        }
+
+        .st-key-org_empresa_card_nova button::before,
+        .st-key-org_empresa_card_autokraft_industrial button::before,
+        .st-key-org_empresa_card_autokraft_projetos button::before,
+        .st-key-org_empresa_card_isa button::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 17px !important;
+            left: 19px !important;
+            width: 28px !important;
+            height: 4px !important;
+            border-radius: 99px !important;
+            background: rgba(19, 185, 232, 0.88) !important;
+        }
+
+        .st-key-org_empresa_card_nova button p,
+        .st-key-org_empresa_card_autokraft_industrial button p,
+        .st-key-org_empresa_card_autokraft_projetos button p,
+        .st-key-org_empresa_card_isa button p {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.24 !important;
+        }
+
+        .st-key-org_empresa_card_nova button strong,
+        .st-key-org_empresa_card_autokraft_industrial button strong,
+        .st-key-org_empresa_card_autokraft_projetos button strong,
+        .st-key-org_empresa_card_isa button strong {
+            display: block !important;
+            width: 100% !important;
+            color: #f5f9fc !important;
+            font-size: 17px !important;
+            line-height: 1.22 !important;
+            font-weight: 730 !important;
+            letter-spacing: -0.018em !important;
+        }
+
+        .st-key-org_empresa_card_nova button:hover,
+        .st-key-org_empresa_card_autokraft_industrial button:hover,
+        .st-key-org_empresa_card_autokraft_projetos button:hover,
+        .st-key-org_empresa_card_isa button:hover {
+            background:
+                radial-gradient(circle at top left, rgba(19, 185, 232, 0.16), transparent 44%),
+                linear-gradient(145deg, #091522 0%, #06101a 72%) !important;
+            border-color: rgba(19, 185, 232, 0.90) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: none !important;
+        }
+
+        @media (max-width: 1280px) {
+            .st-key-org_empresa_card_nova,
+            .st-key-org_empresa_card_autokraft_industrial,
+            .st-key-org_empresa_card_autokraft_projetos,
+            .st-key-org_empresa_card_isa,
+            .st-key-org_empresa_card_nova button,
+            .st-key-org_empresa_card_autokraft_industrial button,
+            .st-key-org_empresa_card_autokraft_projetos button,
+            .st-key-org_empresa_card_isa button {
+                max-width: 230px !important;
+            }
+        }
+
+        @media (max-width: 1050px) {
+            .st-key-org_empresa_card_nova,
+            .st-key-org_empresa_card_autokraft_industrial,
+            .st-key-org_empresa_card_autokraft_projetos,
+            .st-key-org_empresa_card_isa,
+            .st-key-org_empresa_card_nova button,
+            .st-key-org_empresa_card_autokraft_industrial button,
+            .st-key-org_empresa_card_autokraft_projetos button,
+            .st-key-org_empresa_card_isa button {
+                max-width: 100% !important;
+            }
+        }
 '''
-if text.count(old_base) != 1:
-    raise SystemExit(f'Bloco de interpretação da base encontrado {text.count(old_base)} vezes.')
-text = text.replace(old_base, new_base, 1)
 
-old_class = '''            assinatura = criar_assinatura_classificacao(historico)
-            natureza = assinatura.split('|', 1)[0] if assinatura else ''
+if text.count(old_css) != 1:
+    raise SystemExit(f'CSS antigo dos cards encontrado {text.count(old_css)} vezes.')
+text = text.replace(old_css, new_css, 1)
 
-            # Fallback essencial para as planilhas Autokraft: nelas o histórico
-            # costuma ser apenas a descrição original, enquanto o sinal do VALOR
-            # informa com segurança se foi entrada ou saída.
-            if natureza not in {'pago', 'recebido'} and col_valor is not None:
-                valor_linha = limpar_valor_monetario(
-                    ws.cell(numero_linha, col_valor).value
-                )
-                if valor_linha < 0:
-                    natureza = 'pago'
-                elif valor_linha > 0:
-                    natureza = 'recebido'
+old_cols = '''        # Uma única linha com quatro cards e gaps próprios para manter o espaçamento.
+        col_emp1, gap1, col_emp2, gap2, col_emp3, gap3, col_emp4 = st.columns(
+            [1.0, 0.06, 1.0, 0.06, 1.0, 0.06, 1.0], gap="small"
+        )
 '''
-new_class = '''            assinatura = criar_assinatura_classificacao(historico)
-
-            # REGRA PRINCIPAL: o sinal do VALOR decide a natureza.
-            # Nunca usamos uma palavra perdida no histórico para decidir se o banco
-            # entra no débito ou no crédito.
-            valor_linha = (
-                limpar_valor_monetario(ws.cell(numero_linha, col_valor).value)
-                if col_valor is not None else 0.0
-            )
-            if valor_linha < 0:
-                natureza = 'pago'
-            elif valor_linha > 0:
-                natureza = 'recebido'
-            else:
-                natureza = assinatura.split('|', 1)[0] if assinatura else ''
-
-            # A assinatura usada para procurar a contrapartida também recebe a
-            # natureza definida pelo sinal, evitando que "pago" dentro do histórico
-            # faça um recebimento buscar padrões de pagamento (e vice-versa).
-            if assinatura and natureza in {'pago', 'recebido'}:
-                partes_assinatura = assinatura.split('|', 1)
-                sufixo_assinatura = partes_assinatura[1] if len(partes_assinatura) > 1 else ''
-                assinatura = (
-                    f"{natureza}|{sufixo_assinatura}" if sufixo_assinatura else natureza
-                )
+new_cols = '''        # Uma linha equilibrada com quatro cards responsivos e espaçamento consistente.
+        col_emp1, col_emp2, col_emp3, col_emp4 = st.columns(
+            [1, 1, 1, 1], gap="medium"
+        )
 '''
-if text.count(old_class) != 1:
-    raise SystemExit(f'Bloco principal de natureza encontrado {text.count(old_class)} vezes.')
-text = text.replace(old_class, new_class, 1)
-
-old_review = '''            assinatura = criar_assinatura_classificacao(historico)
-            natureza = assinatura.split('|', 1)[0] if assinatura else ''
-            valor = 0.0
-            if col_valor is not None:
-                valor = limpar_valor_monetario(ws.cell(numero_linha, col_valor).value)
-            if natureza not in {'pago', 'recebido'}:
-                if valor < 0:
-                    natureza = 'pago'
-                elif valor > 0:
-                    natureza = 'recebido'
-'''
-new_review = '''            assinatura = criar_assinatura_classificacao(historico)
-            valor = 0.0
-            if col_valor is not None:
-                valor = limpar_valor_monetario(ws.cell(numero_linha, col_valor).value)
-
-            # A Revisão Inteligente segue exatamente a mesma regra da classificação.
-            if valor < 0:
-                natureza = 'pago'
-            elif valor > 0:
-                natureza = 'recebido'
-            else:
-                natureza = assinatura.split('|', 1)[0] if assinatura else ''
-'''
-if text.count(old_review) != 1:
-    raise SystemExit(f'Bloco de natureza da revisão encontrado {text.count(old_review)} vezes.')
-text = text.replace(old_review, new_review, 1)
+if text.count(old_cols) != 1:
+    raise SystemExit(f'Layout antigo dos cards encontrado {text.count(old_cols)} vezes.')
+text = text.replace(old_cols, new_cols, 1)
 
 checks = [
-    "if valor_linha < 0:\n                natureza = 'pago'",
-    "elif valor_linha > 0:\n                natureza = 'recebido'",
-    "if credito_item == conta_banco_item and debito_item:",
-    "if valor < 0:\n                natureza = 'pago'",
-    "f\"{natureza}|{sufixo_assinatura}\"",
+    'height: 154px',
+    'border-radius: 14px',
+    'radial-gradient(circle at top left',
+    'align-items: flex-end',
+    'transform: translateY(-2px)',
+    'st.columns(\n            [1, 1, 1, 1], gap="medium"\n        )',
 ]
 for check in checks:
     if check not in text:
-        raise SystemExit(f'Validação falhou: {check}')
+        raise SystemExit(f'Validação visual falhou: {check}')
 
 path.write_text(text, encoding='utf-8')
-print('Contas bancárias passam a ser classificadas pelo sinal do valor, não por palavras do histórico.')
+print('Cards das empresas redesenhados com visual premium, compacto e responsivo.')
