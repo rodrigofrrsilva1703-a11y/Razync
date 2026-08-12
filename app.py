@@ -200,16 +200,16 @@ st.markdown("""
             font-size: 11px !important;
             text-align: center !important;
             overflow: hidden !important;
-            background: #0b151e !important;
-            border: 1px solid #1a3a4d !important;
+            background: #050b12 !important;
+            border: 1px solid #12324a !important;
             box-shadow: none !important;
             transform: none !important;
         }
         .st-key-org_autokraft_card_0 button:hover,
         .st-key-org_autokraft_card_1 button:hover,
         .st-key-org_autokraft_card_2 button:hover {
-            background: #0f1d27 !important;
-            border-color: #2586ad !important;
+            background: #081725 !important;
+            border-color: #1d6f9b !important;
             box-shadow: none !important;
             transform: none !important;
         }
@@ -249,8 +249,8 @@ st.markdown("""
             overflow: hidden !important;
             padding: 16px 16px !important;
             cursor: pointer !important;
-            background: #0b151e !important;
-            border: 1px solid #1a3a4d !important;
+            background: #050b12 !important;
+            border: 1px solid #12324a !important;
             border-radius: 8px !important;
             color: #91a9bb !important;
             display: flex !important;
@@ -285,8 +285,8 @@ st.markdown("""
         }
         .st-key-org_empresa_card_nova button:hover,
         .st-key-org_empresa_card_autokraft button:hover {
-            background: #0f1d27 !important;
-            border-color: #2586ad !important;
+            background: #081725 !important;
+            border-color: #1d6f9b !important;
             color: #bfd1de !important;
             transform: none !important;
             box-shadow: none !important;
