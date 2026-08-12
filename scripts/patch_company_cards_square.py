@@ -3,97 +3,83 @@ from pathlib import Path
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
 
-old_css = '''        /* Cards de empresas: levemente maiores e alinhados à esquerda. */
-        .st-key-org_empresa_card_nova,
-        .st-key-org_empresa_card_autokraft {
-            width: 224px !important;
-            min-width: 224px !important;
-            max-width: 224px !important;
+old_main = '''            background: linear-gradient(145deg, #05090e 0%, #07131f 56%, #0a1d2d 100%) !important;
+            border: 1px solid #17364f !important;
+            border-left: 3px solid #147eaf !important;
+            border-radius: 8px !important;
+            color: #91a9bb !important;
             display: flex !important;
-            justify-content: flex-start !important;
-            margin: 0 !important;
-        }
-        .st-key-org_empresa_card_nova {
-            margin-right: 10px !important;
-        }
-        .st-key-org_empresa_card_autokraft {
-            margin-left: 0 !important;
-        }
-        .st-key-org_empresa_card_nova button,
-        .st-key-org_empresa_card_autokraft button {
-            width: 224px !important;
-            min-width: 224px !important;
-            max-width: 224px !important;
-            height: 224px !important;
-            min-height: 224px !important;
-            max-height: 224px !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.28 !important;
+            font-size: 10.5px !important;
+            font-weight: 400 !important;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24) !important;
+            transition: transform 160ms ease, border-color 160ms ease,
+                        background 180ms ease, box-shadow 180ms ease !important;
 '''
-
-new_css = '''        /* Cards de empresas: alinhados à esquerda com espaçamento responsivo. */
-        .st-key-org_empresa_card_nova,
-        .st-key-org_empresa_card_autokraft {
-            width: 218px !important;
-            min-width: 218px !important;
-            max-width: 218px !important;
+new_main = '''            background: #0b151e !important;
+            border: 1px solid #1a3a4d !important;
+            border-radius: 8px !important;
+            color: #91a9bb !important;
             display: flex !important;
-            justify-content: flex-start !important;
-            margin: 0 !important;
-        }
-        .st-key-org_empresa_card_nova {
-            margin-right: 18px !important;
-        }
-        .st-key-org_empresa_card_autokraft {
-            margin-left: 0 !important;
-        }
-        .st-key-org_empresa_card_nova button,
-        .st-key-org_empresa_card_autokraft button {
-            width: 218px !important;
-            min-width: 218px !important;
-            max-width: 218px !important;
-            height: 218px !important;
-            min-height: 218px !important;
-            max-height: 218px !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.28 !important;
+            font-size: 10.5px !important;
+            font-weight: 400 !important;
+            box-shadow: none !important;
+            transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease !important;
 '''
+if text.count(old_main) != 1:
+    raise SystemExit(f'Estilo principal encontrado {text.count(old_main)} vezes; alteração cancelada.')
+text = text.replace(old_main, new_main, 1)
 
-if text.count(old_css) != 1:
-    raise SystemExit(f'CSS atual encontrado {text.count(old_css)} vezes; alteração cancelada.')
-text = text.replace(old_css, new_css, 1)
-text = text.replace('max-width: 188px !important;', 'max-width: 182px !important;', 1)
-text = text.replace('max-width: 184px !important;', 'max-width: 178px !important;', 1)
-
-old_cols = '''        col_emp1, col_emp2, _espaco_empresas = st.columns([1, 1, 4])
+old_hover = '''            background: linear-gradient(145deg, #071019 0%, #0a1c2c 52%, #0d2a40 100%) !important;
+            border-color: #2398cf !important;
+            border-left-color: #28b6e8 !important;
+            color: #bfd1de !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 15px 34px rgba(0, 79, 122, 0.22) !important;
 '''
-new_cols = '''        col_emp1, col_gap_empresas, col_emp2, _espaco_empresas = st.columns([1.15, 0.10, 1.15, 3.60])
+new_hover = '''            background: #0f1d27 !important;
+            border-color: #2586ad !important;
+            color: #bfd1de !important;
+            transform: none !important;
+            box-shadow: none !important;
 '''
-if text.count(old_cols) != 1:
-    raise SystemExit(f'Layout atual encontrado {text.count(old_cols)} vezes; alteração cancelada.')
-text = text.replace(old_cols, new_cols, 1)
+if text.count(old_hover) != 1:
+    raise SystemExit(f'Hover principal encontrado {text.count(old_hover)} vezes; alteração cancelada.')
+text = text.replace(old_hover, new_hover, 1)
 
-# Fallback para larguras menores: mantém os cards contidos nas colunas quando a sidebar reduz a área útil.
-css_marker = '''        [data-testid="stFileUploaderDropzone"] {'''
-responsive_css = '''        @media (max-width: 1150px) {
-            .st-key-org_empresa_card_nova,
-            .st-key-org_empresa_card_autokraft {
-                width: 100% !important;
-                min-width: 0 !important;
-                max-width: 218px !important;
-            }
-            .st-key-org_empresa_card_nova button,
-            .st-key-org_empresa_card_autokraft button {
-                width: 100% !important;
-                min-width: 0 !important;
-                max-width: 218px !important;
-                aspect-ratio: 1 / 1 !important;
-                height: auto !important;
-                min-height: 190px !important;
-                max-height: 218px !important;
-            }
+# Os cards pequenos internos do Grupo Autokraft seguem o mesmo visual flat.
+small_marker = '''            overflow: hidden !important;
         }
-
-'''
-if css_marker not in text:
-    raise SystemExit('Ponto para CSS responsivo não encontrado; alteração cancelada.')
-text = text.replace(css_marker, responsive_css + css_marker, 1)
+        .st-key-org_autokraft_card_0 button p,'''
+small_replacement = '''            overflow: hidden !important;
+            background: #0b151e !important;
+            border: 1px solid #1a3a4d !important;
+            box-shadow: none !important;
+            transform: none !important;
+        }
+        .st-key-org_autokraft_card_0 button:hover,
+        .st-key-org_autokraft_card_1 button:hover,
+        .st-key-org_autokraft_card_2 button:hover {
+            background: #0f1d27 !important;
+            border-color: #2586ad !important;
+            box-shadow: none !important;
+            transform: none !important;
+        }
+        .st-key-org_autokraft_card_0 button p,'''
+if text.count(small_marker) != 1:
+    raise SystemExit(f'Bloco dos cards Autokraft encontrado {text.count(small_marker)} vezes; alteração cancelada.')
+text = text.replace(small_marker, small_replacement, 1)
 
 path.write_text(text, encoding='utf-8')
-print('Espaçamento dos cards corrigido para sidebar aberta e larguras menores.')
+print('Cards das empresas atualizados para visual flat, sem sombras e sem relevo.')
