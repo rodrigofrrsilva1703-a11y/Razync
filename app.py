@@ -4133,13 +4133,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         with col_filial:
             chave_card_filial = 'ng_card_filial_ativo' if selecionado_ng == 'filial' else 'ng_card_filial'
-            if st.button('Filial', key=chave_card_filial, use_container_width=True):
+            if st.button('1396 - Nova Geração', key=chave_card_filial, use_container_width=True):
                 st.session_state['org_estabelecimento_nova_geracao_card'] = 'filial'
                 st.rerun()
 
         chave_estabelecimento = st.session_state['org_estabelecimento_nova_geracao_card']
         nome_estabelecimento_nova = (
-            'Filial' if chave_estabelecimento == 'filial' else 'Matriz'
+            '1396 - Nova Geração' if chave_estabelecimento == 'filial' else 'Matriz'
         )
         empresa_base_nova = (
             'nova_geracao_filial'
@@ -4147,7 +4147,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             else 'nova_geracao_matriz'
         )
         nome_base_nova = (
-            '266 - Nova Geração Filial'
+            '1396 - Nova Geração'
             if chave_estabelecimento == 'filial'
             else '266 - Nova Geração Matriz'
         )
@@ -4164,7 +4164,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 }
             }
             st.caption(
-                "Filial selecionada — Itaú 98002-6 usa a conta 515 e "
+                "1396 - Nova Geração selecionada — Itaú 98002-6 usa a conta 515 e "
                 "Bradesco 3084-8 usa a conta 514 na classificação."
             )
         else:
