@@ -304,11 +304,6 @@ st.markdown("""
             box-shadow: none !important;
         }
 
-        .st-key-org_empresa_card_autokraft_projetos,
-        .st-key-org_empresa_card_isa {
-            margin-top: 14px !important;
-        }
-
         @media (max-width: 1150px) {
             .st-key-org_empresa_card_nova,
             .st-key-org_empresa_card_autokraft_industrial,
@@ -3186,15 +3181,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if empresa_organizador is None:
         st.markdown("##### Empresas disponíveis")
 
-        # Duas linhas de dois cards: mantém tamanho e espaçamento mesmo com a sidebar aberta.
-        linha1_card1, linha1_gap, linha1_card2, linha1_restante = st.columns([1.0, 0.10, 1.0, 2.9])
-        linha2_card1, linha2_gap, linha2_card2, linha2_restante = st.columns([1.0, 0.10, 1.0, 2.9])
+        # Uma única linha com quatro cards e gaps próprios para manter o espaçamento.
+        col_emp1, gap1, col_emp2, gap2, col_emp3, gap3, col_emp4 = st.columns(
+            [1.0, 0.06, 1.0, 0.06, 1.0, 0.06, 1.0], gap="small"
+        )
 
         cards_empresas = [
-            (linha1_card1, 'nova_geracao', 'org_empresa_card_nova', '🏢', '266 - Nova Geração', 'Organização bancária e conferência.'),
-            (linha1_card2, 'autokraft_industrial', 'org_empresa_card_autokraft_industrial', '🏭', '3 - Autokraft Industrial', 'Mapas bancários e conferência.'),
-            (linha2_card1, 'autokraft_projetos', 'org_empresa_card_autokraft_projetos', '📐', '178 - Autokraft Projetos', 'Mapas bancários e conferência.'),
-            (linha2_card2, 'isa', 'org_empresa_card_isa', '🏢', '343 - I.S.A', 'Mapas bancários e conferência.'),
+            (col_emp1, 'nova_geracao', 'org_empresa_card_nova', '🏢', '266 - Nova Geração', 'Organização bancária e conferência.'),
+            (col_emp2, 'autokraft_industrial', 'org_empresa_card_autokraft_industrial', '🏭', '3 - Autokraft Industrial', 'Mapas bancários e conferência.'),
+            (col_emp3, 'autokraft_projetos', 'org_empresa_card_autokraft_projetos', '📐', '178 - Autokraft Projetos', 'Mapas bancários e conferência.'),
+            (col_emp4, 'isa', 'org_empresa_card_isa', '🏢', '343 - I.S.A', 'Mapas bancários e conferência.'),
         ]
         for coluna_card, chave_empresa, chave_card, icone, titulo_card, descricao_card in cards_empresas:
             with coluna_card:
