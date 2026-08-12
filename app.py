@@ -1992,6 +1992,24 @@ def carregar_classificacoes_online(empresa='nova_geracao'):
         deslocamento += limite
     return registros
 
+def apagar_classificacoes_online(empresa):
+    """Remove todos os padrões de uma empresa específica da base online."""
+    if not empresa:
+        return 0
+    existentes = carregar_classificacoes_online(empresa)
+    if not existentes:
+        return 0
+    caminho = (
+        'classificacoes_bancarias?empresa=eq.'
+        + urllib.parse.quote(empresa)
+    )
+    requisicao_classificacao_online(
+        caminho,
+        metodo='DELETE',
+        prefer='return=minimal'
+    )
+    return len(existentes)
+
 def salvar_classificacoes_online(registros, empresa='nova_geracao'):
     if not registros:
         return 0
@@ -3661,6 +3679,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             help="Escolha a empresa antes de organizar ou classificar a planilha final."
         )
         chave_estabelecimento = normalizar_texto(estabelecimento_nova)
+        empresa_base_nova = (
+            'nova_geracao_filial'
+            if chave_estabelecimento == 'filial'
+            else 'nova_geracao_matriz'
+        )
+        nome_base_nova = (
+            '266 - Nova Geração Filial'
+            if chave_estabelecimento == 'filial'
+            else '266 - Nova Geração Matriz'
+        )
         if chave_estabelecimento == 'filial':
             contas_dominio_estabelecimento = {'itau': '515', 'bradesco': '514'}
             configuracoes_bancos = {
@@ -3706,9 +3734,22 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         erro_base_classificacoes = ''
         if url_base_classificacao and chave_base_classificacao:
             try:
-                base_classificacoes = carregar_classificacoes_online('nova_geracao')
+                base_classificacoes = carregar_classificacoes_online(empresa_base_nova)
             except Exception as erro_base:
                 erro_base_classificacoes = str(erro_base)
+
+        # Migração: a antiga base compartilhada não deve mais alimentar Matriz ou Filial.
+        # Com a service role já configurada, ela é apagada automaticamente na primeira
+        # abertura após esta atualização. As duas novas bases começam vazias.
+        if url_base_classificacao and chave_base_classificacao:
+            try:
+                if not st.session_state.get('_nova_geracao_base_legada_verificada'):
+                    apagar_classificacoes_online('nova_geracao')
+                    st.session_state['_nova_geracao_base_legada_verificada'] = True
+            except Exception as erro_limpeza_legada:
+                st.session_state['_nova_geracao_erro_limpeza_legada'] = str(
+                    erro_limpeza_legada
+                )
 
         aba_operacoes, aba_base_inteligente = st.tabs([
             "Organizar e conferir",
@@ -3720,7 +3761,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 st.error(erro_base_classificacoes)
             elif url_base_classificacao and chave_base_classificacao:
                 st.success(
-                    f"Base online conectada: {len(base_classificacoes)} padrões disponíveis."
+                    f"{nome_base_nova}: {len(base_classificacoes)} padrões disponíveis."
                 )
             else:
                 st.warning(
@@ -3730,25 +3771,29 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     "A organização continuará funcionando, mas sem preencher Débito e Crédito."
                 )
             st.caption(
-                "Importe planilhas já classificadas. Pode enviar arquivos separados, uma planilha "
-                "com vários bancos ou arquivos ZIP. Reimportar o mesmo conteúdo não cria duplicidades. "
-                "A base de fornecedores é compartilhada entre Matriz e Filial, portanto as planilhas "
-                "antigas da Matriz não precisam ser enviadas novamente."
+                f"Base exclusiva de {nome_base_nova}. Matriz e Filial não compartilham mais "
+                "nenhum padrão. Envie apenas planilhas antigas já classificadas desta área."
             )
+            if st.session_state.get('_nova_geracao_erro_limpeza_legada'):
+                st.warning(
+                    "A separação das bases já está ativa, mas a base antiga compartilhada "
+                    "não pôde ser apagada automaticamente: "
+                    + st.session_state['_nova_geracao_erro_limpeza_legada']
+                )
             arquivos_aprendizado = st.file_uploader(
                 "Planilhas classificadas para ensinar o sistema",
                 type=['xlsx', 'xls', 'zip'],
                 accept_multiple_files=True,
-                key='org_base_classificada_nova'
+                key=f'org_base_classificada_nova_{chave_estabelecimento}'
             )
             senha_aprendizado = st.text_input(
                 "Senha administrativa para atualizar a base",
                 type='password',
-                key='org_senha_base_classificada_nova'
+                key=f'org_senha_base_classificada_nova_{chave_estabelecimento}'
             )
             if st.button(
                 "Importar classificações",
-                key='org_importar_base_classificada_nova',
+                key=f'org_importar_base_classificada_nova_{chave_estabelecimento}',
                 use_container_width=True
             ):
                 if not url_base_classificacao or not chave_base_classificacao:
@@ -3764,15 +3809,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         novos_registros = executar_com_loading(
                             "Lendo os padrões das planilhas...",
                             importar_arquivos_classificados,
-                            arquivos_aprendizado
+                            arquivos_aprendizado,
+                            empresa_base_nova
                         )
                         quantidade_salva = executar_com_loading(
                             "Atualizando a base inteligente...",
                             salvar_classificacoes_online,
-                            novos_registros
+                            novos_registros,
+                            empresa_base_nova
                         )
                         st.success(
-                            f"Base atualizada com {quantidade_salva} padrões de classificação."
+                            f"{nome_base_nova} atualizada com {quantidade_salva} padrões de classificação."
                         )
                         st.rerun()
                     except Exception as erro_importacao:
