@@ -1,41 +1,9 @@
 from pathlib import Path
-import re
 
 p = Path('app.py')
 s = p.read_text(encoding='utf-8')
 
-padrao_calc = re.compile(
-    r"    total_modelo = df_modelo\.groupby\('DATA'\)\['VALOR'\]\.sum\(\)\.rename\('TOTAL PLANILHA'\).*?"
-    r"    diario\['STATUS'\] = diario\['DIFERENÇA DO DIA'\]\.apply\(\n"
-    r"        lambda valor: '✅ Batendo' if abs\(valor\) < 0\.01 else '❌ Divergente'\n"
-    r"    \)\n",
-    re.S,
-)
-novo_calc = '''    def resumo_diario_por_natureza(df, prefixo):
-        temp = df[['DATA', 'VALOR']].copy()
-        temp[f'ENTRADAS {prefixo}'] = temp['VALOR'].where(temp['VALOR'] > 0, 0.0)
-        temp[f'SAÍDAS {prefixo}'] = -temp['VALOR'].where(temp['VALOR'] < 0, 0.0)
-        return temp.groupby('DATA', as_index=False)[[f'ENTRADAS {prefixo}', f'SAÍDAS {prefixo}']].sum()
-
-    ext_dia = resumo_diario_por_natureza(df_extrato_comparavel, 'EXTRATO')
-    plan_dia = resumo_diario_por_natureza(df_modelo, 'PLANILHA')
-    diario = pd.merge(ext_dia, plan_dia, on='DATA', how='outer').fillna(0.0).sort_values('DATA')
-    diario['DIF. ENTRADAS'] = (diario['ENTRADAS PLANILHA'] - diario['ENTRADAS EXTRATO']).round(2)
-    diario['DIF. SAÍDAS'] = (diario['SAÍDAS PLANILHA'] - diario['SAÍDAS EXTRATO']).round(2)
-    diario['STATUS ENTRADAS'] = diario['DIF. ENTRADAS'].apply(lambda v: '✅ Batendo' if abs(v) < 0.01 else '❌ Divergente')
-    diario['STATUS SAÍDAS'] = diario['DIF. SAÍDAS'].apply(lambda v: '✅ Batendo' if abs(v) < 0.01 else '❌ Divergente')
-    diario['STATUS'] = diario.apply(lambda r: '✅ Batendo' if abs(r['DIF. ENTRADAS']) < 0.01 and abs(r['DIF. SAÍDAS']) < 0.01 else '❌ Divergente', axis=1)
-'''
-s, n1 = padrao_calc.subn(novo_calc, s, count=1)
-if n1 != 1:
-    raise SystemExit('Bloco de cálculo da conferência não encontrado.')
-
-inicio = s.find("                dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())")
-fim = s.find("    except Exception as erro:\n        st.error(f\"Não foi possível realizar a conferência: {erro}\")", inicio)
-if inicio < 0 or fim < 0:
-    raise SystemExit('Bloco visual da conferência não encontrado.')
-
-novo_visual = '''                dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())
+old = '''                dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())
                 dias_divergentes = int((diario['STATUS'] == '❌ Divergente').sum())
                 te = float(diario['ENTRADAS EXTRATO'].sum())
                 tp = float(diario['ENTRADAS PLANILHA'].sum())
@@ -65,7 +33,89 @@ novo_visual = '''                dias_batendo = int((diario['STATUS'] == '✅ Ba
                 exibicao = formatar_dataframe_moeda_br(exibicao, ['ENTRADAS EXTRATO','ENTRADAS PLANILHA','DIF. ENTRADAS','SAÍDAS EXTRATO','SAÍDAS PLANILHA','DIF. SAÍDAS'])
                 st.dataframe(exibicao, use_container_width=True, height=390)
 '''
-s = s[:inicio] + novo_visual + s[fim:]
+
+new = '''                dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())
+                dias_divergentes = int((diario['STATUS'] == '❌ Divergente').sum())
+                te = float(diario['ENTRADAS EXTRATO'].sum())
+                tp = float(diario['ENTRADAS PLANILHA'].sum())
+                se = float(diario['SAÍDAS EXTRATO'].sum())
+                sp = float(diario['SAÍDAS PLANILHA'].sum())
+                dif_ent = round(tp - te, 2)
+                dif_sai = round(sp - se, 2)
+
+                st.markdown("##### Conferência por natureza")
+                bloco_entradas, bloco_saidas = st.columns(2, gap='large')
+
+                with bloco_entradas:
+                    st.markdown("**Entradas**")
+                    ent1, ent2, ent3 = st.columns(3)
+                    ent1.metric("Extrato", formatar_moeda(te))
+                    ent2.metric("Planilha", formatar_moeda(tp))
+                    ent3.metric("Diferença", formatar_moeda(dif_ent))
+                    if abs(dif_ent) < 0.01:
+                        st.success("Entradas batendo")
+                    else:
+                        st.error("Entradas divergentes")
+
+                with bloco_saidas:
+                    st.markdown("**Saídas**")
+                    sai1, sai2, sai3 = st.columns(3)
+                    sai1.metric("Extrato", formatar_moeda(se))
+                    sai2.metric("Planilha", formatar_moeda(sp))
+                    sai3.metric("Diferença", formatar_moeda(dif_sai))
+                    if abs(dif_sai) < 0.01:
+                        st.success("Saídas batendo")
+                    else:
+                        st.error("Saídas divergentes")
+
+                st.markdown("##### Conferência diária")
+                resumo1, resumo2 = st.columns(2)
+                resumo1.metric("Dias batendo", dias_batendo)
+                resumo2.metric("Dias divergentes", dias_divergentes)
+
+                exibicao = diario.copy()
+                exibicao['DATA'] = exibicao['DATA'].dt.strftime('%d/%m/%Y')
+                exibicao = exibicao[[
+                    'DATA',
+                    'DIF. ENTRADAS', 'STATUS ENTRADAS',
+                    'DIF. SAÍDAS', 'STATUS SAÍDAS',
+                    'STATUS'
+                ]]
+                exibicao.columns = [
+                    'Data',
+                    'Dif. Entradas', 'Entradas',
+                    'Dif. Saídas', 'Saídas',
+                    'Status do dia'
+                ]
+                exibicao = formatar_dataframe_moeda_br(
+                    exibicao, ['Dif. Entradas', 'Dif. Saídas']
+                )
+                st.dataframe(exibicao, use_container_width=True, height=340)
+
+                with st.expander("Ver valores detalhados por dia", expanded=False):
+                    detalhes = diario.copy()
+                    detalhes['DATA'] = detalhes['DATA'].dt.strftime('%d/%m/%Y')
+                    detalhes = detalhes[[
+                        'DATA',
+                        'ENTRADAS EXTRATO', 'ENTRADAS PLANILHA', 'DIF. ENTRADAS',
+                        'SAÍDAS EXTRATO', 'SAÍDAS PLANILHA', 'DIF. SAÍDAS'
+                    ]]
+                    detalhes.columns = [
+                        'Data',
+                        'Entradas Extrato', 'Entradas Planilha', 'Dif. Entradas',
+                        'Saídas Extrato', 'Saídas Planilha', 'Dif. Saídas'
+                    ]
+                    detalhes = formatar_dataframe_moeda_br(
+                        detalhes,
+                        ['Entradas Extrato', 'Entradas Planilha', 'Dif. Entradas',
+                         'Saídas Extrato', 'Saídas Planilha', 'Dif. Saídas']
+                    )
+                    st.dataframe(detalhes, use_container_width=True, height=320)
+'''
+
+if s.count(old) != 1:
+    raise SystemExit(f'Bloco visual atual encontrado {s.count(old)} vezes.')
+s = s.replace(old, new, 1)
 
 p.write_text(s, encoding='utf-8')
-print('Conferência com entradas e saídas separadas.')
+print('Relatório da conferência simplificado e reorganizado.')
