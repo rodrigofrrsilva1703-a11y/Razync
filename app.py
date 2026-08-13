@@ -3491,10 +3491,11 @@ def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
     return saida.getvalue()
 
 def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
-    """Lê o extrato mensal/por período do Bradesco, inclusive Últimos Lançamentos."""
+    """Lê extratos PDF mensais do Bradesco validando cada movimento pelo saldo."""
     lancamentos = []
     data_atual = None
     partes_historico = []
+    ultimo_saldo = None
     dentro_saldos_invest = False
 
     regex_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s*(.*)$')
@@ -3516,20 +3517,24 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 continue
 
             normalizada = normalizar_texto(linha)
+
             if normalizada.startswith('saldos invest facil'):
                 dentro_saldos_invest = True
+                partes_historico = []
+                continue
+            if normalizada.startswith('ultimos lancamentos'):
+                dentro_saldos_invest = False
+                partes_historico = []
+                continue
+            if normalizada.startswith(('data lancamento', 'data lançamento')):
+                dentro_saldos_invest = False
                 partes_historico = []
                 continue
             if dentro_saldos_invest:
                 continue
             if normalizada.startswith(ignorar_prefixos):
                 continue
-            if normalizada.startswith('ultimos lancamentos'):
-                partes_historico = []
-                continue
             if normalizada.startswith('total '):
-                # Não encerra a leitura: o Bradesco pode trazer o último dia do
-                # mês logo depois, na seção "Últimos Lançamentos".
                 partes_historico = []
                 continue
 
@@ -3540,28 +3545,37 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 normalizada = normalizar_texto(linha)
                 if not linha:
                     continue
-                if normalizada.startswith('saldo anterior'):
-                    partes_historico = []
-                    continue
-
-            if not data_atual:
-                # Continuação no começo de página: mantém a data da página anterior.
-                continue
 
             if normalizada.startswith('saldo anterior'):
+                moedas_saldo = regex_moeda.findall(linha)
+                if moedas_saldo:
+                    ultimo_saldo = limpar_valor_monetario(moedas_saldo[-1])
                 partes_historico = []
+                continue
+
+            if not data_atual:
                 continue
 
             moedas = regex_moeda.findall(linha)
             if len(moedas) >= 2:
                 valor_txt = moedas[-2]
-                valor = limpar_valor_monetario(valor_txt)
+                saldo_txt = moedas[-1]
+                valor_impresso = limpar_valor_monetario(valor_txt)
+                saldo_atual = limpar_valor_monetario(saldo_txt)
+                valor = valor_impresso
+                if ultimo_saldo is not None:
+                    variacao = round(saldo_atual - ultimo_saldo, 2)
+                    if abs(abs(variacao) - abs(valor_impresso)) <= 0.02:
+                        valor = variacao
+
                 inicio_valor = linha.rfind(valor_txt)
                 trecho_historico = linha[:inicio_valor].strip()
                 historico = re.sub(
-                    r'\s+', ' ', ' '.join(partes_historico + ([trecho_historico] if trecho_historico else []))
+                    r'\s+', ' ',
+                    ' '.join(partes_historico + ([trecho_historico] if trecho_historico else []))
                 ).strip()
                 partes_historico = []
+                ultimo_saldo = saldo_atual
 
                 hist_norm = normalizar_texto(historico)
                 if not historico or hist_norm.startswith(('saldo ', 'total ')):
@@ -3577,15 +3591,15 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 lancamentos.append({
                     'DESCRIÇÃO': banco,
                     'DATA': data,
-                    'VALOR': valor,
+                    'VALOR': round(valor, 2),
                     'DÉBITO': '',
                     'CRÉDITO': '',
                     'HISTÓRICO': historico,
                 })
             else:
                 partes_historico.append(linha)
-                if len(partes_historico) > 6:
-                    partes_historico = partes_historico[-6:]
+                if len(partes_historico) > 8:
+                    partes_historico = partes_historico[-8:]
 
     return lancamentos
 
