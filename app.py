@@ -604,6 +604,24 @@ def proteger_acesso_hub():
 
 SEGURANCA_POR_SENHA_ATIVA = proteger_acesso_hub()
 
+if "tema_razync" not in st.session_state:
+    st.session_state["tema_razync"] = "Escuro"
+with st.sidebar:
+    tema = st.radio("Aparência", ["Escuro", "Claro"], horizontal=True, key="tema_razync_radio")
+if tema != st.session_state["tema_razync"]:
+    st.session_state["tema_razync"] = tema
+if st.session_state["tema_razync"] == "Claro":
+    st.markdown("""<style>
+    :root{--hc-bg:#f5f7fa;--hc-surface:#ffffff;--hc-surface-hover:#eef4f8;--hc-border:#d6e0e8;--hc-border-strong:#bac8d3;--hc-text:#17212b;--hc-muted:#5f7180;--hc-accent:#0784b8;--hc-accent-soft:rgba(7,132,184,.10)}
+    .stApp,[data-testid=stAppViewContainer],[data-testid=stMain]{background:#f5f7fa!important;color:#17212b!important}
+    section[data-testid=stSidebar]{background:#fff!important;border-right:1px solid #d6e0e8!important}
+    h1,h2,h3,h4,h5,h6{color:#17212b!important}
+    .stButton>button,[data-testid=stFileUploaderDropzone],[data-testid=stMetric],.metric-card,.aviso-banner{background:#fff!important;border-color:#d6e0e8!important;color:#17212b!important}
+    [data-testid=stCaptionContainer]{background:rgba(7,132,184,.065)!important;border-left-color:#0784b8!important}
+    [data-testid=stCaptionContainer] p{color:#405766!important}
+    input,textarea{background:#fff!important;color:#17212b!important}
+    </style>""", unsafe_allow_html=True)
+
 # ==============================================================================
 # FUNÇÕES DE LIMPEZA E FORMATAÇÃO (MECÂNICAS)
 # ==============================================================================
