@@ -3503,8 +3503,7 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
     ignorar_prefixos = (
         'extrato de:', 'agência | conta', 'agencia | conta', 'data lançamento',
         'data lancamento', 'folha ', 'extrato mensal / por período',
-        'extrato mensal / por periodo', 'nova geração comercial',
-        'nova geracao comercial', 'nome do usuário:', 'nome do usuario:',
+        'extrato mensal / por periodo', 'nome do usuário:', 'nome do usuario:',
         'data da operação:', 'data da operacao:', 'os dados acima têm como base',
         'os dados acima tem como base',
     )
@@ -3533,6 +3532,9 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
             if dentro_saldos_invest:
                 continue
             if normalizada.startswith(ignorar_prefixos):
+                continue
+            # O nome da empresa pode ser um lançamento real. Só ignora o rodapé com CNPJ.
+            if normalizada.startswith('nova geracao comercial') and 'cnpj:' in normalizada:
                 continue
             if normalizada.startswith('total '):
                 partes_historico = []
