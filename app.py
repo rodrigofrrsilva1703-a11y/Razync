@@ -5234,42 +5234,24 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                                         "totais diários."
                                                     )
 
-                                                with st.expander(
-                                                    "O que significam os valores acumulados?"
-                                                ):
-                                                    st.markdown(
-                                                        "O **acumulado** soma progressivamente os "
-                                                        "movimentos desde o primeiro dia do período "
-                                                        "analisado. Ele **não é o saldo bancário real**, "
-                                                        "pois não inclui o saldo inicial da conta. A "
-                                                        "diferença acumulada mostra quanto das divergências "
-                                                        "anteriores ainda permanece sem correção."
-                                                    )
-
-                                                exibicao_diaria = diario.copy()
-                                                exibicao_diaria['DATA'] = (
-                                                    exibicao_diaria['DATA'].dt.strftime(
-                                                        '%d/%m/%Y'
-                                                    )
-                                                )
-                                                colunas_monetarias_diarias = [
-                                                    'TOTAL EXTRATO',
-                                                    'TOTAL PLANILHA',
-                                                    'DIFERENÇA DO DIA',
-                                                    'ACUMULADO EXTRATO',
-                                                    'ACUMULADO PLANILHA',
-                                                    'DIFERENÇA ACUMULADA'
+                                                exibicao_diaria = diario[[
+                                                    'DATA', 'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO',
+                                                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO', 'STATUS'
+                                                ]].copy()
+                                                exibicao_diaria['DATA'] = exibicao_diaria['DATA'].dt.strftime('%d/%m/%Y')
+                                                exibicao_diaria.columns = [
+                                                    'Data', 'Entrada Planilha', 'Entrada Extrato',
+                                                    'Saída Planilha', 'Saída Extrato', 'Status'
                                                 ]
-                                                exibicao_diaria = (
-                                                    formatar_dataframe_moeda_br(
-                                                        exibicao_diaria,
-                                                        colunas_monetarias_diarias
-                                                    )
+                                                exibicao_diaria = formatar_dataframe_moeda_br(
+                                                    exibicao_diaria,
+                                                    ['Entrada Planilha', 'Entrada Extrato', 'Saída Planilha', 'Saída Extrato']
                                                 )
                                                 st.dataframe(
                                                     exibicao_diaria,
                                                     use_container_width=True,
-                                                    height=360
+                                                    height=390,
+                                                    hide_index=True
                                                 )
                     except Exception as erro_conferencia_independente:
                         st.error(
