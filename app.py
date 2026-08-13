@@ -3939,18 +3939,19 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft'):
                 exibicao['DATA'] = exibicao['DATA'].dt.strftime('%d/%m/%Y')
                 exibicao = exibicao[[
                     'DATA',
-                    'DIF. ENTRADAS', 'STATUS ENTRADAS',
-                    'DIF. SAÍDAS', 'STATUS SAÍDAS',
+                    'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO',
+                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO',
                     'STATUS'
                 ]]
                 exibicao.columns = [
                     'Data',
-                    'Dif. Entradas', 'Entradas',
-                    'Dif. Saídas', 'Saídas',
-                    'Status do dia'
+                    'Entrada Planilha', 'Entrada Extrato',
+                    'Saída Planilha', 'Saída Extrato',
+                    'Status'
                 ]
                 exibicao = formatar_dataframe_moeda_br(
-                    exibicao, ['Dif. Entradas', 'Dif. Saídas']
+                    exibicao,
+                    ['Entrada Planilha', 'Entrada Extrato', 'Saída Planilha', 'Saída Extrato']
                 )
                 st.dataframe(exibicao, use_container_width=True, height=340)
 
