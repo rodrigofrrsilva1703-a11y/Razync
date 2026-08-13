@@ -5235,17 +5235,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                                     )
 
                                                 exibicao_diaria = diario[[
-                                                    'DATA', 'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO',
-                                                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO', 'STATUS'
+                                                    'DATA', 'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO', 'DIF. ENTRADAS',
+                                                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO', 'DIF. SAÍDAS', 'STATUS'
                                                 ]].copy()
                                                 exibicao_diaria['DATA'] = exibicao_diaria['DATA'].dt.strftime('%d/%m/%Y')
                                                 exibicao_diaria.columns = [
-                                                    'Data', 'Entrada Planilha', 'Entrada Extrato',
-                                                    'Saída Planilha', 'Saída Extrato', 'Status'
+                                                    'Data', 'Entrada Planilha', 'Entrada Extrato', 'Diferença Entradas',
+                                                    'Saída Planilha', 'Saída Extrato', 'Diferença Saídas', 'Status'
                                                 ]
                                                 exibicao_diaria = formatar_dataframe_moeda_br(
                                                     exibicao_diaria,
-                                                    ['Entrada Planilha', 'Entrada Extrato', 'Saída Planilha', 'Saída Extrato']
+                                                    ['Entrada Planilha', 'Entrada Extrato', 'Diferença Entradas', 'Saída Planilha', 'Saída Extrato', 'Diferença Saídas']
                                                 )
                                                 st.dataframe(
                                                     exibicao_diaria,
