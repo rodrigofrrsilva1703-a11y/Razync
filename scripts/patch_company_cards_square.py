@@ -1,60 +1,40 @@
 from pathlib import Path
+import re
 
 p = Path('app.py')
 s = p.read_text(encoding='utf-8')
 
-inicio = s.find('                st.markdown("##### Conferência por natureza")')
-fim = s.find('    except Exception as erro:\n        st.error(f"Não foi possível realizar a conferência: {erro}")', inicio)
+padrao = re.compile(
+    r'(?m)^(?P<i>\s*)st\.dataframe\(diario,\s*use_container_width=True(?:,\s*height=\d+)?\)\s*$'
+)
 
-if inicio < 0 or fim < 0:
-    raise SystemExit('Bloco visual da conferência não encontrado.')
+def substituir(m):
+    i = m.group('i')
+    return f'''{i}tabela = diario[[
+{i}    'DATA', 'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO',
+{i}    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO', 'STATUS'
+{i}]].copy()
+{i}tabela['DATA'] = pd.to_datetime(tabela['DATA'], errors='coerce').dt.strftime('%d/%m/%Y')
+{i}tabela.columns = [
+{i}    'Data', 'Entrada Planilha', 'Entrada Extrato',
+{i}    'Saída Planilha', 'Saída Extrato', 'Status'
+{i}]
+{i}tabela = formatar_dataframe_moeda_br(
+{i}    tabela,
+{i}    ['Entrada Planilha', 'Entrada Extrato', 'Saída Planilha', 'Saída Extrato']
+{i})
+{i}st.dataframe(tabela, use_container_width=True, height=390, hide_index=True)'''
 
-novo = '''                st.markdown("##### Conferência diária")
-                resumo1, resumo2 = st.columns(2)
-                resumo1.metric("Dias batendo", dias_batendo)
-                resumo2.metric("Dias divergentes", dias_divergentes)
+s, quantidade = padrao.subn(substituir, s)
 
-                exibicao = diario.copy()
-                exibicao['DATA'] = exibicao['DATA'].dt.strftime('%d/%m/%Y')
-                exibicao = exibicao[[
-                    'DATA',
-                    'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO',
-                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO',
-                    'STATUS'
-                ]]
-                exibicao.columns = [
-                    'Data',
-                    'Entrada Planilha', 'Entrada Extrato',
-                    'Saída Planilha', 'Saída Extrato',
-                    'Status'
-                ]
-                exibicao = formatar_dataframe_moeda_br(
-                    exibicao,
-                    ['Entrada Planilha', 'Entrada Extrato',
-                     'Saída Planilha', 'Saída Extrato']
-                )
-                st.dataframe(exibicao, use_container_width=True, height=390)
+# Se a tabela principal já foi montada como `exibicao`, garante que o índice fique oculto.
+s = s.replace(
+    'st.dataframe(exibicao, use_container_width=True, height=390)',
+    'st.dataframe(exibicao, use_container_width=True, height=390, hide_index=True)'
+)
 
-                if dias_divergentes == 0:
-                    st.success("✅ Entradas e saídas estão batendo em todos os dias.")
-                else:
-                    st.warning("❌ Existem dias com divergência entre a planilha e o extrato.")
-'''
-
-s = s[:inicio] + novo + s[fim:]
-
-for check in [
-    "'Entrada Planilha', 'Entrada Extrato'",
-    "'Saída Planilha', 'Saída Extrato'",
-    "'Status'",
-]:
-    if check not in s:
-        raise SystemExit(f'Validação falhou: {check}')
-
-if 'Conferência por natureza' in s[inicio:fim]:
-    raise SystemExit('Bloco antigo ainda permaneceu.')
-if 'Ver valores detalhados por dia' in s[inicio:fim]:
-    raise SystemExit('Expander antigo ainda permaneceu.')
+if quantidade == 0 and 'Entrada Planilha' not in s:
+    raise SystemExit('Tabela da conferência não encontrada.')
 
 p.write_text(s, encoding='utf-8')
-print('Conferência bancária simplificada para Planilha x Extrato com status final.')
+print(f'Tabelas brutas corrigidas: {quantidade}')
