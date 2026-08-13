@@ -3905,31 +3905,6 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft'):
                 dif_ent = round(tp - te, 2)
                 dif_sai = round(sp - se, 2)
 
-                st.markdown("##### Conferência por natureza")
-                bloco_entradas, bloco_saidas = st.columns(2, gap='large')
-
-                with bloco_entradas:
-                    st.markdown("**Entradas**")
-                    ent1, ent2, ent3 = st.columns(3)
-                    ent1.metric("Extrato", formatar_moeda(te))
-                    ent2.metric("Planilha", formatar_moeda(tp))
-                    ent3.metric("Diferença", formatar_moeda(dif_ent))
-                    if abs(dif_ent) < 0.01:
-                        st.success("Entradas batendo")
-                    else:
-                        st.error("Entradas divergentes")
-
-                with bloco_saidas:
-                    st.markdown("**Saídas**")
-                    sai1, sai2, sai3 = st.columns(3)
-                    sai1.metric("Extrato", formatar_moeda(se))
-                    sai2.metric("Planilha", formatar_moeda(sp))
-                    sai3.metric("Diferença", formatar_moeda(dif_sai))
-                    if abs(dif_sai) < 0.01:
-                        st.success("Saídas batendo")
-                    else:
-                        st.error("Saídas divergentes")
-
                 st.markdown("##### Conferência diária")
                 resumo1, resumo2 = st.columns(2)
                 resumo1.metric("Dias batendo", dias_batendo)
@@ -3951,29 +3926,15 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft'):
                 ]
                 exibicao = formatar_dataframe_moeda_br(
                     exibicao,
-                    ['Entrada Planilha', 'Entrada Extrato', 'Saída Planilha', 'Saída Extrato']
+                    ['Entrada Planilha', 'Entrada Extrato',
+                     'Saída Planilha', 'Saída Extrato']
                 )
-                st.dataframe(exibicao, use_container_width=True, height=340)
+                st.dataframe(exibicao, use_container_width=True, height=390)
 
-                with st.expander("Ver valores detalhados por dia", expanded=False):
-                    detalhes = diario.copy()
-                    detalhes['DATA'] = detalhes['DATA'].dt.strftime('%d/%m/%Y')
-                    detalhes = detalhes[[
-                        'DATA',
-                        'ENTRADAS EXTRATO', 'ENTRADAS PLANILHA', 'DIF. ENTRADAS',
-                        'SAÍDAS EXTRATO', 'SAÍDAS PLANILHA', 'DIF. SAÍDAS'
-                    ]]
-                    detalhes.columns = [
-                        'Data',
-                        'Entradas Extrato', 'Entradas Planilha', 'Dif. Entradas',
-                        'Saídas Extrato', 'Saídas Planilha', 'Dif. Saídas'
-                    ]
-                    detalhes = formatar_dataframe_moeda_br(
-                        detalhes,
-                        ['Entradas Extrato', 'Entradas Planilha', 'Dif. Entradas',
-                         'Saídas Extrato', 'Saídas Planilha', 'Dif. Saídas']
-                    )
-                    st.dataframe(detalhes, use_container_width=True, height=320)
+                if dias_divergentes == 0:
+                    st.success("✅ Entradas e saídas estão batendo em todos os dias.")
+                else:
+                    st.warning("❌ Existem dias com divergência entre a planilha e o extrato.")
     except Exception as erro:
         st.error(f"Não foi possível realizar a conferência: {erro}")
 
