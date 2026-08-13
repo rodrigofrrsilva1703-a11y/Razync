@@ -65,8 +65,6 @@ novo = '''def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 if not linha:
                     continue
 
-            # SALDO ANTERIOR não é lançamento, mas é essencial para validar o
-            # sinal e o valor do primeiro movimento do dia.
             if normalizada.startswith('saldo anterior'):
                 moedas_saldo = regex_moeda.findall(linha)
                 if moedas_saldo:
@@ -83,10 +81,6 @@ novo = '''def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 saldo_txt = moedas[-1]
                 valor_impresso = limpar_valor_monetario(valor_txt)
                 saldo_atual = limpar_valor_monetario(saldo_txt)
-
-                # O Bradesco imprime o valor do lançamento e, na última coluna,
-                # o saldo resultante. A variação do saldo é a fonte mais segura
-                # para confirmar o sinal e evitar que saldo seja lido como movimento.
                 valor = valor_impresso
                 if ultimo_saldo is not None:
                     variacao = round(saldo_atual - ultimo_saldo, 2)
@@ -122,8 +116,6 @@ novo = '''def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                     'HISTÓRICO': historico,
                 })
             else:
-                # Históricos do Bradesco podem ocupar várias linhas antes da
-                # linha que contém documento, valor e saldo.
                 partes_historico.append(linha)
                 if len(partes_historico) > 8:
                     partes_historico = partes_historico[-8:]
@@ -132,7 +124,7 @@ novo = '''def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
 
 '''
 
-s, n = padrao.subn(novo, s, count=1)
+s, n = padrao.subn(lambda _m: novo, s, count=1)
 if n != 1:
     raise SystemExit(f'Leitor Bradesco encontrado {n} vezes.')
 
