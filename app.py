@@ -3929,7 +3929,7 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft'):
                     ['Entrada Planilha', 'Entrada Extrato',
                      'Saída Planilha', 'Saída Extrato']
                 )
-                st.dataframe(exibicao, use_container_width=True, height=390)
+                st.dataframe(exibicao, use_container_width=True, height=390, hide_index=True)
 
                 if dias_divergentes == 0:
                     st.success("✅ Entradas e saídas estão batendo em todos os dias.")
