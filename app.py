@@ -10,7 +10,6 @@ import tempfile
 import unicodedata
 import json
 import hashlib
-import hmac
 import zipfile
 import difflib
 import urllib.request
@@ -18,7 +17,9 @@ import urllib.parse
 import urllib.error
 from datetime import datetime
 from pypdf import PdfReader
-import traceback
+
+from razync.companies import CONFIGURACOES_AUTOKRAFT
+from razync.security import proteger_acesso
 
 # Configuração da página Web
 st.set_page_config(
@@ -559,50 +560,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# CONTROLE DE ACESSO OPCIONAL
+# CONTROLE DE ACESSO
 # ==============================================================================
-def proteger_acesso_hub():
-    """Ativa a tela de acesso quando a senha está configurada nos Secrets."""
-    try:
-        secao_seguranca = st.secrets.get('security', {})
-        senha_configurada = str(
-            secao_seguranca.get('app_password', '')
-            or st.secrets.get('APP_PASSWORD', '')
-        )
-    except Exception:
-        senha_configurada = ''
+# Implementação isolada em razync/security.py para facilitar manutenção e testes.
+SEGURANCA_POR_SENHA_ATIVA = proteger_acesso()
 
-    if not senha_configurada:
-        return False
-    if st.session_state.get('_hc_acesso_autorizado', False):
-        return True
-
-    st.markdown("<div style='height: 12vh;'></div>", unsafe_allow_html=True)
-    coluna_esquerda, coluna_login, coluna_direita = st.columns([1.25, 1, 1.25])
-    with coluna_login:
-        st.image("assets/razync-icon.png", width=66)
-        st.markdown("## Razync")
-        st.caption("Acesso restrito. Informe a senha para continuar.")
-        with st.form('hc_formulario_acesso', clear_on_submit=True):
-            senha_informada = st.text_input(
-                "Senha de acesso",
-                type='password',
-                autocomplete='current-password'
-            )
-            entrar = st.form_submit_button(
-                "Entrar no sistema",
-                use_container_width=True
-            )
-        if entrar:
-            if hmac.compare_digest(str(senha_informada), senha_configurada):
-                st.session_state['_hc_acesso_autorizado'] = True
-                st.rerun()
-            else:
-                st.error("Senha incorreta.")
-    st.stop()
-
-
-SEGURANCA_POR_SENHA_ATIVA = proteger_acesso_hub()
 
 if "tema_razync" not in st.session_state:
     st.session_state["tema_razync"] = "Escuro"
@@ -4284,27 +4246,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if st.session_state['empresa_organizador'] in {
         'autokraft_industrial', 'autokraft_projetos', 'isa'
     }:
-        configuracoes_autokraft_por_area = {
-            'autokraft_industrial': {
-                'empresa': '3 - Autokraft Industrial',
-                'slug': 'autokraft_industrial',
-                'arquivo': 'Autokraft_Industrial',
-                'contas_bancarias': {'itau': '508', 'daycoval': '2283'}
-            },
-            'autokraft_projetos': {
-                'empresa': '178 - Autokraft Projetos',
-                'slug': 'autokraft_projetos',
-                'arquivo': 'Autokraft_Projetos',
-                'contas_bancarias': {'itau': '508', 'daycoval': '505'}
-            },
-            'isa': {
-                'empresa': '343 - I.S.A',
-                'slug': 'isa',
-                'arquivo': 'ISA',
-                'contas_bancarias': {'itau': '508', 'daycoval': '506'}
-            }
-        }
-        configuracao_empresa_autokraft = configuracoes_autokraft_por_area[
+        configuracao_empresa_autokraft = CONFIGURACOES_AUTOKRAFT[
             st.session_state['empresa_organizador']
         ]
         empresa_autokraft = configuracao_empresa_autokraft['empresa']
@@ -5481,4 +5423,4 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 st.warning("⚠️ Não conseguimos extrair as linhas contábeis válidas. Verifique se os arquivos contêm Data e Valor.")
         
         except Exception as e:
-            st.error(f"🛑 Ocorreu um erro no cruzamento dos dados. Tire um print e envie para análise: \n{traceback.format_exc()}")
+            st.error("Não foi possível concluir o cruzamento dos dados. Verifique os arquivos enviados e tente novamente.")

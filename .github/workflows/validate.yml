@@ -1,0 +1,43 @@
+name: Validar Razync
+
+on:
+  push:
+    branches: [main, "agent/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Instalar dependências
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/*.py
+      - name: Executar testes
+        run: pytest -q
+      - name: Verificar placeholders e segredos
+        run: |
+          ! grep -R -n -E 'PLACEHOLDER|YOUR-PASSWORD|sb_secret_[A-Za-z0-9_-]+' -- app.py razync .streamlit
+      - name: Iniciar Streamlit
+        run: |
+          streamlit run app.py --server.headless=true --server.port=8501 > /tmp/razync-streamlit.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          for tentativa in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8501/_stcore/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/razync-streamlit.log
+          exit 1
