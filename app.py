@@ -10,6 +10,7 @@ import tempfile
 import unicodedata
 import json
 import hashlib
+import hmac
 import zipfile
 import difflib
 import urllib.request
