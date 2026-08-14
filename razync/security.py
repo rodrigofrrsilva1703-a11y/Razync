@@ -23,15 +23,11 @@ def _limpar_autorizacao():
 
 
 def proteger_acesso():
-    """Exige senha, limita tentativas e expira sessões inativas."""
+    """Protege o app quando há senha configurada e preserva o acesso legado sem senha."""
     senha_configurada = _obter_senha()
     if not senha_configurada:
         _limpar_autorizacao()
-        st.error(
-            "O acesso ao Razync está temporariamente indisponível. "
-            "A configuração de segurança não foi encontrada."
-        )
-        st.stop()
+        return False
 
     agora = time.time()
     if st.session_state.get("_hc_acesso_autorizado", False):
