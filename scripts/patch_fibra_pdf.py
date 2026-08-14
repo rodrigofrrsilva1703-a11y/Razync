@@ -17,8 +17,10 @@ if 'def processar_pdf_fibra_extrato' not in s:
     if 'extrato de c/c para simples conferencia' not in texto_norm:
         return []
 
-    linhas = [re.sub(r'\s+', ' ', linha.replace('\x00', '')).strip()
-              for linha in texto_total.splitlines() if linha.strip()]
+    linhas = [
+        re.sub(r'\s+', ' ', linha.replace('Emi\x00do', 'Emitido').replace('emi\x00do', 'emitido').replace('\x00', '')).strip()
+        for linha in texto_total.splitlines() if linha.strip()
+    ]
     regex_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s+(.*)$')
     regex_valor = re.compile(r'R\$\s*([\d.]+,\d{2})|(?<!\d)([\d.]+,\d{2})(?!\d)')
 
@@ -66,8 +68,6 @@ if 'def processar_pdf_fibra_extrato' not in s:
         if not valores:
             continue
 
-        # O extrato Fibra possui um único valor de movimento por lançamento.
-        # O saldo aparece em linhas separadas iniciadas por SALDO e já foi removido.
         m_valor, token_valor = valores[-1]
         valor_abs = abs(limpar_valor_monetario(token_valor))
         if valor_abs < 0.005:
@@ -76,8 +76,6 @@ if 'def processar_pdf_fibra_extrato' not in s:
         hist = re.sub(r'\s+', ' ', (conteudo[:m_valor.start()] + ' ' + conteudo[m_valor.end():])).strip()
         hist_norm = normalizar_texto(hist)
 
-        # Natureza explícita do formato Fibra. Essas regras vêm antes da heurística
-        # universal porque o PDF textual não preserva as posições Débito/Crédito.
         if any(t in hist_norm for t in [
             'ted emitido', 'tarifa', 'debito', 'pix enviado', 'pagamento',
             'saque', 'transferencia enviada', 'ted enviado', 'doc emitido'
@@ -133,6 +131,7 @@ if "lancamentos_fibra = processar_pdf_fibra_extrato" not in s:
 
 checks = [
     'def processar_pdf_fibra_extrato',
+    "replace('Emi\\x00do', 'Emitido')",
     "'ted emitido'",
     "'ted recebido'",
     'lancamentos_fibra = processar_pdf_fibra_extrato',
