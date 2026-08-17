@@ -1402,7 +1402,13 @@ def processar_pdf_daycoval_detalhado(reader, banco_identificado):
     )
     lancamentos = []
     chaves_vistas = set()
-    for texto_pagina in textos_layout:
+
+    # Alguns PDFs recentes do Dayconnect perdem as datas DD/MM quando extraídos
+    # em modo layout. O texto simples preserva corretamente data, histórico e sinal.
+    # Processamos primeiro o texto simples e mantemos o layout como fallback para
+    # os formatos antigos; a deduplicação abaixo impede lançamentos repetidos.
+    fontes_texto = textos_simples + textos_layout
+    for texto_pagina in fontes_texto:
         for linha in texto_pagina.splitlines():
             correspondencia = padrao_lancamento.match(linha)
             if not correspondencia:
