@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import openpyxl
 import re
 import struct
 import calendar
@@ -1622,6 +1621,7 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
         print(f"Erro no processamento PDF universal: {e}")
     return lancamentos
 
+@st.cache_data(show_spinner=False, max_entries=12)
 def processar_extrato_unificado(file_bytes, filename):
     """Leitor único de extratos usado por todas as ferramentas do Razync."""
     extensao = os.path.splitext(filename)[1].lower()
@@ -1644,6 +1644,7 @@ def processar_extrato_unificado(file_bytes, filename):
         if caminho_temporario and os.path.exists(caminho_temporario):
             os.remove(caminho_temporario)
 
+@st.cache_data(show_spinner=False, max_entries=8)
 def gerar_excel_modelo_dominio(df):
     """Preenche uma cópia fiel do Modelo Domínio, preservando sua estrutura e estilos."""
     from copy import copy
@@ -2415,6 +2416,7 @@ def requisicao_classificacao_online(caminho, metodo='GET', dados=None, prefer=''
     except urllib.error.URLError as erro:
         raise RuntimeError(f"Não foi possível acessar a base online: {erro.reason}") from erro
 
+@st.cache_data(show_spinner=False, ttl=120, max_entries=20)
 def carregar_classificacoes_online(empresa='nova_geracao'):
     registros, deslocamento, limite = [], 0, 1000
     while True:
@@ -2447,6 +2449,7 @@ def apagar_classificacoes_online(empresa):
         metodo='DELETE',
         prefer='return=minimal'
     )
+    carregar_classificacoes_online.clear()
     return len(existentes)
 
 def salvar_classificacoes_online(registros, empresa='nova_geracao'):
@@ -2470,6 +2473,7 @@ def salvar_classificacoes_online(registros, empresa='nova_geracao'):
             dados=registros[inicio:inicio + 500],
             prefer='resolution=merge-duplicates,return=minimal'
         )
+    carregar_classificacoes_online.clear()
     return len(registros)
 
 def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
