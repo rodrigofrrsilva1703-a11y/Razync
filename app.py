@@ -3350,12 +3350,16 @@ def processar_nova_geracao_filial_bradesco(file_bytes):
 def processar_mapa_autokraft(file_bytes, filename=''):
     """Converte as abas diárias do mapa Autokraft para o Modelo Domínio."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    # Os mapas da Autokraft existem em dois padrões de nome de aba:
+    # arquivos antigos usam DD.MM e arquivos mais novos usam DD-MM.
+    # Aceitamos ambos sem incluir abas auxiliares de pagamentos/adiantamentos.
     abas_diarias = [
-        aba for aba in xls.sheet_names if re.fullmatch(r'\d{2}\.\d{2}', str(aba).strip())
+        aba for aba in xls.sheet_names
+        if re.fullmatch(r'\d{2}[.-]\d{2}', str(aba).strip())
     ]
     if not abas_diarias:
         raise ValueError(
-            "Nenhuma aba diária no formato DD.MM foi encontrada no arquivo enviado."
+            "Nenhuma aba diária no formato DD-MM ou DD.MM foi encontrada no arquivo enviado."
         )
 
     ano_nome = re.search(r'(?<!\d)(20\d{2})(?!\d)', str(filename))
@@ -3377,7 +3381,10 @@ def processar_mapa_autokraft(file_bytes, filename=''):
         else:
             data_aba = pd.to_datetime(data_raw, dayfirst=True, errors='coerce')
         if pd.isna(data_aba):
-            dia, mes = [int(parte) for parte in str(nome_aba).split('.')]
+            partes_data = re.split(r'[.-]', str(nome_aba).strip())
+            if len(partes_data) != 2:
+                continue
+            dia, mes = [int(parte) for parte in partes_data]
             data_aba = pd.Timestamp(year=ano_referencia, month=mes, day=dia)
 
         banco_atual = None
