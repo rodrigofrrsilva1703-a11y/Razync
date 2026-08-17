@@ -1,0 +1,47 @@
+name: Rollback caches pesados V16
+
+on:
+  push:
+    paths:
+      - 'scripts/rollback_cache_heavy_v16.py'
+      - '.github/workflows/rollback-cache-heavy-v16.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Remover caches pesados
+        run: python scripts/rollback_cache_heavy_v16.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py
+      - name: Validar cache seguro
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('app.py').read_text(encoding='utf-8')
+          assert "@st.cache_data(show_spinner=False, ttl=120, max_entries=20)\ndef carregar_classificacoes_online" in s
+          assert '@st.cache_data(show_spinner=False, max_entries=12)\ndef processar_extrato_unificado' not in s
+          assert '@st.cache_data(show_spinner=False, max_entries=8)\ndef gerar_excel_modelo_dominio' not in s
+          print('Configuração segura confirmada.')
+          PY
+      - name: Commit
+        run: |
+          if git diff --quiet -- app.py; then
+            echo "Sem alterações"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git commit -m "Remove caches pesados que podiam travar o Streamlit"
+          git push
