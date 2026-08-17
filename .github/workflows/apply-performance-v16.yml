@@ -1,0 +1,52 @@
+name: Aplicar Performance V16
+
+on:
+  push:
+    paths:
+      - 'scripts/patch_performance_v16.py'
+      - '.github/workflows/apply-performance-v16.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar otimizações
+        run: python scripts/patch_performance_v16.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py
+      - name: Validar otimizações
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('app.py').read_text(encoding='utf-8')
+          checks = [
+              '@st.cache_data(show_spinner=False, max_entries=12)\ndef processar_extrato_unificado',
+              "@st.cache_data(show_spinner=False, ttl=120, max_entries=20)\ndef carregar_classificacoes_online",
+              '@st.cache_data(show_spinner=False, max_entries=8)\ndef gerar_excel_modelo_dominio',
+              'carregar_classificacoes_online.clear()',
+          ]
+          for check in checks:
+              assert check in s, check
+          print('Caches e invalidação confirmados.')
+          PY
+      - name: Commit da otimização
+        run: |
+          if git diff --quiet -- app.py; then
+            echo "Sem alterações"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git commit -m "Otimiza abertura e reruns do Razync"
+          git push
