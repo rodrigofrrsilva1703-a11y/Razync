@@ -1621,7 +1621,6 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
         print(f"Erro no processamento PDF universal: {e}")
     return lancamentos
 
-@st.cache_data(show_spinner=False, max_entries=12)
 def processar_extrato_unificado(file_bytes, filename):
     """Leitor único de extratos usado por todas as ferramentas do Razync."""
     extensao = os.path.splitext(filename)[1].lower()
@@ -1644,7 +1643,6 @@ def processar_extrato_unificado(file_bytes, filename):
         if caminho_temporario and os.path.exists(caminho_temporario):
             os.remove(caminho_temporario)
 
-@st.cache_data(show_spinner=False, max_entries=8)
 def gerar_excel_modelo_dominio(df):
     """Preenche uma cópia fiel do Modelo Domínio, preservando sua estrutura e estilos."""
     from copy import copy
