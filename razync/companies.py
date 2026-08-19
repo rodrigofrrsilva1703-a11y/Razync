@@ -20,3 +20,18 @@ CONFIGURACOES_AUTOKRAFT = {
         "contas_bancarias": {"itau": "508", "daycoval": "506"},
     },
 }
+
+CONFIGURACOES_ACCEDE = {
+    "accede_automacao": {
+        "empresa": "1000 - ACCEDE AUTOMAÇÃO",
+        "slug": "accede_automacao",
+        "arquivo": "ACCEDE_Automacao",
+        "contas_bancarias": {"itau": "508", "sicredi": "505"},
+    },
+    "accede_equipamentos": {
+        "empresa": "1001 - ACCEDE EQUIPAMENTOS",
+        "slug": "accede_equipamentos",
+        "arquivo": "ACCEDE_Equipamentos",
+        "contas_bancarias": {"itau": "508", "sicredi": "505"},
+    },
+}
