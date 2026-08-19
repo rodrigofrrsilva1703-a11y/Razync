@@ -18,7 +18,7 @@ import urllib.error
 from datetime import datetime
 from pypdf import PdfReader
 
-from razync.companies import CONFIGURACOES_AUTOKRAFT
+from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
 from razync.security import proteger_acesso
 
 # Configuração da página Web
@@ -2650,7 +2650,7 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
                 if col_descricao is not None else ''
             ) or banco_aba or banco_arquivo
             assinatura = criar_assinatura_classificacao(historico)
-            if banco_linha not in {'itau', 'bradesco', 'fibra', 'daycoval'} or not assinatura:
+            if banco_linha not in {'itau', 'bradesco', 'fibra', 'daycoval', 'sicredi'} or not assinatura:
                 continue
             data_lancamento = (
                 pd.to_datetime(linha[col_data], dayfirst=True, errors='coerce')
@@ -3619,12 +3619,14 @@ def identificar_chave_banco_empresa(valor):
         return 'fibra'
     if 'daycoval' in texto:
         return 'daycoval'
+    if 'sicredi' in texto:
+        return 'sicredi'
     return ''
 
 def nome_banco_por_chave(chave):
     return {
         'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra',
-        'daycoval': 'Daycoval'
+        'daycoval': 'Daycoval', 'sicredi': 'Sicredi'
     }.get(chave, chave)
 
 def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
@@ -3687,7 +3689,8 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
             if not descricao:
                 descricao = {
                     'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO',
-                    'fibra': 'BANCO FIBRA', 'daycoval': 'BANCO DAYCOVAL'
+                    'fibra': 'BANCO FIBRA', 'daycoval': 'BANCO DAYCOVAL',
+                    'sicredi': 'SICREDI'
                 }[banco_alvo]
             historico_valor = linha[col_hist]
             historico = (
