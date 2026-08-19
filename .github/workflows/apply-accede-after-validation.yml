@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 env:
-  APPLY_ACCEDE_VERSION: "2"
+  APPLY_ACCEDE_VERSION: "3"
 
 jobs:
   aplicar:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,15 +27,17 @@ jobs:
         run: python scripts/patch_accede_empresas.py
       - name: Normalizar import ACCEDE
         run: python scripts/cleanup_accede_import.py
-      - name: Validar sintaxe
-        run: python -m py_compile app.py razync/*.py
+      - name: Aplicar OCR Bradesco
+        run: python scripts/patch_bradesco_ocr.py
       - name: Instalar dependências
         run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/*.py
       - name: Executar testes
         run: pytest -q
       - name: Testar inicialização Streamlit
         run: |
-          streamlit run app.py --server.headless=true --server.port=8501 > /tmp/accede-streamlit.log 2>&1 &
+          streamlit run app.py --server.headless=true --server.port=8501 > /tmp/razync-streamlit.log 2>&1 &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
           for tentativa in {1..20}; do
@@ -44,7 +46,7 @@ jobs:
             fi
             sleep 1
           done
-          cat /tmp/accede-streamlit.log
+          cat /tmp/razync-streamlit.log
           exit 1
       - name: Gravar app atualizado
         run: |
@@ -55,5 +57,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app.py
-          git commit -m 'Finaliza integração ACCEDE no Razync'
+          git commit -m 'Adiciona OCR para extratos Bradesco sem texto'
           git push origin main
