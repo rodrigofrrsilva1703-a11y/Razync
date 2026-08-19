@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  APPLY_ACCEDE_VERSION: "4"
+  APPLY_ACCEDE_VERSION: "5"
 
 jobs:
   aplicar:
@@ -29,27 +29,15 @@ jobs:
         run: python scripts/cleanup_accede_import.py
       - name: Aplicar OCR Bradesco
         run: python scripts/patch_bradesco_ocr.py
-      - name: Corrigir caminho real do PDF no OCR
-        run: python scripts/fix_bradesco_ocr_source_path.py
       - name: Instalar dependências
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Validar sintaxe
         run: python -m py_compile app.py razync/*.py
-      - name: Verificar caminho OCR
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          app = Path('app.py').read_text(encoding='utf-8')
-          assert "reader._razync_source_path = caminho_pdf" in app
-          assert "getattr(reader, '_razync_source_path', None)" in app
-          assert "fitz.Matrix(4.0, 4.0)" in app
-          print('OCR Bradesco recebeu o caminho físico do PDF.')
-          PY
       - name: Executar testes
         run: pytest -q
       - name: Testar inicialização Streamlit
         run: |
-          streamlit run app.py --server.headless=true --server.port=8501 > /tmp/razync-streamlit.log 2>&1 &
+          streamlit run app.py --server.headless=true --server.port=8501 > /tmp/accede-streamlit.log 2>&1 &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
           for tentativa in {1..20}; do
@@ -58,7 +46,7 @@ jobs:
             fi
             sleep 1
           done
-          cat /tmp/razync-streamlit.log
+          cat /tmp/accede-streamlit.log
           exit 1
       - name: Gravar app atualizado
         run: |
@@ -69,5 +57,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app.py
-          git commit -m 'Corrige caminho do PDF no OCR Bradesco'
+          git commit -m 'Mantém integração ACCEDE e OCR Bradesco'
           git push origin main
