@@ -3946,8 +3946,35 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
         'os dados acima tem como base',
     )
 
-    for pagina in reader.pages:
-        texto = pagina.extract_text() or ''
+    textos_paginas = [pagina.extract_text() or '' for pagina in reader.pages]
+
+    # Alguns extratos do Bradesco Net Empresa são PDFs rasterizados, sem qualquer
+    # camada de texto. Nesses casos usamos OCR apenas como fallback, mantendo o
+    # caminho rápido do pypdf para os PDFs normais.
+    if not any(texto.strip() for texto in textos_paginas):
+        try:
+            import fitz
+            import pytesseract
+            from PIL import Image
+
+            caminho_pdf = getattr(getattr(reader, 'stream', None), 'name', None)
+            if caminho_pdf and os.path.exists(caminho_pdf):
+                documento_ocr = fitz.open(caminho_pdf)
+                textos_paginas = []
+                for pagina_ocr in documento_ocr:
+                    pix = pagina_ocr.get_pixmap(matrix=fitz.Matrix(3.0, 3.0), alpha=False)
+                    imagem = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
+                    texto_ocr = pytesseract.image_to_string(
+                        imagem,
+                        lang='por',
+                        config='--psm 6 -c preserve_interword_spaces=1'
+                    )
+                    textos_paginas.append(texto_ocr or '')
+                documento_ocr.close()
+        except Exception:
+            textos_paginas = textos_paginas or []
+
+    for texto in textos_paginas:
         for linha_bruta in texto.splitlines():
             linha = re.sub(r'\s+', ' ', linha_bruta).strip()
             if not linha:
