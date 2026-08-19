@@ -7,44 +7,55 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validar:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - name: Aplicar integração ACCEDE
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: python scripts/patch_accede_empresas.py
+      - name: Instalar Tesseract português
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-por
       - name: Instalar dependências
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Validar sintaxe
         run: python -m py_compile app.py razync/*.py
       - name: Executar testes
         run: pytest -q
-      - name: Verificar integração ACCEDE
+      - name: Verificar componentes críticos
         run: |
           python - <<'PY'
           from pathlib import Path
           app = Path('app.py').read_text(encoding='utf-8')
           companies = Path('razync/companies.py').read_text(encoding='utf-8')
-          checks = [
-              '1000 - ACCEDE AUTOMAÇÃO',
-              '1001 - ACCEDE EQUIPAMENTOS',
-              'def processar_planilha_accede_sig(file_bytes, banco_nome):',
+          requirements = Path('requirements.txt').read_text(encoding='utf-8')
+          packages = Path('packages.txt').read_text(encoding='utf-8')
+          checks_app = [
+              'def processar_pdf_daycoval_detalhado',
+              'def processar_pdf_itau_detalhado',
+              'def processar_pdf_bradesco_mensal',
+              'def processar_pdf_fibra_extrato',
+              'def processar_planilha_accede_sig',
+              "reader._razync_source_path = caminho_pdf",
+              "getattr(reader, '_razync_source_path', None)",
               "return 'sicredi'",
-              "{'nome': 'Sicredi', 'slug': 'sicredi'}",
-              "'sicredi': '505'",
           ]
-          for check in checks:
-              assert check in app or check in companies, check
-          print('ACCEDE integrada e validada.')
+          for check in checks_app:
+              assert check in app, check
+          for check in ['1000 - ACCEDE AUTOMAÇÃO', '1001 - ACCEDE EQUIPAMENTOS', "'sicredi': '505'"]:
+              assert check in companies, check
+          for check in ['PyMuPDF', 'pytesseract']:
+              assert check in requirements, check
+          for check in ['tesseract-ocr', 'tesseract-ocr-por']:
+              assert check in packages, check
+          print('Componentes críticos validados.')
           PY
       - name: Verificar placeholders e segredos
         run: |
@@ -54,7 +65,7 @@ jobs:
           streamlit run app.py --server.headless=true --server.port=8501 > /tmp/razync-streamlit.log 2>&1 &
           APP_PID=$!
           trap 'kill $APP_PID 2>/dev/null || true' EXIT
-          for tentativa in {1..20}; do
+          for tentativa in {1..25}; do
             if curl --fail --silent http://127.0.0.1:8501/_stcore/health; then
               break
             fi
@@ -64,15 +75,3 @@ jobs:
             cat /tmp/razync-streamlit.log
             exit 1
           fi
-      - name: Gravar integração validada
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          if git diff --quiet -- app.py; then
-            echo "app.py já estava atualizado"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app.py
-          git commit -m "Integra ACCEDE Automação e Equipamentos ao Razync"
-          git push
