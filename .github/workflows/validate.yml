@@ -6,54 +6,46 @@ on:
   pull_request:
     branches: [main]
 
-concurrency:
-  group: bradesco-ocr-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: write
 
 jobs:
   validar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - name: Aplicar fallback OCR Bradesco
-        run: python scripts/patch_bradesco_ocr.py
-      - name: Instalar Tesseract português
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-por
+      - name: Aplicar integração ACCEDE
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: python scripts/patch_accede_empresas.py
       - name: Instalar dependências
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Validar sintaxe
         run: python -m py_compile app.py razync/*.py
-      - name: Validar OCR no código
+      - name: Executar testes
+        run: pytest -q
+      - name: Verificar integração ACCEDE
         run: |
           python - <<'PY'
           from pathlib import Path
           app = Path('app.py').read_text(encoding='utf-8')
-          for check in [
-              "import pytesseract",
-              "import fitz",
-              "lang='por'",
-              "fitz.Matrix(4.0, 4.0)",
-              "modo_ocr = True",
-              "sinal = -1 if variacao < 0 else 1",
-          ]:
-              assert check in app, check
-          print('Fallback OCR Bradesco robusto presente.')
+          companies = Path('razync/companies.py').read_text(encoding='utf-8')
+          checks = [
+              '1000 - ACCEDE AUTOMAÇÃO',
+              '1001 - ACCEDE EQUIPAMENTOS',
+              'def processar_planilha_accede_sig(file_bytes, banco_nome):',
+              "return 'sicredi'",
+              "{'nome': 'Sicredi', 'slug': 'sicredi'}",
+              "'sicredi': '505'",
+          ]
+          for check in checks:
+              assert check in app or check in companies, check
+          print('ACCEDE integrada e validada.')
           PY
-      - name: Executar testes
-        run: pytest -q
       - name: Verificar placeholders e segredos
         run: |
           ! grep -R -n -E 'PLACEHOLDER|YOUR-PASSWORD|sb_secret_[A-Za-z0-9_-]+' -- app.py razync .streamlit
@@ -62,7 +54,7 @@ jobs:
           streamlit run app.py --server.headless=true --server.port=8501 > /tmp/razync-streamlit.log 2>&1 &
           APP_PID=$!
           trap 'kill $APP_PID 2>/dev/null || true' EXIT
-          for tentativa in {1..25}; do
+          for tentativa in {1..20}; do
             if curl --fail --silent http://127.0.0.1:8501/_stcore/health; then
               break
             fi
@@ -72,16 +64,15 @@ jobs:
             cat /tmp/razync-streamlit.log
             exit 1
           fi
-      - name: Gravar OCR validado no branch
+      - name: Gravar integração validada
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           if git diff --quiet -- app.py; then
             echo "app.py já estava atualizado"
             exit 0
           fi
-          BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app.py
-          git commit -m "Adiciona OCR a extratos Bradesco sem camada de texto"
-          git pull --rebase origin "$BRANCH"
-          git push origin HEAD:"$BRANCH"
+          git commit -m "Integra ACCEDE Automação e Equipamentos ao Razync"
+          git push
