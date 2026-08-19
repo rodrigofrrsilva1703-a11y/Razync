@@ -3929,14 +3929,15 @@ def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
     return saida.getvalue()
 
 def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
-    """Lê extratos PDF mensais do Bradesco validando cada movimento pelo saldo."""
+    """Lê extratos mensais Bradesco, inclusive PDFs rasterizados via OCR."""
     lancamentos = []
     data_atual = None
     partes_historico = []
     ultimo_saldo = None
     dentro_saldos_invest = False
+    modo_ocr = False
 
-    regex_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s*(.*)$')
+    regex_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s*[|—-]?\s*(.*)$')
     regex_moeda = re.compile(r'-?\d{1,3}(?:\.\d{3})*,\d{2}')
     ignorar_prefixos = (
         'extrato de:', 'agência | conta', 'agencia | conta', 'data lançamento',
@@ -3948,22 +3949,26 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
 
     textos_paginas = [pagina.extract_text() or '' for pagina in reader.pages]
 
-    # Alguns extratos do Bradesco Net Empresa são PDFs rasterizados, sem qualquer
-    # camada de texto. Nesses casos usamos OCR apenas como fallback, mantendo o
-    # caminho rápido do pypdf para os PDFs normais.
+    # PDF-imagem: OCR somente quando não existe qualquer camada de texto.
     if not any(texto.strip() for texto in textos_paginas):
+        modo_ocr = True
         try:
             import fitz
             import pytesseract
-            from PIL import Image
+            from PIL import Image, ImageOps
 
             caminho_pdf = getattr(getattr(reader, 'stream', None), 'name', None)
             if caminho_pdf and os.path.exists(caminho_pdf):
                 documento_ocr = fitz.open(caminho_pdf)
                 textos_paginas = []
                 for pagina_ocr in documento_ocr:
-                    pix = pagina_ocr.get_pixmap(matrix=fitz.Matrix(3.0, 3.0), alpha=False)
-                    imagem = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
+                    pix = pagina_ocr.get_pixmap(
+                        matrix=fitz.Matrix(4.0, 4.0), alpha=False
+                    )
+                    imagem = Image.frombytes(
+                        'RGB', [pix.width, pix.height], pix.samples
+                    )
+                    imagem = ImageOps.autocontrast(ImageOps.grayscale(imagem))
                     texto_ocr = pytesseract.image_to_string(
                         imagem,
                         lang='por',
@@ -3989,6 +3994,7 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
             if normalizada.startswith('ultimos lancamentos'):
                 dentro_saldos_invest = False
                 partes_historico = []
+                ultimo_saldo = None
                 continue
             if normalizada.startswith(('data lancamento', 'data lançamento')):
                 dentro_saldos_invest = False
@@ -3998,7 +4004,6 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 continue
             if normalizada.startswith(ignorar_prefixos):
                 continue
-            # O nome da empresa pode ser um lançamento real. Só ignora o rodapé com CNPJ.
             if normalizada.startswith('nova geracao comercial') and 'cnpj:' in normalizada:
                 continue
             if normalizada.startswith('total '):
@@ -4013,7 +4018,7 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 if not linha:
                     continue
 
-            if normalizada.startswith('saldo anterior'):
+            if 'saldo anterior' in normalizada:
                 moedas_saldo = regex_moeda.findall(linha)
                 if moedas_saldo:
                     ultimo_saldo = limpar_valor_monetario(moedas_saldo[-1])
@@ -4028,21 +4033,41 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 valor_txt = moedas[-2]
                 saldo_txt = moedas[-1]
                 valor_impresso = limpar_valor_monetario(valor_txt)
-                saldo_atual = limpar_valor_monetario(saldo_txt)
+                saldo_lido = limpar_valor_monetario(saldo_txt)
                 valor = valor_impresso
+
                 if ultimo_saldo is not None:
-                    variacao = round(saldo_atual - ultimo_saldo, 2)
-                    if abs(abs(variacao) - abs(valor_impresso)) <= 0.02:
-                        valor = variacao
+                    variacao = round(saldo_lido - ultimo_saldo, 2)
+                    if modo_ocr:
+                        # OCR pode perder o sinal do débito ou errar um dígito do saldo.
+                        # A direção do saldo define o sinal; a magnitude impressa continua
+                        # sendo usada quando a leitura do saldo não fecha exatamente.
+                        sinal = -1 if variacao < 0 else 1
+                        if abs(abs(variacao) - abs(valor_impresso)) <= max(
+                            0.05, abs(valor_impresso) * 0.01
+                        ):
+                            valor = variacao
+                            ultimo_saldo = saldo_lido
+                        else:
+                            valor = sinal * abs(valor_impresso)
+                            ultimo_saldo = round(ultimo_saldo + valor, 2)
+                    else:
+                        if abs(abs(variacao) - abs(valor_impresso)) <= 0.02:
+                            valor = variacao
+                        ultimo_saldo = saldo_lido
+                else:
+                    ultimo_saldo = saldo_lido
 
                 inicio_valor = linha.rfind(valor_txt)
                 trecho_historico = linha[:inicio_valor].strip()
                 historico = re.sub(
                     r'\s+', ' ',
-                    ' '.join(partes_historico + ([trecho_historico] if trecho_historico else []))
-                ).strip()
+                    ' '.join(
+                        partes_historico
+                        + ([trecho_historico] if trecho_historico else [])
+                    )
+                ).strip(' |—-')
                 partes_historico = []
-                ultimo_saldo = saldo_atual
 
                 hist_norm = normalizar_texto(historico)
                 if not historico or hist_norm.startswith(('saldo ', 'total ')):
