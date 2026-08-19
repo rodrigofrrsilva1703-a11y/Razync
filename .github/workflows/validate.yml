@@ -40,11 +40,12 @@ jobs:
               "import pytesseract",
               "import fitz",
               "lang='por'",
-              "fitz.Matrix(3.0, 3.0)",
-              "if not any(texto.strip() for texto in textos_paginas)",
+              "fitz.Matrix(4.0, 4.0)",
+              "modo_ocr = True",
+              "sinal = -1 if variacao < 0 else 1",
           ]:
               assert check in app, check
-          print('Fallback OCR Bradesco presente.')
+          print('Fallback OCR Bradesco robusto presente.')
           PY
       - name: Executar testes
         run: pytest -q
