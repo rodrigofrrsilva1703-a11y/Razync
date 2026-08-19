@@ -18,7 +18,7 @@ import urllib.error
 from datetime import datetime
 from pypdf import PdfReader
 
-from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE, CONFIGURACOES_ACCEDE
+from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
 from razync.security import proteger_acesso
 
 # Configuração da página Web
