@@ -1696,6 +1696,9 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
     lancamentos = []
     try:
         reader = PdfReader(caminho_pdf, strict=False)
+        # O pypdf converte o caminho em BytesIO e perde reader.stream.name.
+        # Guardamos explicitamente o arquivo temporário para o fallback OCR.
+        reader._razync_source_path = caminho_pdf
         texto_completo = ""
         for pagina in reader.pages:
             texto_completo += (pagina.extract_text() or "") + "\n"
@@ -3957,7 +3960,10 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
             import pytesseract
             from PIL import Image, ImageOps
 
-            caminho_pdf = getattr(getattr(reader, 'stream', None), 'name', None)
+            caminho_pdf = (
+                getattr(reader, '_razync_source_path', None)
+                or getattr(getattr(reader, 'stream', None), 'name', None)
+            )
             if caminho_pdf and os.path.exists(caminho_pdf):
                 documento_ocr = fitz.open(caminho_pdf)
                 textos_paginas = []
