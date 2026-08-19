@@ -33,8 +33,9 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from razync.companies import CONFIGURACOES_ACCEDE
+
           app = Path('app.py').read_text(encoding='utf-8')
-          companies = Path('razync/companies.py').read_text(encoding='utf-8')
           requirements = Path('requirements.txt').read_text(encoding='utf-8')
           packages = Path('packages.txt').read_text(encoding='utf-8')
           checks_app = [
@@ -49,8 +50,16 @@ jobs:
           ]
           for check in checks_app:
               assert check in app, check
-          for check in ['1000 - ACCEDE AUTOMAÇÃO', '1001 - ACCEDE EQUIPAMENTOS', "'sicredi': '505'"]:
-              assert check in companies, check
+
+          esperado = {
+              'accede_automacao': ('1000 - ACCEDE AUTOMAÇÃO', {'itau': '508', 'sicredi': '505'}),
+              'accede_equipamentos': ('1001 - ACCEDE EQUIPAMENTOS', {'itau': '508', 'sicredi': '505'}),
+          }
+          for chave, (nome, contas) in esperado.items():
+              config = CONFIGURACOES_ACCEDE[chave]
+              assert config['empresa'] == nome
+              assert config['contas_bancarias'] == contas
+
           for check in ['PyMuPDF', 'pytesseract']:
               assert check in requirements, check
           for check in ['tesseract-ocr', 'tesseract-ocr-por']:
