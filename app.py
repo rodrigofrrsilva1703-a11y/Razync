@@ -20,6 +20,7 @@ from pypdf import PdfReader
 
 from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
 from razync.security import proteger_acesso
+from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
 
 # Configuração da página Web
 st.set_page_config(
@@ -1727,8 +1728,18 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
             lancamentos_bradesco = processar_pdf_bradesco_mensal(
                 reader, banco_identificado
             )
+            fechamento_bradesco = getattr(reader, '_razync_balance_check', None)
+            if fechamento_bradesco:
+                st.session_state['ultimo_fechamento_extrato'] = fechamento_bradesco
             if lancamentos_bradesco:
                 return lancamentos_bradesco
+            if not texto_completo.strip():
+                st.session_state['ultimo_erro_extrato'] = diagnostico_pdf_sem_lancamentos(
+                    banco_identificado,
+                    True,
+                    bool(getattr(reader, '_razync_ocr_executado', False)),
+                    str(getattr(reader, '_razync_ocr_error', '') or '')
+                )
 
         if banco_identificado == 'BANCO FIBRA':
             lancamentos_fibra = processar_pdf_fibra_extrato(
@@ -1792,6 +1803,8 @@ def processar_extrato_unificado(file_bytes, filename):
     if extensao != '.pdf':
         return []
 
+    st.session_state.pop('ultimo_erro_extrato', None)
+    st.session_state.pop('ultimo_fechamento_extrato', None)
     caminho_temporario = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temporario:
@@ -3939,6 +3952,9 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
     ultimo_saldo = None
     dentro_saldos_invest = False
     modo_ocr = False
+    saldo_abertura = None
+    indice_saldo_abertura = 0
+    erro_ocr = ''
 
     regex_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s*[|—-]?\s*(.*)$')
     regex_moeda = re.compile(r'-?\d{1,3}(?:\.\d{3})*,\d{2}')
@@ -3964,6 +3980,9 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 getattr(reader, '_razync_source_path', None)
                 or getattr(getattr(reader, 'stream', None), 'name', None)
             )
+            if not caminho_pdf or not os.path.exists(caminho_pdf):
+                erro_ocr = 'Arquivo temporário do PDF não ficou disponível para o OCR.'
+                reader._razync_ocr_error = erro_ocr
             if caminho_pdf and os.path.exists(caminho_pdf):
                 documento_ocr = fitz.open(caminho_pdf)
                 textos_paginas = []
@@ -3982,9 +4001,12 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                     )
                     textos_paginas.append(texto_ocr or '')
                 documento_ocr.close()
-        except Exception:
+        except Exception as erro:
+            erro_ocr = str(erro)
+            reader._razync_ocr_error = erro_ocr
             textos_paginas = textos_paginas or []
 
+    reader._razync_ocr_executado = modo_ocr
     for texto in textos_paginas:
         for linha_bruta in texto.splitlines():
             linha = re.sub(r'\s+', ' ', linha_bruta).strip()
@@ -4028,6 +4050,8 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 moedas_saldo = regex_moeda.findall(linha)
                 if moedas_saldo:
                     ultimo_saldo = limpar_valor_monetario(moedas_saldo[-1])
+                    saldo_abertura = ultimo_saldo
+                    indice_saldo_abertura = len(lancamentos)
                 partes_historico = []
                 continue
 
@@ -4099,6 +4123,16 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
                 if len(partes_historico) > 8:
                     partes_historico = partes_historico[-8:]
 
+    if saldo_abertura is not None and ultimo_saldo is not None:
+        movimentos_validacao = [
+            item.get('VALOR', 0.0) for item in lancamentos[indice_saldo_abertura:]
+        ]
+        reader._razync_balance_check = validar_fechamento_saldo(
+            saldo_abertura, ultimo_saldo, movimentos_validacao
+        )
+    reader._razync_ocr_executado = modo_ocr
+    if erro_ocr:
+        reader._razync_ocr_error = erro_ocr
     return lancamentos
 
 def processar_extrato_conferencia_empresa(file_bytes, filename):
@@ -4117,6 +4151,17 @@ def processar_extrato_conferencia_empresa(file_bytes, filename):
         if abs(valor) < 0.005:
             continue
         filtrados.append(item)
+    fechamento = st.session_state.get('ultimo_fechamento_extrato')
+    if fechamento and fechamento.get('disponivel') and fechamento.get('ok') is False:
+        st.warning(
+            'O extrato foi lido, mas o fechamento matemático do saldo apresentou '
+            f"diferença de {formatar_moeda(abs(fechamento.get('diferenca', 0)))}. "
+            'Revise os lançamentos antes de concluir a conciliação.'
+        )
+    if not filtrados:
+        erro_leitura = st.session_state.get('ultimo_erro_extrato', '')
+        if erro_leitura:
+            raise ValueError(erro_leitura)
     return filtrados
 
 def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados=None):
