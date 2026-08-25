@@ -1,0 +1,5 @@
+=== PY_COMPILE ===
+py_compile_exit=0
+=== PYTEST ===
+/home/runner/work/_temp/2a3658db-21ce-4edd-9b0c-2eaf833359be.sh: line 7: pytest: command not found
+pytest_exit=127
