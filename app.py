@@ -4869,7 +4869,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     if st.button(
                         f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
                         type='tertiary',
-                        use_container_width=True,
+                        use_container_width=False,
                         key=f"org_resultado_empresa_{empresa_catalogo['codigo']}"
                     ):
                         _abrir_empresa_catalogo(empresa_catalogo)
@@ -4882,7 +4882,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 if st.button(
                     f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
                     type='tertiary',
-                    use_container_width=True,
+                    use_container_width=False,
                     key=f"org_empresa_ativa_{empresa_catalogo['codigo']}"
                 ):
                     _abrir_empresa_catalogo(empresa_catalogo)
