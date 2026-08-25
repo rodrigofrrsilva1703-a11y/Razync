@@ -4857,9 +4857,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
 
             if not termo_normalizado:
-                st.caption(
-                    'Digite um código ou parte do nome para exibir as empresas.'
-                )
+                st.caption('Digite um código ou parte do nome para localizar a empresa.')
             else:
                 empresas_encontradas = []
                 for empresa_catalogo in empresas_catalogo_completo:
@@ -4872,38 +4870,56 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 if not empresas_encontradas:
                     st.info('Nenhuma empresa encontrada.')
                 else:
-                    st.caption(
-                        f"{len(empresas_encontradas)} empresa(s) encontrada(s)."
+                    opcoes_busca = ['Selecione uma empresa...'] + [
+                        f"{empresa['codigo']} · {empresa['nome']}"
+                        for empresa in empresas_encontradas
+                    ]
+                    escolha_busca = st.selectbox(
+                        'Resultado da pesquisa',
+                        opcoes_busca,
+                        key='org_seletor_empresa_pesquisa'
                     )
-                    for empresa_catalogo in empresas_encontradas:
-                        ativa = bool(empresa_catalogo.get('chave_sistema'))
-                        if st.button(
-                            f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
-                            use_container_width=True,
-                            key=f"org_empresa_busca_{empresa_catalogo['codigo']}"
-                        ):
-                            _abrir_empresa_catalogo(empresa_catalogo)
-                        status = (
-                            'Ferramentas ativas'
-                            if ativa
-                            else 'Aguardando configuração'
-                        )
+                    if escolha_busca != 'Selecione uma empresa...':
+                        indice = opcoes_busca.index(escolha_busca) - 1
+                        empresa_escolhida = empresas_encontradas[indice]
                         st.caption(
-                            f"{empresa_catalogo['regime'].title()} · {status}"
+                            f"{empresa_escolhida['regime'].title()} · "
+                            + (
+                                'Ferramentas ativas'
+                                if empresa_escolhida.get('chave_sistema')
+                                else 'Aguardando configuração'
+                            )
                         )
+                        if st.button(
+                            'Abrir empresa',
+                            type='primary',
+                            use_container_width=True,
+                            key='org_abrir_empresa_pesquisa'
+                        ):
+                            _abrir_empresa_catalogo(empresa_escolhida)
 
         with aba_empresas_ativas:
-            st.caption(
-                'Somente empresas que já possuem ferramentas configuradas no Razync.'
+            st.caption('Selecione uma empresa que já possui ferramentas configuradas.')
+            opcoes_ativas = ['Selecione uma empresa...'] + [
+                f"{empresa['codigo']} · {empresa['nome']}"
+                for empresa in empresas_ativas
+            ]
+            escolha_ativa = st.selectbox(
+                'Empresa',
+                opcoes_ativas,
+                key='org_seletor_empresa_ativa'
             )
-            for empresa_catalogo in empresas_ativas:
+            if escolha_ativa != 'Selecione uma empresa...':
+                indice = opcoes_ativas.index(escolha_ativa) - 1
+                empresa_escolhida = empresas_ativas[indice]
+                st.caption(empresa_escolhida['regime'].title())
                 if st.button(
-                    f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
+                    'Abrir ferramentas',
+                    type='primary',
                     use_container_width=True,
-                    key=f"org_empresa_ativa_{empresa_catalogo['codigo']}"
+                    key='org_abrir_empresa_ativa'
                 ):
-                    _abrir_empresa_catalogo(empresa_catalogo)
-                st.caption(empresa_catalogo['regime'].title())
+                    _abrir_empresa_catalogo(empresa_escolhida)
 
     if empresa_catalogo_atual:
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
