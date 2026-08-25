@@ -4843,83 +4843,49 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             if empresa.get('chave_sistema')
         ]
 
-        aba_buscar_empresas, aba_empresas_ativas = st.tabs([
-            'Pesquisar empresas',
-            'Empresas com ferramentas'
-        ])
+        termo_busca_empresas = st.text_input(
+            'Pesquisar empresa',
+            placeholder='Digite o código ou nome da empresa...',
+            key='org_busca_empresas_catalogo'
+        )
+        termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
 
-        with aba_buscar_empresas:
-            termo_busca_empresas = st.text_input(
-                'Pesquisar empresa',
-                placeholder='Digite o código ou nome da empresa...',
-                key='org_busca_empresas_catalogo'
-            )
-            termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
+        if not termo_normalizado:
+            st.caption('Digite um código ou parte do nome para localizar a empresa.')
+        else:
+            empresas_encontradas = []
+            for empresa_catalogo in empresas_catalogo_completo:
+                alvo = _normalizar_busca_empresa(
+                    f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
+                )
+                if termo_normalizado in alvo:
+                    empresas_encontradas.append(empresa_catalogo)
 
-            if not termo_normalizado:
-                st.caption('Digite um código ou parte do nome para localizar a empresa.')
+            if not empresas_encontradas:
+                st.info('Nenhuma empresa encontrada.')
             else:
-                empresas_encontradas = []
-                for empresa_catalogo in empresas_catalogo_completo:
-                    alvo = _normalizar_busca_empresa(
-                        f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
-                    )
-                    if termo_normalizado in alvo:
-                        empresas_encontradas.append(empresa_catalogo)
+                st.caption(f"{len(empresas_encontradas)} empresa(s) encontrada(s). Clique no nome para abrir.")
+                for empresa_catalogo in empresas_encontradas[:10]:
+                    if st.button(
+                        f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
+                        type='tertiary',
+                        use_container_width=True,
+                        key=f"org_resultado_empresa_{empresa_catalogo['codigo']}"
+                    ):
+                        _abrir_empresa_catalogo(empresa_catalogo)
+                if len(empresas_encontradas) > 10:
+                    st.caption('Refine a pesquisa para ver resultados mais específicos.')
 
-                if not empresas_encontradas:
-                    st.info('Nenhuma empresa encontrada.')
-                else:
-                    opcoes_busca = ['Selecione uma empresa...'] + [
-                        f"{empresa['codigo']} · {empresa['nome']}"
-                        for empresa in empresas_encontradas
-                    ]
-                    escolha_busca = st.selectbox(
-                        'Resultado da pesquisa',
-                        opcoes_busca,
-                        key='org_seletor_empresa_pesquisa'
-                    )
-                    if escolha_busca != 'Selecione uma empresa...':
-                        indice = opcoes_busca.index(escolha_busca) - 1
-                        empresa_escolhida = empresas_encontradas[indice]
-                        st.caption(
-                            f"{empresa_escolhida['regime'].title()} · "
-                            + (
-                                'Ferramentas ativas'
-                                if empresa_escolhida.get('chave_sistema')
-                                else 'Aguardando configuração'
-                            )
-                        )
-                        if st.button(
-                            'Abrir empresa',
-                            type='primary',
-                            use_container_width=True,
-                            key='org_abrir_empresa_pesquisa'
-                        ):
-                            _abrir_empresa_catalogo(empresa_escolhida)
-
-        with aba_empresas_ativas:
-            st.caption('Selecione uma empresa que já possui ferramentas configuradas.')
-            opcoes_ativas = ['Selecione uma empresa...'] + [
-                f"{empresa['codigo']} · {empresa['nome']}"
-                for empresa in empresas_ativas
-            ]
-            escolha_ativa = st.selectbox(
-                'Empresa',
-                opcoes_ativas,
-                key='org_seletor_empresa_ativa'
-            )
-            if escolha_ativa != 'Selecione uma empresa...':
-                indice = opcoes_ativas.index(escolha_ativa) - 1
-                empresa_escolhida = empresas_ativas[indice]
-                st.caption(empresa_escolhida['regime'].title())
+        with st.expander('Empresas com ferramentas', expanded=False):
+            st.caption('Acesso rápido às empresas que já possuem ferramentas configuradas.')
+            for empresa_catalogo in empresas_ativas:
                 if st.button(
-                    'Abrir ferramentas',
-                    type='primary',
+                    f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
+                    type='tertiary',
                     use_container_width=True,
-                    key='org_abrir_empresa_ativa'
+                    key=f"org_empresa_ativa_{empresa_catalogo['codigo']}"
                 ):
-                    _abrir_empresa_catalogo(empresa_escolhida)
+                    _abrir_empresa_catalogo(empresa_catalogo)
 
     if empresa_catalogo_atual:
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
