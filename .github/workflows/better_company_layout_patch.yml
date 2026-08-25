@@ -1,0 +1,49 @@
+name: Aplicar organização de empresas temporariamente
+
+on:
+  push:
+    branches:
+      - agent/better-company-layout
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/better-company-layout
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar Tesseract português
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-por
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Aplicar patch
+        run: python scripts/apply_better_company_layout.py
+
+      - name: Validar sintaxe e testes
+        run: |
+          python -m py_compile app.py razync/*.py
+          pytest -q
+
+      - name: Limpar arquivos temporários e registrar alteração
+        run: |
+          rm scripts/apply_better_company_layout.py
+          rm .github/workflows/better_company_layout_patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app.py scripts/apply_better_company_layout.py .github/workflows/better_company_layout_patch.yml
+          git commit -m "Melhora organização visual das empresas"
+          git push origin HEAD:agent/better-company-layout
