@@ -4811,31 +4811,131 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if empresa_organizador is None:
         st.markdown("##### Empresas disponíveis")
-        st.caption("Empresas organizadas pelo regime tributário. As áreas ainda sem ferramentas ficam preparadas para configuração futura.")
+        st.caption(
+            "Encontre rapidamente a empresa pelo código ou nome. "
+            "As empresas com ferramentas ativas ficam destacadas e o catálogo completo é separado por regime tributário."
+        )
 
-        for regime, empresas_regime in EMPRESAS_POR_REGIME.items():
-            st.markdown(f"#### {regime.title()}")
-            for inicio_linha in range(0, len(empresas_regime), 3):
-                colunas_regime = st.columns(3, gap="medium")
+        def _normalizar_busca_empresa(valor):
+            texto = unicodedata.normalize('NFKD', str(valor))
+            texto = ''.join(caractere for caractere in texto if not unicodedata.combining(caractere))
+            return texto.casefold().strip()
+
+        def _abrir_empresa_catalogo(empresa_catalogo):
+            chave_destino = empresa_catalogo.get('chave_sistema', empresa_catalogo['chave'])
+            if chave_destino == 'nova_geracao':
+                st.session_state['org_estabelecimento_nova_geracao_card'] = empresa_catalogo.get(
+                    'estabelecimento', 'matriz'
+                )
+            st.session_state['empresa_organizador'] = chave_destino
+            st.rerun()
+
+        empresas_catalogo_completo = [
+            empresa
+            for empresas_regime in EMPRESAS_POR_REGIME.values()
+            for empresa in empresas_regime
+        ]
+        empresas_ativas = [
+            empresa for empresa in empresas_catalogo_completo if empresa.get('chave_sistema')
+        ]
+
+        col_busca_empresas, col_status_empresas = st.columns([2.2, 1], gap='small')
+        with col_busca_empresas:
+            termo_busca_empresas = st.text_input(
+                "Buscar empresa",
+                placeholder="Digite o código ou parte do nome...",
+                key="org_busca_empresas_catalogo"
+            )
+        with col_status_empresas:
+            filtro_status_empresas = st.selectbox(
+                "Status",
+                ["Todas", "Com ferramentas", "Aguardando configuração"],
+                key="org_filtro_status_empresas"
+            )
+
+        resumo_lr, resumo_lp, resumo_sn, resumo_ativas = st.columns(4, gap='small')
+        resumo_lr.metric("Lucro Real", len(EMPRESAS_POR_REGIME.get('LUCRO REAL', [])))
+        resumo_lp.metric("Lucro Presumido", len(EMPRESAS_POR_REGIME.get('LUCRO PRESUMIDO', [])))
+        resumo_sn.metric("Simples Nacional", len(EMPRESAS_POR_REGIME.get('SIMPLES NACIONAL', [])))
+        resumo_ativas.metric("Ferramentas ativas", len(empresas_ativas))
+
+        termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
+
+        def _empresa_visivel(empresa_catalogo):
+            ativa = bool(empresa_catalogo.get('chave_sistema'))
+            if filtro_status_empresas == "Com ferramentas" and not ativa:
+                return False
+            if filtro_status_empresas == "Aguardando configuração" and ativa:
+                return False
+            if termo_normalizado:
+                alvo = _normalizar_busca_empresa(
+                    f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
+                )
+                if termo_normalizado not in alvo:
+                    return False
+            return True
+
+        if not termo_normalizado and filtro_status_empresas == "Todas":
+            st.markdown("### Acesso rápido")
+            st.caption("Empresas que já possuem ferramentas configuradas no Razync.")
+            for inicio_linha in range(0, len(empresas_ativas), 3):
+                colunas_ativas = st.columns(3, gap='small')
                 for deslocamento, empresa_catalogo in enumerate(
-                    empresas_regime[inicio_linha:inicio_linha + 3]
+                    sorted(empresas_ativas, key=lambda item: item['codigo'])[inicio_linha:inicio_linha + 3]
                 ):
-                    with colunas_regime[deslocamento]:
+                    with colunas_ativas[deslocamento]:
                         if st.button(
-                            f"**{empresa_catalogo['rotulo']}**",
+                            f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
                             use_container_width=True,
-                            key=f"org_empresa_catalogo_{empresa_catalogo['codigo']}"
+                            key=f"org_empresa_ativa_{empresa_catalogo['codigo']}"
                         ):
-                            chave_destino = empresa_catalogo.get(
-                                'chave_sistema', empresa_catalogo['chave']
-                            )
-                            if chave_destino == 'nova_geracao':
-                                st.session_state['org_estabelecimento_nova_geracao_card'] = (
-                                    empresa_catalogo.get('estabelecimento', 'matriz')
+                            _abrir_empresa_catalogo(empresa_catalogo)
+                        st.caption("● Ferramentas ativas")
+            st.markdown("---")
+
+        abas_regime = st.tabs(["Lucro Real", "Lucro Presumido", "Simples Nacional"])
+        regimes_abas = ["LUCRO REAL", "LUCRO PRESUMIDO", "SIMPLES NACIONAL"]
+        total_encontrado = 0
+
+        for aba_regime, regime in zip(abas_regime, regimes_abas):
+            with aba_regime:
+                empresas_regime = [
+                    empresa
+                    for empresa in sorted(
+                        EMPRESAS_POR_REGIME.get(regime, []),
+                        key=lambda item: item['codigo']
+                    )
+                    if _empresa_visivel(empresa)
+                ]
+                total_encontrado += len(empresas_regime)
+                st.caption(
+                    f"{len(empresas_regime)} empresa(s) exibida(s) neste regime."
+                )
+
+                if not empresas_regime:
+                    st.info("Nenhuma empresa encontrada com os filtros atuais.")
+                else:
+                    for inicio_linha in range(0, len(empresas_regime), 2):
+                        colunas_regime = st.columns(2, gap='medium')
+                        for deslocamento, empresa_catalogo in enumerate(
+                            empresas_regime[inicio_linha:inicio_linha + 2]
+                        ):
+                            ativa = bool(empresa_catalogo.get('chave_sistema'))
+                            with colunas_regime[deslocamento]:
+                                if st.button(
+                                    f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
+                                    use_container_width=True,
+                                    key=f"org_empresa_catalogo_{empresa_catalogo['codigo']}"
+                                ):
+                                    _abrir_empresa_catalogo(empresa_catalogo)
+                                st.caption(
+                                    "● Ferramentas ativas"
+                                    if ativa
+                                    else "○ Aguardando configuração"
                                 )
-                            st.session_state['empresa_organizador'] = chave_destino
-                            st.rerun()
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+
+        if total_encontrado == 0:
+            st.warning("Nenhuma empresa corresponde à busca e ao filtro selecionados.")
 
     if empresa_catalogo_atual:
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
