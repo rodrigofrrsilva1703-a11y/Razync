@@ -1,0 +1,45 @@
+name: Diagnosticar lista sem cards temporariamente
+
+on:
+  push:
+    branches:
+      - agent/company-search-no-cards-3
+    paths:
+      - .github/workflows/debug_company_search_no_cards.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnosticar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/company-search-no-cards-3
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+      - name: Diagnosticar
+        shell: bash
+        run: |
+          set +e
+          python scripts/apply_company_search_no_cards.py
+          echo '=== PY_COMPILE ===' > validation_output.txt
+          python -m py_compile app.py razync/*.py >> validation_output.txt 2>&1
+          echo "py_compile_exit=$?" >> validation_output.txt
+          echo '=== PYTEST ===' >> validation_output.txt
+          pytest -q >> validation_output.txt 2>&1
+          echo "pytest_exit=$?" >> validation_output.txt
+          git checkout -- app.py
+          cat validation_output.txt
+      - name: Registrar diagnóstico
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add validation_output.txt
+          git commit -m "Registra diagnóstico temporário da lista sem cards"
+          git push origin agent/company-search-no-cards-3
