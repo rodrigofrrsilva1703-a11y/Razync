@@ -4850,6 +4850,45 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         )
         termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
 
+        st.markdown(
+            """
+            <style>
+            [class*="st-key-org_resultado_empresa_"] button,
+            [class*="st-key-org_empresa_ativa_"] button {
+                background: transparent !important;
+                border: 0 !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                min-height: auto !important;
+                height: auto !important;
+                border-radius: 0 !important;
+                justify-content: flex-start !important;
+            }
+            [class*="st-key-org_resultado_empresa_"] button p,
+            [class*="st-key-org_empresa_ativa_"] button p {
+                font-weight: 500 !important;
+                line-height: 1.45 !important;
+                margin: 0 !important;
+            }
+            [class*="st-key-org_resultado_empresa_"] button:hover,
+            [class*="st-key-org_empresa_ativa_"] button:hover,
+            [class*="st-key-org_resultado_empresa_"] button:focus,
+            [class*="st-key-org_empresa_ativa_"] button:focus {
+                background: transparent !important;
+                border: 0 !important;
+                box-shadow: none !important;
+            }
+            [class*="st-key-org_resultado_empresa_"] button:hover p,
+            [class*="st-key-org_empresa_ativa_"] button:hover p {
+                color: #06b6d4 !important;
+                text-decoration: underline !important;
+                text-underline-offset: 3px !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
         if not termo_normalizado:
             st.caption('Digite um código ou parte do nome para localizar a empresa.')
         else:
