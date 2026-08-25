@@ -19,6 +19,7 @@ from datetime import datetime
 from pypdf import PdfReader
 
 from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
+from razync.company_catalog import EMPRESAS_POR_REGIME, EMPRESAS_POR_CHAVE
 from razync.security import proteger_acesso
 from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
 
@@ -4756,6 +4757,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if 'empresa_organizador' not in st.session_state:
         st.session_state['empresa_organizador'] = None
     empresa_organizador = st.session_state['empresa_organizador']
+    empresa_catalogo_atual = EMPRESAS_POR_CHAVE.get(str(empresa_organizador))
 
     col_voltar, col_tit = st.columns([1.2, 8.8])
     with col_voltar:
@@ -4786,7 +4788,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             'isa': '343 - I.S.A',
             'accede_automacao': '1000 - ACCEDE AUTOMAÇÃO',
             'accede_equipamentos': '1001 - ACCEDE EQUIPAMENTOS'
-        }.get(empresa_organizador, 'Organizador de Planilhas'))
+        }.get(
+            empresa_organizador,
+            empresa_catalogo_atual['rotulo'] if empresa_catalogo_atual else 'Organizador de Planilhas'
+        ))
     st.caption({
         'nova_geracao': f'Organize, confira e classifique os movimentos da {titulo_nova_geracao_atual}.',
         'autokraft_industrial': 'Organize os mapas diários e confira os extratos da 3 - Autokraft Industrial.',
@@ -4796,33 +4801,49 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         'accede_equipamentos': 'Organize as planilhas SIG e confira Itaú e Sicredi da 1001 - ACCEDE EQUIPAMENTOS.'
     }.get(
         empresa_organizador,
-        'Selecione uma empresa para abrir sua área de trabalho exclusiva.'
+        (
+            f"{empresa_catalogo_atual['regime'].title()} · Área cadastrada para receber ferramentas específicas."
+            if empresa_catalogo_atual
+            else 'Selecione uma empresa para abrir sua área de trabalho exclusiva.'
+        )
     ))
     st.markdown("---")
 
     if empresa_organizador is None:
         st.markdown("##### Empresas disponíveis")
+        st.caption("Empresas organizadas pelo regime tributário. As áreas ainda sem ferramentas ficam preparadas para configuração futura.")
 
-        col_emp1, col_emp2, col_emp3 = st.columns([1, 1, 1], gap="medium")
-        col_emp4, col_emp5, col_emp6 = st.columns([1, 1, 1], gap="medium")
-
-        cards_empresas = [
-            (col_emp1, 'nova_geracao', 'org_empresa_card_nova', '266 - Nova Geração'),
-            (col_emp2, 'autokraft_industrial', 'org_empresa_card_autokraft_industrial', '3 - Autokraft Industrial'),
-            (col_emp3, 'autokraft_projetos', 'org_empresa_card_autokraft_projetos', '178 - Autokraft Projetos'),
-            (col_emp4, 'isa', 'org_empresa_card_isa', '343 - I.S.A'),
-            (col_emp5, 'accede_automacao', 'org_empresa_card_accede_automacao', '1000 - ACCEDE AUTOMAÇÃO'),
-            (col_emp6, 'accede_equipamentos', 'org_empresa_card_accede_equipamentos', '1001 - ACCEDE EQUIPAMENTOS'),
-        ]
-        for coluna_card, chave_empresa, chave_card, titulo_card in cards_empresas:
-            with coluna_card:
-                if st.button(
-                    f"**{titulo_card}**",
-                    use_container_width=True,
-                    key=chave_card
+        for regime, empresas_regime in EMPRESAS_POR_REGIME.items():
+            st.markdown(f"#### {regime.title()}")
+            for inicio_linha in range(0, len(empresas_regime), 3):
+                colunas_regime = st.columns(3, gap="medium")
+                for deslocamento, empresa_catalogo in enumerate(
+                    empresas_regime[inicio_linha:inicio_linha + 3]
                 ):
-                    st.session_state['empresa_organizador'] = chave_empresa
-                    st.rerun()
+                    with colunas_regime[deslocamento]:
+                        if st.button(
+                            f"**{empresa_catalogo['rotulo']}**",
+                            use_container_width=True,
+                            key=f"org_empresa_catalogo_{empresa_catalogo['codigo']}"
+                        ):
+                            chave_destino = empresa_catalogo.get(
+                                'chave_sistema', empresa_catalogo['chave']
+                            )
+                            if chave_destino == 'nova_geracao':
+                                st.session_state['org_estabelecimento_nova_geracao_card'] = (
+                                    empresa_catalogo.get('estabelecimento', 'matriz')
+                                )
+                            st.session_state['empresa_organizador'] = chave_destino
+                            st.rerun()
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+
+    if empresa_catalogo_atual:
+        st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
+        st.caption(f"Regime tributário: {empresa_catalogo_atual['regime'].title()}")
+        st.info(
+            "Empresa cadastrada no Razync. As ferramentas específicas desta empresa "
+            "ainda não foram configuradas."
+        )
 
     if st.session_state['empresa_organizador'] in {
         'autokraft_industrial', 'autokraft_projetos', 'isa'
