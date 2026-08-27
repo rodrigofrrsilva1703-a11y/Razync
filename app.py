@@ -923,6 +923,21 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     for conta, banco in contas_nova_geracao:
         if conta in digitos_cabecalho:
             return banco
+
+    # Itaú Empresas: em alguns PDFs o logotipo é imagem e a palavra "Itaú"
+    # não existe na camada de texto. Identificamos então pela assinatura estrutural
+    # exclusiva do extrato detalhado, sem depender do nome do arquivo.
+    assinatura_itau = (
+        'LANCAMENTOS DO PERIODO' in cabecalho
+        and 'RAZAO SOCIAL' in cabecalho
+        and 'CNPJ/CPF' in cabecalho
+        and 'VALOR (R$)' in cabecalho
+        and 'SALDO (R$)' in cabecalho
+        and ('LIMITE DA CONTA' in cabecalho or 'SALDO TOTAL' in cabecalho)
+    )
+    if assinatura_itau:
+        return 'BANCO ITAU'
+
     if '58.616.418' in str(texto_conteudo)[:6000]: return 'BANCO FIBRA'
     if re.search(r'\b0?341\b', cabecalho): return 'BANCO ITAU'
     return "BANCO CONTA CORRENTE"
@@ -1329,19 +1344,37 @@ def processar_pdf_itau_detalhado(reader, banco_identificado):
     if 'lancamentos do periodo' not in texto_norm or 'razao social' not in texto_norm:
         return []
 
-    linhas = [re.sub(r'\s+', ' ', linha).strip() for linha in texto_total.splitlines() if linha.strip()]
     padrao_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s+(.*)$')
+    padrao_valor = re.compile(r'(?<!\d)([-+]?\s*\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)')
     blocos = []
     atual = None
-    for linha in linhas:
-        m = padrao_data.match(linha)
-        if m:
-            if atual:
-                blocos.append(atual)
-            atual = [m.group(1), m.group(2)]
-        elif atual:
-            # Complementos de razão social podem quebrar em várias linhas.
-            atual[1] += ' ' + linha
+
+    # Processa página a página. Alguns extratos Itaú repetem a data na primeira
+    # linha da página seguinte quando um lançamento foi quebrado na virada de página.
+    # Se o bloco anterior ainda não tem valor monetário e a data é a mesma, tratamos
+    # a nova linha como continuação, preservando histórico e valor do mesmo movimento.
+    for texto_pagina in textos:
+        linhas_pagina = [
+            re.sub(r'\s+', ' ', linha).strip()
+            for linha in texto_pagina.splitlines()
+            if linha.strip()
+        ]
+        for linha in linhas_pagina:
+            m = padrao_data.match(linha)
+            if m:
+                data_nova, conteudo_novo = m.group(1), m.group(2)
+                if (
+                    atual
+                    and atual[0] == data_nova
+                    and not padrao_valor.search(atual[1])
+                ):
+                    atual[1] += ' ' + conteudo_novo
+                    continue
+                if atual:
+                    blocos.append(atual)
+                atual = [data_nova, conteudo_novo]
+            elif atual:
+                atual[1] += ' ' + linha
     if atual:
         blocos.append(atual)
 
@@ -1352,12 +1385,15 @@ def processar_pdf_itau_detalhado(reader, banco_identificado):
         'saldo total disponivel dia',
         'saldo movimentacao conta',
         'sdo aplic aut mais ap',
+        'saldo em conta corrente',
+        'saldo disponivel',
+        'saldo final',
+        'saldo do dia',
         'saldo total',
         'limite da conta',
         'utilizado',
         'disponivel',
     ]
-    padrao_valor = re.compile(r'(?<!\d)([-+]?\s*\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)')
     lancamentos = []
 
     for data_str, conteudo in blocos:
