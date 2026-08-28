@@ -1,0 +1,46 @@
+name: Aplicar correção OCR Nibo BB
+
+on:
+  push:
+    branches:
+      - agent/nibo-bb-ocr-money-fix
+    paths:
+      - scripts/apply_nibo_bb_ocr_fix.py
+      - .github/workflows/apply_nibo_bb_ocr_fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/nibo-bb-ocr-money-fix
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Aplicar alteração
+        run: python scripts/apply_nibo_bb_ocr_fix.py
+      - name: Validar
+        run: |
+          python -m py_compile razync/nibo.py
+          pytest -q
+      - name: Limpar temporários e registrar
+        run: |
+          rm scripts/apply_nibo_bb_ocr_fix.py
+          rm .github/workflows/apply_nibo_bb_ocr_fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add razync/nibo.py tests/test_nibo.py
+          git rm --cached scripts/apply_nibo_bb_ocr_fix.py .github/workflows/apply_nibo_bb_ocr_fix.yml || true
+          git add -u
+          git commit -m "Corrige leitura monetária OCR do Nibo BB"
+          git push origin HEAD:agent/nibo-bb-ocr-money-fix
