@@ -50,7 +50,7 @@ EMPRESAS = [
     {"codigo": 1487, "nome": "H & G CONSULTORIA FINANCEIRAS LTDA (Cliente a partir de 01/09/2025)", "regime": "SIMPLES NACIONAL"},
     {"codigo": 1520, "nome": "SOUZA LEMES HOLDING PATRIMONIAL LTDA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1522, "nome": "PRISCILA CAMARGO GARCIA DE OLIVEIRA LTDA", "regime": "SIMPLES NACIONAL"},
-    {"codigo": 1529, "nome": "DIAS E PEREIRA SOCIEDADE DE ADVOGADOS", "regime": "LUCRO PRESUMIDO"},
+    {"codigo": 1529, "nome": "DIAS E PEREIRA SOCIEDADE DE ADVOGADOS", "regime": "LUCRO PRESUMIDO", "chave_sistema": "dias_pereira"},
     {"codigo": 1530, "nome": "DIAS PEREIRA SOCIEDADE INDIVIDUAL DE ADVOCACIA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1532, "nome": "MARIA APARECIDA DIAS PEREIRA NARBUTIS SOCIEDADE UNIPESSOAL LTDA", "regime": "SIMPLES NACIONAL"},
 ]
