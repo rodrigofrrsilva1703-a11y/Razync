@@ -1,0 +1,118 @@
+name: Aplicar correção Itaú data abreviada
+
+on:
+  push:
+    branches: [agent/itau-short-date-pdf]
+    paths:
+      - 'scripts/apply_itau_short_date_pdf.py'
+      - '.github/workflows/apply_itau_short_date_pdf.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/itau-short-date-pdf
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar Tesseract português
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-por
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Aplicar alteração
+        run: python scripts/apply_itau_short_date_pdf.py
+      - name: Validar sintaxe e testes
+        run: |
+          python -m py_compile app.py
+          pytest -q
+      - name: Validar os dois formatos Itaú
+        run: |
+          python - <<'PY'
+          import ast
+          import re
+          import unicodedata
+          from datetime import datetime
+          from pathlib import Path
+
+          tree = ast.parse(Path('app.py').read_text(encoding='utf-8'))
+          alvo = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'processar_pdf_itau_detalhado')
+          modulo = ast.Module(body=[alvo], type_ignores=[])
+
+          def normalizar_texto(valor):
+              texto = unicodedata.normalize('NFKD', str(valor or ''))
+              return ''.join(c for c in texto if not unicodedata.combining(c)).lower()
+
+          def limpar_valor_monetario(valor):
+              s = str(valor).strip().replace(' ', '')
+              negativo = s.startswith('-')
+              s = s.lstrip('+-').replace('.', '').replace(',', '.')
+              numero = float(s)
+              return -numero if negativo else numero
+
+          def limpar_caracteres_ilegais(valor):
+              return str(valor)
+
+          ns = {
+              're': re,
+              'datetime': datetime,
+              'normalizar_texto': normalizar_texto,
+              'limpar_valor_monetario': limpar_valor_monetario,
+              'limpar_caracteres_ilegais': limpar_caracteres_ilegais,
+          }
+          exec(compile(modulo, 'app.py', 'exec'), ns)
+          parser = ns['processar_pdf_itau_detalhado']
+
+          class Page:
+              def __init__(self, text): self.text = text
+              def extract_text(self): return self.text
+          class Reader:
+              def __init__(self, pages): self.pages = [Page(p) for p in pages]
+
+          curto = Reader([
+              'conta corrente\n18326-1\nlançamentos período: 01/03/2026 até 31/03/2026\n'
+              'data lançamentos ag/origem valor (R$) saldo (R$)\n'
+              'BOLETO PAGO JURI CONTABI -1.621,0002 / mar\n'
+              'PIX TRANSF DIAS P 03/03 41.271,2003 / mar\n'
+              '03 / mar SALDO TOTAL DISPONÍVEL DIA 47.095,20\n'
+              'SISPAG TRANSF CC ITAU -2.450,0004 / mar\n'
+              '02 abr DA ELETROPAULO 20515861 -870,05\n'
+              'APLIC AUT\n'
+          ])
+          r = parser(curto, 'BANCO ITAU')
+          assert len(r) == 3, r
+          assert [x['VALOR'] for x in r] == [-1621.0, 41271.2, -2450.0], r
+          assert all(x['DATA'].endswith('/03/2026') for x in r), r
+          assert not any('SALDO' in x['HISTÓRICO'].upper() for x in r), r
+          assert not any(x['DATA'].startswith('02/04') for x in r), r
+
+          moderno = Reader([
+              'Lançamentos do período: 01/07/2026 até 03/08/2026\nRazão Social CNPJ/CPF Valor (R$) Saldo (R$)\n'
+              '03/07/2026 RECEBIMENTO REDE MAST\n',
+              '03/07/2026 DB0095865659 REDECARD INSTITUICAO DE PAGAMENTO S.A. 01.425.787/0001-04 362,97\n'
+              '03/07/2026 SALDO TOTAL DISPONÍVEL DIA 9.496,96\n'
+          ])
+          r2 = parser(moderno, 'BANCO ITAU')
+          assert len(r2) == 1, r2
+          assert r2[0]['VALOR'] == 362.97, r2
+          assert 'RECEBIMENTO REDE MAST' in r2[0]['HISTÓRICO'], r2
+          assert 'DB0095865659' in r2[0]['HISTÓRICO'], r2
+          print('Validação específica Itaú OK')
+          PY
+      - name: Limpar temporários e registrar alteração final
+        run: |
+          rm -f scripts/apply_itau_short_date_pdf.py .github/workflows/apply_itau_short_date_pdf.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/apply_itau_short_date_pdf.py .github/workflows/apply_itau_short_date_pdf.yml
+          git commit -m 'Suporta extrato Itaú com datas abreviadas'
+          git push origin HEAD:agent/itau-short-date-pdf
