@@ -87,16 +87,11 @@ def _limpar_nome(texto: str) -> str:
     return texto.strip(" -|")
 
 
-def _historico(nome: str, descricao: str, referencia: str, identificacao: str) -> str:
+def _historico(nome: str, descricao: str, referencia: str = "", identificacao: str = "") -> str:
+    """Monta somente Nome + Descrição; Ref. e Identif. não vão para o Domínio."""
     nome = _limpar_nome(nome)
     descricao = re.sub(r"\s+", " ", str(descricao or "")).strip()
-    referencia = re.sub(r"\s+", " ", str(referencia or "")).strip()
-    identificacao = re.sub(r"\s+", " ", str(identificacao or "")).strip()
-
     principal = " - ".join(parte for parte in (nome, descricao) if parte)
-    extras = [parte for parte in (referencia, identificacao) if parte]
-    if extras:
-        principal = " | ".join([principal] + extras) if principal else " | ".join(extras)
     return principal or "MOVIMENTO NIBO"
 
 
@@ -182,13 +177,15 @@ def processar_extrato_nibo_pdf(file_bytes: bytes) -> pd.DataFrame:
                 continue
 
             data_formatada = datetime.strptime(data_atual, "%d/%m/%y").strftime("%d/%m/%Y")
+            historico_base = _historico(nome, descricao, referencia, identificacao)
+            prefixo_historico = "Pago:" if valor < 0 else "Recebido:"
             lancamentos.append({
                 "DESCRIÇÃO": "NIBO",
                 "DATA": data_formatada,
                 "VALOR": valor,
                 "DÉBITO": "",
                 "CRÉDITO": "",
-                "HISTÓRICO": _historico(nome, descricao, referencia, identificacao),
+                "HISTÓRICO": f"{prefixo_historico} {historico_base}",
                 "PÁGINA": numero_pagina,
             })
 
