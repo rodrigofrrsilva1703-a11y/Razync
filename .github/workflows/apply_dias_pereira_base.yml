@@ -1,0 +1,59 @@
+name: Aplicar Base Inteligente 1529
+
+on:
+  push:
+    branches:
+      - agent/dias-pereira-base-inteligente
+    paths:
+      - scripts/apply_dias_pereira_base.py
+      - .github/workflows/apply_dias_pereira_base.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dias-pereira-base-inteligente
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-por
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Aplicar alterações
+        run: python scripts/apply_dias_pereira_base.py
+      - name: Validar sintaxe e testes
+        run: |
+          python -m py_compile app.py razync/*.py
+          pytest -q
+          python - <<'PY'
+          from razync.nibo import _historico
+          assert _historico('Cliente Teste', 'Honorários', 'REF123', 'ID456') == 'Cliente Teste - Honorários'
+          text = open('app.py', encoding='utf-8').read()
+          assert "'banco_brasil': '8'" in text
+          assert "'itau': '508'" in text
+          assert "return 'banco_brasil'" in text
+          assert "'Base inteligente de Débito e Crédito'" in text
+          print('Validações específicas 1529: OK')
+          PY
+      - name: Limpar temporários e registrar
+        run: |
+          rm -f scripts/apply_dias_pereira_base.py .github/workflows/apply_dias_pereira_base.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py razync/nibo.py scripts/apply_dias_pereira_base.py .github/workflows/apply_dias_pereira_base.yml
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração para registrar"
+          else
+            git commit -m "Aprimora Nibo e Base Inteligente da empresa 1529"
+            git push origin HEAD:agent/dias-pereira-base-inteligente
+          fi
