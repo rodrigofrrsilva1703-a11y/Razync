@@ -4891,6 +4891,24 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.session_state['empresa_organizador'] = None
     empresa_organizador = st.session_state['empresa_organizador']
     empresa_catalogo_atual = EMPRESAS_POR_CHAVE.get(str(empresa_organizador))
+    if empresa_catalogo_atual is None and empresa_organizador:
+        empresas_mesma_chave = [
+            empresa
+            for empresas_regime in EMPRESAS_POR_REGIME.values()
+            for empresa in empresas_regime
+            if empresa.get('chave_sistema') == empresa_organizador
+        ]
+        if empresa_organizador == 'nova_geracao' and empresas_mesma_chave:
+            estabelecimento_atual = st.session_state.get(
+                'org_estabelecimento_nova_geracao_card', 'matriz'
+            )
+            empresa_catalogo_atual = next(
+                (empresa for empresa in empresas_mesma_chave
+                 if empresa.get('estabelecimento', 'matriz') == estabelecimento_atual),
+                empresas_mesma_chave[0]
+            )
+        elif empresas_mesma_chave:
+            empresa_catalogo_atual = empresas_mesma_chave[0]
 
     col_voltar, col_tit = st.columns([1.2, 8.8])
     with col_voltar:
@@ -4920,7 +4938,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             'autokraft_projetos': '178 - Autokraft Projetos',
             'isa': '343 - I.S.A',
             'accede_automacao': '1000 - ACCEDE AUTOMAÇÃO',
-            'accede_equipamentos': '1001 - ACCEDE EQUIPAMENTOS'
+            'accede_equipamentos': '1001 - ACCEDE EQUIPAMENTOS',
+            'dias_pereira': '1529 - Dias e Pereira'
         }.get(
             empresa_organizador,
             empresa_catalogo_atual['rotulo'] if empresa_catalogo_atual else 'Organizador de Planilhas'
@@ -5060,7 +5079,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 ):
                     _abrir_empresa_catalogo(empresa_catalogo)
 
-    if empresa_catalogo_atual:
+    if empresa_catalogo_atual and not empresa_catalogo_atual.get('chave_sistema'):
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
         st.caption(f"Regime tributário: {empresa_catalogo_atual['regime'].title()}")
         st.info(
