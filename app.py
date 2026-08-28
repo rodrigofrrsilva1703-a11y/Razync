@@ -6215,29 +6215,64 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 'O Razync organiza os movimentos e aplica a Base Inteligente exclusiva da 1529.'
             )
 
-            banco_nibo_rotulo = st.selectbox(
-                'Banco deste relatório Nibo',
+            bancos_nibo_selecionados = st.multiselect(
+                'Bancos deste processamento Nibo',
                 list(bancos_dias_pereira.keys()),
-                key='dias_pereira_banco_nibo'
-            )
-            config_banco_nibo = bancos_dias_pereira[banco_nibo_rotulo]
-
-            arquivo_nibo = st.file_uploader(
-                'Extrato Nibo em PDF',
-                type=['pdf'],
-                key='dias_pereira_extrato_nibo_pdf',
-                help='Use o relatório mensal de Contas & Extratos do Nibo.'
+                default=[list(bancos_dias_pereira.keys())[0]],
+                key='dias_pereira_bancos_nibo',
+                help='Você pode selecionar Itaú, Banco do Brasil ou os dois bancos ao mesmo tempo.'
             )
 
-            if arquivo_nibo is not None:
+            arquivos_nibo_por_banco = {}
+            if not bancos_nibo_selecionados:
+                st.info('Selecione pelo menos um banco para continuar.')
+            else:
+                st.caption(
+                    'Envie um PDF para cada banco selecionado. Quando os dois forem enviados, '
+                    'o Razync gera um único Modelo Domínio consolidado.'
+                )
+                for banco_nibo_rotulo in bancos_nibo_selecionados:
+                    config_banco_nibo = bancos_dias_pereira[banco_nibo_rotulo]
+                    arquivo_nibo = st.file_uploader(
+                        f"Extrato Nibo em PDF — {banco_nibo_rotulo}",
+                        type=['pdf'],
+                        key=f"dias_pereira_extrato_nibo_{config_banco_nibo['slug']}",
+                        help='Use o relatório mensal de Contas & Extratos do Nibo.'
+                    )
+                    if arquivo_nibo is not None:
+                        arquivos_nibo_por_banco[banco_nibo_rotulo] = arquivo_nibo
+
+            todos_arquivos_nibo_enviados = (
+                bool(bancos_nibo_selecionados)
+                and len(arquivos_nibo_por_banco) == len(bancos_nibo_selecionados)
+            )
+
+            if todos_arquivos_nibo_enviados:
                 try:
-                    with st.spinner('Lendo e organizando o relatório Nibo...'):
-                        df_nibo = processar_extrato_nibo_pdf(arquivo_nibo.getvalue())
+                    quadros_nibo = []
+                    configs_nibo_processados = []
+                    with st.spinner('Lendo e organizando os relatórios Nibo...'):
+                        for banco_nibo_rotulo in bancos_nibo_selecionados:
+                            config_banco_nibo = bancos_dias_pereira[banco_nibo_rotulo]
+                            arquivo_nibo = arquivos_nibo_por_banco[banco_nibo_rotulo]
+                            df_nibo = processar_extrato_nibo_pdf(arquivo_nibo.getvalue())
+                            df_banco_nibo = df_nibo[
+                                ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+                            ].copy()
+                            df_banco_nibo['DESCRIÇÃO'] = config_banco_nibo['descricao']
+                            quadros_nibo.append(df_banco_nibo)
+                            configs_nibo_processados.append(config_banco_nibo)
 
-                    df_export_nibo = df_nibo[
-                        ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
-                    ].copy()
-                    df_export_nibo['DESCRIÇÃO'] = config_banco_nibo['descricao']
+                    df_export_nibo = pd.concat(quadros_nibo, ignore_index=True)
+                    df_export_nibo['_DATA_ORDEM'] = pd.to_datetime(
+                        df_export_nibo['DATA'], dayfirst=True, errors='coerce'
+                    )
+                    df_export_nibo = (
+                        df_export_nibo
+                        .sort_values(['_DATA_ORDEM', 'DESCRIÇÃO'], kind='stable')
+                        .drop(columns=['_DATA_ORDEM'])
+                        .reset_index(drop=True)
+                    )
                     datas_nibo = pd.to_datetime(
                         df_export_nibo['DATA'], dayfirst=True, errors='coerce'
                     )
@@ -6261,37 +6296,43 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         f'R$ {saidas_nibo:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
                     )
 
-                    st.success('Relatório Nibo organizado com sucesso.')
+                    st.success('Relatório(s) Nibo organizado(s) com sucesso.')
                     st.dataframe(
-                        df_export_nibo[['DATA', 'VALOR', 'HISTÓRICO']],
+                        df_export_nibo[['DESCRIÇÃO', 'DATA', 'VALOR', 'HISTÓRICO']],
                         use_container_width=True,
                         hide_index=True
                     )
 
                     excel_nibo = gerar_excel_modelo_dominio(df_export_nibo)
                     datas_validas = datas_nibo.dropna()
+                    bancos_nome_arquivo = '_'.join(
+                        config['arquivo'] for config in configs_nibo_processados
+                    )
                     if not datas_validas.empty:
                         nome_nibo = (
-                            f"1529_Dias_Pereira_{config_banco_nibo['arquivo']}_"
+                            f"1529_Dias_Pereira_{bancos_nome_arquivo}_"
                             f"{datas_validas.min().strftime('%m_%Y')}.xlsx"
                         )
                     else:
                         nome_nibo = (
-                            f"1529_Dias_Pereira_{config_banco_nibo['arquivo']}_Modelo_Dominio.xlsx"
+                            f"1529_Dias_Pereira_{bancos_nome_arquivo}_Modelo_Dominio.xlsx"
                         )
 
                     arquivo_saida_nibo = excel_nibo
                     resumo_nibo = {}
                     try:
                         base_dias_pereira = carregar_classificacoes_online('dias_pereira')
-                        base_banco_nibo = [
+                        bancos_slugs_nibo = {
+                            config['slug'] for config in configs_nibo_processados
+                        }
+                        base_bancos_nibo = [
                             item for item in base_dias_pereira
-                            if item.get('banco') == config_banco_nibo['slug']
+                            if item.get('banco') in bancos_slugs_nibo
                         ]
                         arquivo_saida_nibo, resumo_nibo = classificar_planilha_final(
                             excel_nibo,
                             nome_nibo,
-                            base_banco_nibo,
+                            base_bancos_nibo,
                             contas_dias_pereira
                         )
                     except Exception as erro_base_nibo:
@@ -6320,7 +6361,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         key='dias_pereira_download_modelo_dominio'
                     )
                 except Exception as erro_nibo:
-                    st.error(f'Não foi possível processar o relatório Nibo: {erro_nibo}')
+                    st.error(f'Não foi possível processar o(s) relatório(s) Nibo: {erro_nibo}')
 
 # ==============================================================================
 # TELA 4: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
