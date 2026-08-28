@@ -35,13 +35,22 @@ def _valor_br(texto: str):
     if "," in bruto:
         normalizado = bruto.replace(".", "").replace(",", ".")
     elif "." in bruto:
-        partes = bruto.split(".")
-        if len(partes[-1]) == 2:
-            normalizado = "".join(partes[:-1]) + "." + partes[-1]
-        elif len(partes[-1]) == 3:
-            normalizado = "".join(partes)
+        # OCR do Nibo pode perder a vírgula decimal em valores com milhar.
+        # Ex.: "20.115,83" pode chegar como "20.11583". Nesse formato,
+        # os dois últimos dígitos continuam sendo os centavos.
+        sinal = "-" if bruto.startswith("-") else ""
+        corpo = bruto.lstrip("-")
+        if re.fullmatch(r"\d{1,3}(?:\.\d{3})+\d{2}", corpo):
+            inteiro = corpo[:-2].replace(".", "")
+            normalizado = f"{sinal}{inteiro}.{corpo[-2:]}"
         else:
-            normalizado = bruto.replace(".", "")
+            partes = bruto.split(".")
+            if len(partes[-1]) == 2:
+                normalizado = "".join(partes[:-1]) + "." + partes[-1]
+            elif len(partes[-1]) == 3:
+                normalizado = "".join(partes)
+            else:
+                normalizado = bruto.replace(".", "")
     else:
         digitos = re.sub(r"\D", "", bruto)
         if not digitos:
