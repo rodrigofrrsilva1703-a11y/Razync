@@ -1,0 +1,46 @@
+name: Corrigir posição ferramenta Nibo 1529
+
+on:
+  push:
+    branches:
+      - agent/fix-1529-nibo-placement
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/fix-1529-nibo-placement
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar correção
+        run: python scripts/fix_1529_nibo_placement.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/*.py
+      - name: Validar posição
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t = Path('app.py').read_text(encoding='utf-8')
+          b = t.index('    # --- Ferramenta exclusiva 1529: Nibo -> Modelo Dominio ---')
+          t4 = t.index('# TELA 4: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO')
+          assert b < t4
+          assert "if st.session_state['empresa_organizador'] == 'dias_pereira':" in t[b:t4]
+          print('posição correta')
+          PY
+      - name: Limpar temporários e registrar
+        run: |
+          rm -f scripts/fix_1529_nibo_placement.py .github/workflows/fix_1529_nibo_placement.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/fix_1529_nibo_placement.py .github/workflows/fix_1529_nibo_placement.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Move ferramenta Nibo 1529 para o Organizador'
+            git push origin HEAD:agent/fix-1529-nibo-placement
+          fi
