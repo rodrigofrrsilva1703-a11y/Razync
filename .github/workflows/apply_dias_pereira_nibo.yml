@@ -1,0 +1,56 @@
+name: Aplicar ferramenta Nibo 1529
+
+on:
+  push:
+    branches:
+      - agent/dias-pereira-nibo
+    paths:
+      - 'scripts/apply_dias_pereira_nibo.py'
+      - '.github/workflows/apply_dias_pereira_nibo.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dias-pereira-nibo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar Tesseract português
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-por
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: Aplicar alteração
+        run: python scripts/apply_dias_pereira_nibo.py
+      - name: Validar sintaxe e testes
+        run: |
+          python -m py_compile app.py razync/nibo.py razync/company_catalog.py
+          pytest -q
+      - name: Validar funções Nibo
+        run: |
+          python - <<'PY'
+          from razync.nibo import _valor_br, _historico
+          assert _valor_br('(2.125,58)') == -2125.58
+          assert _valor_br('41.271,20') == 41271.20
+          assert _valor_br('(547336)') == -5473.36
+          assert _historico('Cliente', 'Honorários Grupo Teste', '02/2026', '') == 'Cliente - Honorários Grupo Teste | 02/2026'
+          print('Funções Nibo OK')
+          PY
+      - name: Limpar temporários e registrar alteração final
+        run: |
+          rm scripts/apply_dias_pereira_nibo.py
+          rm .github/workflows/apply_dias_pereira_nibo.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py razync/company_catalog.py razync/nibo.py scripts/apply_dias_pereira_nibo.py .github/workflows/apply_dias_pereira_nibo.yml
+          git commit -m "Adiciona ferramenta Nibo para empresa 1529"
+          git push origin HEAD:agent/dias-pereira-nibo
