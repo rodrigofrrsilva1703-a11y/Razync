@@ -5375,6 +5375,23 @@ section[data-testid="stSidebar"] .st-key-sb_organizador button::before { content
 </style>
 """, unsafe_allow_html=True)
 
+
+st.markdown("""
+<style>
+.rz-nav-label {
+    display: block !important;
+    line-height: 1.35 !important;
+    margin-bottom: 0 !important;
+}
+.rz-nav-title-gap {
+    display: block;
+    width: 100%;
+    height: 0.58rem;
+    pointer-events: none;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
@@ -5401,7 +5418,10 @@ def mudar_pagina(nome_pagina):
 # BARRA LATERAL
 # ==============================================================================
 st.sidebar.markdown(
-    '<div class="rz-nav-label">Navegação</div>',
+    (
+        '<div class="rz-nav-label">Navegação</div>'
+        '<div class="rz-nav-title-gap" aria-hidden="true"></div>'
+    ),
     unsafe_allow_html=True,
 )
 
