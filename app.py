@@ -5734,6 +5734,80 @@ elif st.session_state['pagina_ativa'] == 'extratos':
 # TELA 3: ORGANIZADOR DE PLANILHAS POR EMPRESA
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'organizador':
+    st.markdown(
+        """
+        <style>
+        .rz-company-workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr);
+            gap: 0;
+            margin: -0.35rem 0 1.4rem;
+            border-top: 1px solid rgba(148, 163, 184, 0.22);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+        }
+        .rz-company-workspace__item {
+            min-width: 0;
+            padding: 0.85rem 1rem 0.8rem 0;
+        }
+        .rz-company-workspace__item + .rz-company-workspace__item {
+            padding-left: 1rem;
+            border-left: 1px solid rgba(148, 163, 184, 0.18);
+        }
+        .rz-company-workspace__label {
+            display: block;
+            margin-bottom: 0.22rem;
+            color: #7f93a5;
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.09em;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+        .rz-company-workspace__value {
+            display: block;
+            color: #e8eef5;
+            font-size: 0.84rem;
+            font-weight: 600;
+            line-height: 1.35;
+        }
+        [data-testid="stTabs"] {
+            margin-top: 0.15rem;
+        }
+        [data-testid="stTabs"] [data-baseweb="tab-list"] {
+            gap: 1.7rem !important;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.24) !important;
+        }
+        [data-testid="stTabs"] button[role="tab"] {
+            min-height: 2.65rem !important;
+            padding: 0 0 0.7rem !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            font-size: 0.83rem !important;
+            font-weight: 600 !important;
+        }
+        @media (max-width: 700px) {
+            .rz-company-workspace {
+                grid-template-columns: 1fr;
+            }
+            .rz-company-workspace__item,
+            .rz-company-workspace__item + .rz-company-workspace__item {
+                padding: 0.65rem 0;
+                border-left: 0;
+            }
+            .rz-company-workspace__item + .rz-company-workspace__item {
+                border-top: 1px solid rgba(148, 163, 184, 0.14);
+            }
+            [data-testid="stTabs"] [data-baseweb="tab-list"] {
+                gap: 1rem !important;
+            }
+            [data-testid="stTabs"] button[role="tab"] {
+                font-size: 0.76rem !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
     if 'empresa_organizador' not in st.session_state:
         st.session_state['empresa_organizador'] = None
     empresa_organizador = st.session_state['empresa_organizador']
@@ -5808,6 +5882,32 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         )
     ))
     st.markdown("---")
+
+    if empresa_organizador:
+        regime_workspace = (
+            empresa_catalogo_atual.get('regime', 'Regime cadastrado').title()
+            if empresa_catalogo_atual
+            else 'Regime cadastrado'
+        )
+        st.markdown(
+            f"""
+            <div class="rz-company-workspace" aria-label="Resumo da área da empresa">
+                <div class="rz-company-workspace__item">
+                    <span class="rz-company-workspace__label">Empresa</span>
+                    <span class="rz-company-workspace__value">{empresa_catalogo_atual.get('rotulo', 'Área individual') if empresa_catalogo_atual else 'Área individual'}</span>
+                </div>
+                <div class="rz-company-workspace__item">
+                    <span class="rz-company-workspace__label">Regime</span>
+                    <span class="rz-company-workspace__value">{regime_workspace}</span>
+                </div>
+                <div class="rz-company-workspace__item">
+                    <span class="rz-company-workspace__label">Ferramentas</span>
+                    <span class="rz-company-workspace__value">Organização · Base Inteligente</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     if empresa_organizador is None:
         def _normalizar_busca_empresa(valor):
@@ -6036,8 +6136,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         slug_empresa_autokraft = configuracao_empresa_autokraft["slug"]
 
         aba_operacoes_autokraft, aba_base_autokraft = st.tabs([
-            "Organizar e conferir",
-            "Base inteligente de Débito e Crédito"
+            "Organizar arquivos",
+            "Base Inteligente"
         ])
 
         with aba_base_autokraft:
@@ -6180,8 +6280,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         slug_accede = config_accede['slug']
 
         aba_operacoes_accede, aba_base_accede = st.tabs([
-            'Organizar e conferir',
-            'Base inteligente de Débito e Crédito'
+            'Organizar arquivos',
+            'Base Inteligente'
         ])
 
         with aba_base_accede:
@@ -6450,8 +6550,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
 
         aba_operacoes, aba_base_inteligente = st.tabs([
-            "Organizar e conferir",
-            "Base inteligente de Débito e Crédito"
+            "Organizar arquivos",
+            "Base Inteligente"
         ])
 
         with aba_base_inteligente:
@@ -7132,8 +7232,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         }
 
         aba_nibo, aba_base_dias = st.tabs([
-            'Organizar Nibo',
-            'Base inteligente de Débito e Crédito'
+            'Organizar arquivos',
+            'Base Inteligente'
         ])
 
         with aba_base_dias:
