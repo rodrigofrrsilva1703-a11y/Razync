@@ -5946,66 +5946,70 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.markdown(
             """
             <style>
-            [class*="st-key-org_pesquisa_empresa"] {
-                position: relative;
-                z-index: 20;
-                width: min(100%, 760px);
-                margin: 1.1rem auto 0;
+            [class*="st-key-org_seletor_empresa"] {
+                width: min(100%, 720px);
+                margin: 1.15rem auto 0;
             }
-            [class*="st-key-org_pesquisa_empresa"] [data-testid="stTextInput"] {
-                margin: 0 !important;
-            }
-            [class*="st-key-org_pesquisa_empresa"] [data-testid="stTextInput"] input {
-                min-height: 3.25rem;
-                padding: 0 1rem 0 2.9rem !important;
-                color: var(--text-color) !important;
+            [class*="st-key-org_seletor_empresa"] [data-testid="stPopover"] > button {
+                min-height: 3.35rem !important;
+                padding: 0 1rem !important;
+                justify-content: flex-start !important;
+                color: #9aabba !important;
                 background: rgba(148, 163, 184, 0.045) !important;
                 border: 1px solid rgba(148, 163, 184, 0.24) !important;
                 border-radius: 10px !important;
                 box-shadow: none !important;
                 font-size: 0.88rem !important;
+                font-weight: 500 !important;
+                text-align: left !important;
             }
-            [class*="st-key-org_pesquisa_empresa"]::before {
-                content: "⌕";
-                position: absolute;
-                z-index: 2;
-                top: 0.37rem;
-                left: 0.95rem;
+            [class*="st-key-org_seletor_empresa"] [data-testid="stPopover"] > button:hover {
+                color: var(--text-color) !important;
+                border-color: rgba(34, 191, 230, 0.55) !important;
+                background: rgba(34, 191, 230, 0.045) !important;
+            }
+            .rz-company-picker__eyebrow {
+                margin: 0 0 0.25rem;
                 color: #22bfe6;
-                font-size: 1.45rem;
-                line-height: 2rem;
-                pointer-events: none;
+                font-size: 0.65rem;
+                font-weight: 750;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
             }
-            [class*="st-key-org_pesquisa_empresa"] [data-testid="stTextInput"] input:focus {
-                border-color: rgba(34, 191, 230, 0.75) !important;
+            .rz-company-picker__title {
+                margin: 0 0 0.8rem;
+                color: var(--text-color);
+                font-size: 0.95rem;
+                font-weight: 680;
+            }
+            [class*="st-key-org_busca_no_popover"] [data-testid="stTextInput"] input {
+                min-height: 2.9rem;
+                color: var(--text-color) !important;
+                background: rgba(148, 163, 184, 0.055) !important;
+                border: 1px solid rgba(148, 163, 184, 0.22) !important;
+                border-radius: 8px !important;
+                box-shadow: none !important;
+                font-size: 0.84rem !important;
+            }
+            [class*="st-key-org_busca_no_popover"] [data-testid="stTextInput"] input:focus {
+                border-color: rgba(34, 191, 230, 0.72) !important;
                 box-shadow: 0 0 0 3px rgba(34, 191, 230, 0.08) !important;
-            }
-            [class*="st-key-org_resultados_pesquisa"] {
-                margin-top: 0.42rem;
-                padding: 0.2rem 0.3rem;
-                border: 1px solid rgba(148, 163, 184, 0.18);
-                border-radius: 10px;
-                background: var(--background-color);
-                box-shadow: 0 16px 36px rgba(2, 8, 23, 0.18);
-            }
-            [class*="st-key-org_resultados_pesquisa"] [data-testid="stCaptionContainer"] {
-                padding: 0.35rem 0.55rem 0.25rem;
             }
             [class*="st-key-org_resultado_empresa_"] button {
                 width: 100% !important;
-                min-height: 2.65rem !important;
-                padding: 0.48rem 0.62rem !important;
+                min-height: 2.55rem !important;
+                padding: 0.42rem 0.55rem !important;
                 justify-content: flex-start !important;
                 text-align: left !important;
                 border: 0 !important;
                 border-top: 1px solid rgba(148, 163, 184, 0.10) !important;
-                border-radius: 6px !important;
+                border-radius: 5px !important;
                 background: transparent !important;
                 box-shadow: none !important;
             }
             [class*="st-key-org_resultado_empresa_"] button p {
                 color: var(--text-color) !important;
-                font-size: 0.82rem !important;
+                font-size: 0.8rem !important;
                 font-weight: 500 !important;
                 margin: 0 !important;
             }
@@ -6016,9 +6020,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 color: #22bfe6 !important;
             }
             @media (max-width: 640px) {
-                [class*="st-key-org_pesquisa_empresa"] {
+                [class*="st-key-org_seletor_empresa"] {
                     width: 100%;
-                    margin-top: 0.7rem;
+                    margin-top: 0.75rem;
                 }
             }
             </style>
@@ -6026,25 +6030,36 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             unsafe_allow_html=True,
         )
 
-        with st.container(key='org_pesquisa_empresa'):
-            termo_busca_empresas = st.text_input(
-                'Pesquisar empresa',
-                placeholder='Pesquisar empresa por código ou nome',
-                key='org_busca_empresas_catalogo',
-                label_visibility='collapsed',
-            )
-            termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
-
-            if termo_normalizado:
-                empresas_encontradas = []
-                for empresa_catalogo in empresas_catalogo_completo:
-                    alvo = _normalizar_busca_empresa(
-                        f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
+        with st.container(key='org_seletor_empresa'):
+            with st.popover(
+                '⌕   Selecionar empresa',
+                use_container_width=True,
+            ):
+                st.markdown(
+                    '<p class="rz-company-picker__eyebrow">Empresas</p>'
+                    '<p class="rz-company-picker__title">Pesquisar empresa</p>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key='org_busca_no_popover'):
+                    termo_busca_empresas = st.text_input(
+                        'Pesquisar empresa',
+                        placeholder='Digite o código ou o nome',
+                        key='org_busca_empresas_catalogo',
+                        label_visibility='collapsed',
                     )
-                    if termo_normalizado in alvo:
-                        empresas_encontradas.append(empresa_catalogo)
+                termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
 
-                with st.container(key='org_resultados_pesquisa'):
+                if not termo_normalizado:
+                    st.caption('Digite para localizar uma empresa.')
+                else:
+                    empresas_encontradas = []
+                    for empresa_catalogo in empresas_catalogo_completo:
+                        alvo = _normalizar_busca_empresa(
+                            f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
+                        )
+                        if termo_normalizado in alvo:
+                            empresas_encontradas.append(empresa_catalogo)
+
                     if not empresas_encontradas:
                         st.caption('Nenhuma empresa encontrada.')
                     else:
