@@ -5234,6 +5234,102 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
 </style>
 """, unsafe_allow_html=True)
 
+
+st.markdown("""
+<style>
+/* Alinhamento fino da Home após inspeção em 1352x615. */
+.rz-dashboard-intro {
+    max-width: 760px !important;
+    padding-bottom: 1rem !important;
+}
+.rz-dashboard-intro .rz-home-title {
+    font-size: clamp(1.9rem, 3.3vw, 2.65rem) !important;
+    line-height: 1.06 !important;
+}
+.rz-dashboard-grid-title {
+    height: 1.35rem;
+    display: flex;
+    align-items: center;
+    margin: 0.55rem 0 0.45rem !important;
+}
+
+.st-key-home_action_organizador button,
+.st-key-home_action_extratos button,
+.st-key-home_action_razao button {
+    position: relative !important;
+    width: 100% !important;
+    min-height: 92px !important;
+    height: 92px !important;
+    padding: 0.9rem 1rem 0.9rem 3.8rem !important;
+    margin-bottom: 0.48rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
+}
+.st-key-home_action_organizador button p,
+.st-key-home_action_extratos button p,
+.st-key-home_action_razao button p {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+    white-space: pre-line !important;
+}
+.st-key-home_action_organizador button::before,
+.st-key-home_action_extratos button::before,
+.st-key-home_action_razao button::before {
+    position: absolute;
+    left: 1.15rem;
+    top: 50%;
+    width: 1.65rem;
+    height: 1.65rem;
+    display: grid;
+    place-items: center;
+    transform: translateY(-50%);
+    border: 1px solid var(--rz-line);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--rz-panel) 82%, transparent);
+    color: var(--rz-accent);
+    font-size: 0.82rem;
+    line-height: 1;
+}
+.st-key-home_action_organizador button::before { content: "▤"; }
+.st-key-home_action_extratos button::before { content: "⇄"; }
+.st-key-home_action_razao button::before { content: "✓"; }
+
+.rz-overview-panel {
+    min-height: 292px !important;
+    height: 292px !important;
+    padding: 1rem 1.05rem !important;
+    box-sizing: border-box !important;
+}
+.rz-overview-copy {
+    margin-bottom: 0.72rem !important;
+}
+.rz-overview-row {
+    padding: 0.55rem 0 !important;
+}
+
+@media (max-width: 900px) {
+    .st-key-home_action_organizador button,
+    .st-key-home_action_extratos button,
+    .st-key-home_action_razao button {
+        min-height: 86px !important;
+        height: 86px !important;
+        padding-left: 3.45rem !important;
+    }
+    .rz-overview-panel {
+        height: auto !important;
+        min-height: 0 !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
@@ -5350,21 +5446,21 @@ if st.session_state['pagina_ativa'] == 'home':
             unsafe_allow_html=True,
         )
         st.button(
-            "▤  **Organizador de Planilhas**\nFluxos específicos, empresas e Base Inteligente.",
+            "**Organizador de Planilhas**\nFluxos específicos, empresas e Base Inteligente.",
             key="home_action_organizador",
             use_container_width=True,
             on_click=mudar_pagina,
             args=('organizador',),
         )
         st.button(
-            "⇄  **Conversor de Extratos**\nPDF, OFX, CSV e Excel para o padrão Domínio.",
+            "**Conversor de Extratos**\nPDF, OFX, CSV e Excel para o padrão Domínio.",
             key="home_action_extratos",
             use_container_width=True,
             on_click=mudar_pagina,
             args=('extratos',),
         )
         st.button(
-            "✓  **Conciliação com Razão**\nConferência diária e identificação de divergências.",
+            "**Conciliação com Razão**\nConferência diária e identificação de divergências.",
             key="home_action_razao",
             use_container_width=True,
             on_click=mudar_pagina,
