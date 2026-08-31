@@ -5330,6 +5330,51 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+st.markdown("""
+<style>
+/* Grade fixa de ícones e textos da navegação lateral. */
+.rz-nav-label {
+    padding-left: 0.85rem !important;
+    margin-top: 0.65rem !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button {
+    position: relative !important;
+    width: 100% !important;
+    min-height: 2.5rem !important;
+    padding: 0.48rem 0.7rem 0.48rem 2.55rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button p {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+    white-space: nowrap !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button::before {
+    position: absolute;
+    left: 0.86rem;
+    top: 50%;
+    width: 1rem;
+    display: block;
+    transform: translateY(-50%);
+    color: currentColor;
+    font-size: 0.78rem;
+    line-height: 1;
+    text-align: center;
+}
+section[data-testid="stSidebar"] .st-key-sb_home button::before { content: "⌂"; }
+section[data-testid="stSidebar"] .st-key-sb_extratos button::before { content: "⇄"; }
+section[data-testid="stSidebar"] .st-key-sb_razao button::before { content: "✓"; }
+section[data-testid="stSidebar"] .st-key-sb_organizador button::before { content: "▤"; }
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
@@ -5362,7 +5407,7 @@ st.sidebar.markdown(
 
 pagina_sidebar = st.session_state.get('pagina_ativa', 'home')
 st.sidebar.button(
-    "⌂  Início",
+    "Início",
     use_container_width=True,
     key="sb_home",
     type="primary" if pagina_sidebar == "home" else "tertiary",
@@ -5370,7 +5415,7 @@ st.sidebar.button(
     args=('home',),
 )
 st.sidebar.button(
-    "⇄  Conversor de Extratos",
+    "Conversor de Extratos",
     use_container_width=True,
     key="sb_extratos",
     type="primary" if pagina_sidebar == "extratos" else "tertiary",
@@ -5378,7 +5423,7 @@ st.sidebar.button(
     args=('extratos',),
 )
 st.sidebar.button(
-    "✓  Conciliação com Razão",
+    "Conciliação com Razão",
     use_container_width=True,
     key="sb_razao",
     type="primary" if pagina_sidebar == "razao" else "tertiary",
@@ -5386,7 +5431,7 @@ st.sidebar.button(
     args=('razao',),
 )
 st.sidebar.button(
-    "▤  Organizador de Planilhas",
+    "Organizador de Planilhas",
     use_container_width=True,
     key="sb_organizador",
     type="primary" if pagina_sidebar == "organizador" else "tertiary",
