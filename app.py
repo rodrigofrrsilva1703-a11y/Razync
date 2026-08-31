@@ -4999,17 +4999,112 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             if empresa.get('chave_sistema')
         ]
 
-        termo_busca_empresas = st.text_input(
-            'Pesquisar empresa',
-            placeholder='Digite o código ou nome da empresa...',
-            key='org_busca_empresas_catalogo'
-        )
-        termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
-
         st.markdown(
             """
             <style>
-            [class*="st-key-org_resultado_empresa_"] button,
+            [class*="st-key-org_busca_card_flutuante"] {
+                position: relative;
+                z-index: 20;
+                max-width: 920px;
+                margin: 0 auto 1.5rem auto;
+                padding: 1.35rem 1.4rem 1.25rem;
+                border: 1px solid rgba(34, 211, 238, 0.24);
+                border-radius: 22px;
+                background:
+                    linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(2, 8, 23, 0.92));
+                box-shadow:
+                    0 24px 70px rgba(2, 8, 23, 0.34),
+                    0 0 0 1px rgba(255, 255, 255, 0.025) inset;
+                backdrop-filter: blur(18px);
+                -webkit-backdrop-filter: blur(18px);
+            }
+            [class*="st-key-org_busca_card_flutuante"]::before {
+                content: "";
+                position: absolute;
+                top: -1px;
+                left: 9%;
+                width: 42%;
+                height: 2px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, transparent, #22d3ee, transparent);
+                opacity: 0.9;
+            }
+            .razync-search-eyebrow {
+                color: #22d3ee;
+                font-size: 0.72rem;
+                font-weight: 800;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                margin-bottom: 0.25rem;
+            }
+            .razync-search-title {
+                color: #f8fafc;
+                font-size: clamp(1.15rem, 2vw, 1.45rem);
+                font-weight: 750;
+                letter-spacing: -0.025em;
+                margin: 0;
+            }
+            .razync-search-copy {
+                color: #94a3b8;
+                font-size: 0.9rem;
+                margin: 0.3rem 0 1rem;
+            }
+            [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input {
+                min-height: 3.15rem;
+                color: #f8fafc !important;
+                background: rgba(15, 23, 42, 0.78) !important;
+                border: 1px solid rgba(148, 163, 184, 0.22) !important;
+                border-radius: 14px !important;
+                padding-left: 1rem !important;
+                box-shadow: none !important;
+                transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+            }
+            [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input:focus {
+                border-color: rgba(34, 211, 238, 0.9) !important;
+                box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.11) !important;
+                transform: translateY(-1px);
+            }
+            [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input::placeholder {
+                color: #64748b !important;
+            }
+            [class*="st-key-org_resultados_flutuantes"] {
+                position: relative;
+                margin-top: 0.65rem;
+                padding: 0.55rem;
+                border: 1px solid rgba(148, 163, 184, 0.18);
+                border-radius: 16px;
+                background: rgba(2, 8, 23, 0.97);
+                box-shadow: 0 22px 55px rgba(0, 0, 0, 0.34);
+                animation: razyncSearchReveal 170ms ease-out;
+            }
+            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button {
+                width: 100% !important;
+                min-height: 3rem !important;
+                padding: 0.65rem 0.8rem !important;
+                justify-content: flex-start !important;
+                text-align: left !important;
+                border: 1px solid transparent !important;
+                border-radius: 11px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+            }
+            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button p {
+                color: #dbeafe !important;
+                font-size: 0.91rem !important;
+                font-weight: 600 !important;
+                line-height: 1.35 !important;
+                margin: 0 !important;
+            }
+            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button:hover,
+            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button:focus {
+                background: rgba(8, 145, 178, 0.12) !important;
+                border-color: rgba(34, 211, 238, 0.28) !important;
+                transform: translateX(3px);
+            }
+            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button:hover p {
+                color: #67e8f9 !important;
+            }
             [class*="st-key-org_empresa_ativa_"] button {
                 background: transparent !important;
                 border: 0 !important;
@@ -5017,59 +5112,92 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 padding: 0 !important;
                 min-height: auto !important;
                 height: auto !important;
-                border-radius: 0 !important;
                 justify-content: flex-start !important;
             }
-            [class*="st-key-org_resultado_empresa_"] button p,
-            [class*="st-key-org_empresa_ativa_"] button p {
-                font-weight: 500 !important;
-                line-height: 1.45 !important;
-                margin: 0 !important;
-            }
-            [class*="st-key-org_resultado_empresa_"] button:hover,
-            [class*="st-key-org_empresa_ativa_"] button:hover,
-            [class*="st-key-org_resultado_empresa_"] button:focus,
-            [class*="st-key-org_empresa_ativa_"] button:focus {
-                background: transparent !important;
-                border: 0 !important;
-                box-shadow: none !important;
-            }
-            [class*="st-key-org_resultado_empresa_"] button:hover p,
             [class*="st-key-org_empresa_ativa_"] button:hover p {
                 color: #06b6d4 !important;
                 text-decoration: underline !important;
                 text-underline-offset: 3px !important;
+            }
+            @keyframes razyncSearchReveal {
+                from { opacity: 0; transform: translateY(-7px) scale(0.992); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @media (max-width: 640px) {
+                [class*="st-key-org_busca_card_flutuante"] {
+                    padding: 1.05rem;
+                    border-radius: 18px;
+                }
+                [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button p {
+                    font-size: 0.84rem !important;
+                }
+            }
+            html[data-theme="light"] [class*="st-key-org_busca_card_flutuante"],
+            body:has([data-baseweb="base-input"]) [data-theme="light"] [class*="st-key-org_busca_card_flutuante"] {
+                background: rgba(255, 255, 255, 0.95);
+                border-color: rgba(8, 145, 178, 0.2);
+                box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
             }
             </style>
             """,
             unsafe_allow_html=True,
         )
 
-        if not termo_normalizado:
-            st.caption('Digite um código ou parte do nome para localizar a empresa.')
-        else:
-            empresas_encontradas = []
-            for empresa_catalogo in empresas_catalogo_completo:
-                alvo = _normalizar_busca_empresa(
-                    f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
-                )
-                if termo_normalizado in alvo:
-                    empresas_encontradas.append(empresa_catalogo)
+        with st.container(key='org_busca_card_flutuante'):
+            st.markdown(
+                """
+                <div class="razync-search-eyebrow">Diretório de empresas</div>
+                <div class="razync-search-title">Qual empresa você deseja acessar?</div>
+                <div class="razync-search-copy">
+                    Pesquise pelo código ou por qualquer parte do nome. Os resultados abrem em um clique.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            termo_busca_empresas = st.text_input(
+                'Pesquisar empresa',
+                placeholder='Pesquisar por código ou nome da empresa...',
+                key='org_busca_empresas_catalogo',
+                label_visibility='collapsed',
+            )
+            termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
 
-            if not empresas_encontradas:
-                st.info('Nenhuma empresa encontrada.')
+            if not termo_normalizado:
+                st.caption('Comece a digitar para visualizar as empresas.')
             else:
-                st.caption(f"{len(empresas_encontradas)} empresa(s) encontrada(s). Clique no nome para abrir.")
-                for empresa_catalogo in empresas_encontradas[:10]:
-                    if st.button(
-                        f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
-                        type='tertiary',
-                        use_container_width=False,
-                        key=f"org_resultado_empresa_{empresa_catalogo['codigo']}"
-                    ):
-                        _abrir_empresa_catalogo(empresa_catalogo)
-                if len(empresas_encontradas) > 10:
-                    st.caption('Refine a pesquisa para ver resultados mais específicos.')
+                empresas_encontradas = []
+                for empresa_catalogo in empresas_catalogo_completo:
+                    alvo = _normalizar_busca_empresa(
+                        f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
+                    )
+                    if termo_normalizado in alvo:
+                        empresas_encontradas.append(empresa_catalogo)
+
+                with st.container(key='org_resultados_flutuantes'):
+                    if not empresas_encontradas:
+                        st.info('Nenhuma empresa encontrada. Tente outro código ou nome.')
+                    else:
+                        st.caption(
+                            f"{len(empresas_encontradas)} resultado(s) · clique para abrir"
+                        )
+                        for empresa_catalogo in empresas_encontradas[:8]:
+                            regime_empresa = empresa_catalogo.get(
+                                'regime', 'Regime não informado'
+                            ).title()
+                            if st.button(
+                                (
+                                    f"{empresa_catalogo['codigo']}  ·  "
+                                    f"{empresa_catalogo['nome']}  —  {regime_empresa}"
+                                ),
+                                type='tertiary',
+                                use_container_width=True,
+                                key=f"org_resultado_empresa_{empresa_catalogo['codigo']}"
+                            ):
+                                _abrir_empresa_catalogo(empresa_catalogo)
+                        if len(empresas_encontradas) > 8:
+                            st.caption(
+                                'Há mais resultados. Digite mais letras para refinar a pesquisa.'
+                            )
 
         with st.expander('Empresas com ferramentas', expanded=False):
             st.caption('Acesso rápido às empresas que já possuem ferramentas configuradas.')
