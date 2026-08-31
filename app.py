@@ -5946,198 +5946,148 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.markdown(
             """
             <style>
-            .rz-search-section-title {
-                margin: 0 0 0.5rem;
-                color: var(--text-color);
-                font-size: 0.79rem;
-                font-weight: 650;
+            .rz-company-table-heading {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 1rem;
+                margin: 0 0 0.55rem;
             }
-            .rz-search-section-help {
-                margin: 0.45rem 0 1.45rem;
-                color: #7f91a2;
-                font-size: 0.75rem;
-            }
-            [class*="st-key-org_busca_card_flutuante"] {
-                position: relative;
-                z-index: 20;
-                width: 100%;
+            .rz-company-table-heading__title {
                 margin: 0;
+                color: var(--text-color);
+                font-size: 0.82rem;
+                font-weight: 680;
             }
-            [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] {
-                margin: 0 !important;
+            .rz-company-table-heading__hint {
+                margin: 0;
+                color: #7f91a2;
+                font-size: 0.73rem;
             }
-            [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input {
-                min-height: 3.2rem;
-                padding: 0 1rem 0 2.9rem !important;
+            [class*="st-key-org_busca_empresas_tabela"] {
+                position: relative;
+                margin-bottom: 0.85rem;
+            }
+            [class*="st-key-org_busca_empresas_tabela"] [data-testid="stTextInput"] input {
+                min-height: 3rem;
+                padding: 0 1rem 0 2.8rem !important;
                 color: var(--text-color) !important;
-                background: rgba(148, 163, 184, 0.045) !important;
-                border: 1px solid rgba(148, 163, 184, 0.24) !important;
-                border-radius: 10px !important;
+                background: rgba(148, 163, 184, 0.04) !important;
+                border: 1px solid rgba(148, 163, 184, 0.22) !important;
+                border-radius: 9px !important;
                 box-shadow: none !important;
-                font-size: 0.88rem !important;
+                font-size: 0.86rem !important;
             }
-            [class*="st-key-org_busca_card_flutuante"]::before {
+            [class*="st-key-org_busca_empresas_tabela"]::before {
                 content: "⌕";
                 position: absolute;
                 z-index: 2;
-                top: 0.34rem;
-                left: 0.95rem;
+                top: 0.28rem;
+                left: 0.92rem;
                 color: #22bfe6;
-                font-size: 1.45rem;
+                font-size: 1.4rem;
                 line-height: 2rem;
                 pointer-events: none;
             }
-            [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input:focus {
-                border-color: rgba(34, 191, 230, 0.75) !important;
+            [class*="st-key-org_busca_empresas_tabela"] [data-testid="stTextInput"] input:focus {
+                border-color: rgba(34, 191, 230, 0.72) !important;
                 box-shadow: 0 0 0 3px rgba(34, 191, 230, 0.08) !important;
             }
-            [class*="st-key-org_resultados_flutuantes"] {
-                margin-top: 0.4rem;
-                padding: 0.25rem;
+            [class*="st-key-org_tabela_empresas"] [data-testid="stDataFrame"] {
                 border: 1px solid rgba(148, 163, 184, 0.18);
                 border-radius: 10px;
-                background: var(--background-color);
-                box-shadow: 0 16px 36px rgba(2, 8, 23, 0.2);
-            }
-            [class*="st-key-org_resultados_flutuantes"] [data-testid="stCaptionContainer"] {
-                padding: 0.3rem 0.6rem;
-            }
-            [class*="st-key-org_resultado_empresa_"] button {
-                width: 100% !important;
-                min-height: 2.7rem !important;
-                padding: 0.45rem 0.65rem !important;
-                justify-content: flex-start !important;
-                text-align: left !important;
-                border: 0 !important;
-                border-top: 1px solid rgba(148, 163, 184, 0.1) !important;
-                border-radius: 6px !important;
-                background: transparent !important;
-                box-shadow: none !important;
-            }
-            [class*="st-key-org_resultado_empresa_"] button p {
-                font-size: 0.83rem !important;
-                font-weight: 500 !important;
-            }
-            [class*="st-key-org_resultado_empresa_"] button:hover {
-                background: rgba(34, 191, 230, 0.065) !important;
-            }
-            .rz-active-companies-heading {
-                margin: 0 0 0.22rem;
-                color: var(--text-color);
-                font-size: 0.84rem;
-                font-weight: 650;
-            }
-            .rz-active-companies-help {
-                margin: 0 0 0.75rem;
-                color: #7f91a2;
-                font-size: 0.74rem;
-            }
-            [class*="st-key-org_empresas_ativas"] {
-                margin-top: 0.15rem;
-                padding-top: 1rem;
-                border-top: 1px solid rgba(148, 163, 184, 0.18);
-            }
-            [class*="st-key-org_empresa_ativa_"] button {
-                width: 100% !important;
-                min-height: 2.45rem !important;
-                padding: 0.4rem 0.65rem !important;
-                justify-content: flex-start !important;
-                text-align: left !important;
-                border: 1px solid rgba(148, 163, 184, 0.14) !important;
-                border-radius: 7px !important;
-                background: transparent !important;
-                box-shadow: none !important;
-            }
-            [class*="st-key-org_empresa_ativa_"] button p {
                 overflow: hidden;
-                color: var(--text-color) !important;
-                font-size: 0.78rem !important;
-                font-weight: 520 !important;
-                text-overflow: ellipsis;
-                white-space: nowrap;
             }
-            [class*="st-key-org_empresa_ativa_"] button:hover {
-                border-color: rgba(34, 191, 230, 0.42) !important;
-                background: rgba(34, 191, 230, 0.05) !important;
+            .rz-company-table-footer {
+                margin: 0.55rem 0 0;
+                color: #718394;
+                font-size: 0.71rem;
             }
             @media (max-width: 640px) {
-                [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input {
-                    min-height: 3rem;
+                .rz-company-table-heading {
+                    display: block;
+                }
+                .rz-company-table-heading__hint {
+                    margin-top: 0.2rem;
                 }
             }
             </style>
-            <p class="rz-search-section-title">Pesquisar empresa</p>
+            <div class="rz-company-table-heading">
+                <p class="rz-company-table-heading__title">Lista de empresas</p>
+                <p class="rz-company-table-heading__hint">Selecione uma linha para abrir</p>
+            </div>
             """,
             unsafe_allow_html=True,
         )
 
-        with st.container(key='org_busca_card_flutuante'):
+        with st.container(key='org_busca_empresas_tabela'):
             termo_busca_empresas = st.text_input(
                 'Pesquisar empresa',
-                placeholder='Digite o código ou o nome da empresa',
+                placeholder='Pesquisar por código ou nome',
                 key='org_busca_empresas_catalogo',
                 label_visibility='collapsed',
             )
-            termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
+        termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
+        empresas_filtradas = []
+        for empresa_catalogo in empresas_catalogo_completo:
+            alvo = _normalizar_busca_empresa(
+                f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
+            )
+            if not termo_normalizado or termo_normalizado in alvo:
+                empresas_filtradas.append(empresa_catalogo)
 
-            if termo_normalizado:
-                empresas_encontradas = []
-                for empresa_catalogo in empresas_catalogo_completo:
-                    alvo = _normalizar_busca_empresa(
-                        f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
-                    )
-                    if termo_normalizado in alvo:
-                        empresas_encontradas.append(empresa_catalogo)
+        dados_tabela_empresas = pd.DataFrame([
+            {
+                'Código': empresa_catalogo['codigo'],
+                'Empresa': empresa_catalogo['nome'],
+                'Regime': empresa_catalogo.get(
+                    'regime', 'Não informado'
+                ).title(),
+                'Status': (
+                    'Ferramentas disponíveis'
+                    if empresa_catalogo.get('chave_sistema')
+                    else 'Aguardando configuração'
+                ),
+            }
+            for empresa_catalogo in empresas_filtradas
+        ])
 
-                with st.container(key='org_resultados_flutuantes'):
-                    if not empresas_encontradas:
-                        st.caption('Nenhuma empresa encontrada.')
-                    else:
-                        st.caption(f"{len(empresas_encontradas)} resultado(s)")
-                        for empresa_catalogo in empresas_encontradas[:8]:
-                            regime_empresa = empresa_catalogo.get(
-                                'regime', 'Regime não informado'
-                            ).title()
-                            if st.button(
-                                (
-                                    f"{empresa_catalogo['codigo']}  ·  "
-                                    f"{empresa_catalogo['nome']}  ·  {regime_empresa}"
-                                ),
-                                type='tertiary',
-                                use_container_width=True,
-                                key=f"org_resultado_empresa_{empresa_catalogo['codigo']}"
-                            ):
-                                _abrir_empresa_catalogo(empresa_catalogo)
-                        if len(empresas_encontradas) > 8:
-                            st.caption('Continue digitando para refinar os resultados.')
+        with st.container(key='org_tabela_empresas'):
+            if dados_tabela_empresas.empty:
+                st.info('Nenhuma empresa encontrada. Verifique o código ou o nome.')
+            else:
+                evento_tabela_empresas = st.dataframe(
+                    dados_tabela_empresas,
+                    hide_index=True,
+                    use_container_width=True,
+                    height=min(470, 38 + (len(dados_tabela_empresas) * 35)),
+                    column_config={
+                        'Código': st.column_config.TextColumn('Código', width='small'),
+                        'Empresa': st.column_config.TextColumn('Empresa', width='large'),
+                        'Regime': st.column_config.TextColumn('Regime', width='medium'),
+                        'Status': st.column_config.TextColumn('Status', width='medium'),
+                    },
+                    on_select='rerun',
+                    selection_mode='single-row',
+                    key='org_diretorio_empresas',
+                )
+                linhas_selecionadas = evento_tabela_empresas.selection.rows
+                if linhas_selecionadas:
+                    indice_selecionado = linhas_selecionadas[0]
+                    if 0 <= indice_selecionado < len(empresas_filtradas):
+                        _abrir_empresa_catalogo(
+                            empresas_filtradas[indice_selecionado]
+                        )
 
         st.markdown(
-            f'<p class="rz-search-section-help">Pesquise entre {len(empresas_catalogo_completo)} empresas cadastradas.</p>',
+            (
+                f'<p class="rz-company-table-footer">'
+                f'{len(empresas_filtradas)} de {len(empresas_catalogo_completo)} empresas'
+                f' · {len(empresas_ativas)} com ferramentas disponíveis'
+                f'</p>'
+            ),
             unsafe_allow_html=True,
         )
-
-        with st.container(key='org_empresas_ativas'):
-            st.markdown(
-                '<p class="rz-active-companies-heading">Empresas com ferramentas</p>'
-                '<p class="rz-active-companies-help">Acesso rápido às áreas já configuradas.</p>',
-                unsafe_allow_html=True,
-            )
-            colunas_empresas_ativas = st.columns(2, gap='small')
-            for indice_empresa, empresa_catalogo in enumerate(empresas_ativas):
-                with colunas_empresas_ativas[indice_empresa % 2]:
-                    regime_ativo = empresa_catalogo.get(
-                        'regime', 'Regime não informado'
-                    ).title()
-                    if st.button(
-                        (
-                            f"{empresa_catalogo['codigo']} · "
-                            f"{empresa_catalogo['nome']} · {regime_ativo}"
-                        ),
-                        type='tertiary',
-                        use_container_width=True,
-                        key=f"org_empresa_ativa_{empresa_catalogo['codigo']}"
-                    ):
-                        _abrir_empresa_catalogo(empresa_catalogo)
 
     if empresa_catalogo_atual and not empresa_catalogo_atual.get('chave_sistema'):
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
