@@ -6188,10 +6188,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         contas_dias_pereira = {'itau': '508', 'banco_brasil': '8'}
         bancos_dias_pereira = {
             'Itaú · Conta contábil 508': {
-                'slug': 'itau', 'descricao': 'BANCO ITAÚ', 'arquivo': 'Itau'
+                'slug': 'itau', 'descricao': 'BANCO ITAÚ', 'arquivo': 'Itau', 'aba': 'Itaú'
             },
             'Banco do Brasil · Conta contábil 8': {
-                'slug': 'banco_brasil', 'descricao': 'BANCO DO BRASIL', 'arquivo': 'Banco_do_Brasil'
+                'slug': 'banco_brasil', 'descricao': 'BANCO DO BRASIL', 'arquivo': 'Banco_do_Brasil', 'aba': 'Banco do Brasil'
             },
         }
 
@@ -6413,7 +6413,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                 )
                             except Exception as erro_classificacao_banco:
                                 st.info(
-                                    f"A aba {config_banco_nibo['nome']} foi gerada normalmente, "
+                                    f"A aba {config_banco_nibo['aba']} foi gerada normalmente, "
                                     'mas a Base Inteligente não pôde ser aplicada nela agora: '
                                     f'{erro_classificacao_banco}'
                                 )
@@ -6425,7 +6425,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             resumo_banco_nibo.get('somente_banco', 0) or 0
                         )
                         modelos_nibo_por_banco.append(
-                            (config_banco_nibo['nome'], arquivo_banco_nibo)
+                            (config_banco_nibo['aba'], arquivo_banco_nibo)
                         )
 
                     if erro_base_nibo:
