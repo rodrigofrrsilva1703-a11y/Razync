@@ -5863,7 +5863,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             'dias_pereira': '1529 - Dias e Pereira'
         }.get(
             empresa_organizador,
-            empresa_catalogo_atual['rotulo'] if empresa_catalogo_atual else 'Empresas'
+            empresa_catalogo_atual['rotulo'] if empresa_catalogo_atual else 'Organizador de Planilhas'
         ))
     st.caption({
         'nova_geracao': f'Organize, confira e classifique os movimentos da {titulo_nova_geracao_atual}.',
@@ -5878,7 +5878,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         (
             f"{empresa_catalogo_atual['regime'].title()} · Área cadastrada para receber ferramentas específicas."
             if empresa_catalogo_atual
-            else 'Encontre uma empresa e acesse suas ferramentas de organização e classificação.'
+            else 'Pesquise uma empresa para acessar sua área de organização e Base Inteligente.'
         )
     ))
     st.markdown("---")
@@ -5946,165 +5946,135 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.markdown(
             """
             <style>
-            .rz-company-directory {
-                max-width: 920px;
-                margin: 0 auto 1.15rem;
-            }
-            .rz-company-directory__eyebrow {
-                margin-bottom: 0.35rem;
-                color: #22bfe6;
-                font-size: 0.68rem;
-                font-weight: 750;
-                letter-spacing: 0.1em;
-                text-transform: uppercase;
-            }
-            .rz-company-directory__heading {
-                margin: 0;
+            .rz-search-section-title {
+                margin: 0 0 0.5rem;
                 color: var(--text-color);
-                font-size: 1.12rem;
-                font-weight: 680;
-                line-height: 1.35;
+                font-size: 0.79rem;
+                font-weight: 650;
             }
-            .rz-company-directory__meta {
-                margin: 0.28rem 0 0;
-                color: #8192a3;
-                font-size: 0.8rem;
-                line-height: 1.5;
+            .rz-search-section-help {
+                margin: 0.45rem 0 1.45rem;
+                color: #7f91a2;
+                font-size: 0.75rem;
             }
             [class*="st-key-org_busca_card_flutuante"] {
                 position: relative;
                 z-index: 20;
-                max-width: 920px;
-                margin: 0 auto 1rem;
+                width: 100%;
+                margin: 0;
             }
             [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] {
                 margin: 0 !important;
             }
             [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input {
-                min-height: 3.45rem;
+                min-height: 3.2rem;
+                padding: 0 1rem 0 2.9rem !important;
                 color: var(--text-color) !important;
-                background: rgba(148, 163, 184, 0.055) !important;
-                border: 1px solid rgba(148, 163, 184, 0.25) !important;
-                border-radius: 12px !important;
-                padding: 0 1rem 0 3rem !important;
+                background: rgba(148, 163, 184, 0.045) !important;
+                border: 1px solid rgba(148, 163, 184, 0.24) !important;
+                border-radius: 10px !important;
                 box-shadow: none !important;
-                font-size: 0.92rem !important;
-                transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+                font-size: 0.88rem !important;
             }
             [class*="st-key-org_busca_card_flutuante"]::before {
                 content: "⌕";
                 position: absolute;
                 z-index: 2;
-                top: 0.48rem;
-                left: 1rem;
+                top: 0.34rem;
+                left: 0.95rem;
                 color: #22bfe6;
-                font-size: 1.55rem;
+                font-size: 1.45rem;
                 line-height: 2rem;
                 pointer-events: none;
             }
             [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input:focus {
-                border-color: rgba(34, 191, 230, 0.78) !important;
-                background: rgba(34, 191, 230, 0.035) !important;
-                box-shadow: 0 0 0 3px rgba(34, 191, 230, 0.09) !important;
+                border-color: rgba(34, 191, 230, 0.75) !important;
+                box-shadow: 0 0 0 3px rgba(34, 191, 230, 0.08) !important;
             }
             [class*="st-key-org_resultados_flutuantes"] {
-                position: relative;
-                margin-top: 0.42rem;
-                padding: 0.3rem;
-                border: 1px solid rgba(148, 163, 184, 0.19);
-                border-radius: 12px;
+                margin-top: 0.4rem;
+                padding: 0.25rem;
+                border: 1px solid rgba(148, 163, 184, 0.18);
+                border-radius: 10px;
                 background: var(--background-color);
-                box-shadow: 0 18px 42px rgba(2, 8, 23, 0.22);
-                animation: razyncSearchReveal 140ms ease-out;
+                box-shadow: 0 16px 36px rgba(2, 8, 23, 0.2);
             }
             [class*="st-key-org_resultados_flutuantes"] [data-testid="stCaptionContainer"] {
-                padding: 0.35rem 0.65rem 0.28rem;
+                padding: 0.3rem 0.6rem;
             }
-            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button {
+            [class*="st-key-org_resultado_empresa_"] button {
                 width: 100% !important;
-                min-height: 2.85rem !important;
-                padding: 0.54rem 0.7rem !important;
+                min-height: 2.7rem !important;
+                padding: 0.45rem 0.65rem !important;
                 justify-content: flex-start !important;
                 text-align: left !important;
                 border: 0 !important;
-                border-top: 1px solid rgba(148, 163, 184, 0.10) !important;
+                border-top: 1px solid rgba(148, 163, 184, 0.1) !important;
+                border-radius: 6px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+            }
+            [class*="st-key-org_resultado_empresa_"] button p {
+                font-size: 0.83rem !important;
+                font-weight: 500 !important;
+            }
+            [class*="st-key-org_resultado_empresa_"] button:hover {
+                background: rgba(34, 191, 230, 0.065) !important;
+            }
+            .rz-active-companies-heading {
+                margin: 0 0 0.22rem;
+                color: var(--text-color);
+                font-size: 0.84rem;
+                font-weight: 650;
+            }
+            .rz-active-companies-help {
+                margin: 0 0 0.75rem;
+                color: #7f91a2;
+                font-size: 0.74rem;
+            }
+            [class*="st-key-org_empresas_ativas"] {
+                margin-top: 0.15rem;
+                padding-top: 1rem;
+                border-top: 1px solid rgba(148, 163, 184, 0.18);
+            }
+            [class*="st-key-org_empresa_ativa_"] button {
+                width: 100% !important;
+                min-height: 2.45rem !important;
+                padding: 0.4rem 0.65rem !important;
+                justify-content: flex-start !important;
+                text-align: left !important;
+                border: 1px solid rgba(148, 163, 184, 0.14) !important;
                 border-radius: 7px !important;
                 background: transparent !important;
                 box-shadow: none !important;
             }
-            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button p {
-                color: var(--text-color) !important;
-                font-size: 0.85rem !important;
-                font-weight: 520 !important;
-                margin: 0 !important;
-            }
-            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button:hover,
-            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button:focus {
-                background: rgba(34, 191, 230, 0.07) !important;
-            }
-            [class*="st-key-org_resultados_flutuantes"] [class*="st-key-org_resultado_empresa_"] button:hover p {
-                color: #22bfe6 !important;
-            }
-            [class*="st-key-org_empresas_ativas"] {
-                max-width: 920px;
-                margin: 0 auto;
-                border-top: 1px solid rgba(148, 163, 184, 0.20);
-                padding-top: 0.55rem;
-            }
-            [class*="st-key-org_empresas_ativas"] details {
-                border: 0 !important;
-                background: transparent !important;
-                box-shadow: none !important;
-            }
-            [class*="st-key-org_empresas_ativas"] details summary {
-                padding: 0.75rem 0 !important;
-                color: var(--text-color) !important;
-                font-size: 0.82rem !important;
-                font-weight: 620 !important;
-            }
-            [class*="st-key-org_empresa_ativa_"] button {
-                background: transparent !important;
-                border: 0 !important;
-                box-shadow: none !important;
-                padding: 0.25rem 0 !important;
-                min-height: 1.9rem !important;
-                height: auto !important;
-                justify-content: flex-start !important;
-            }
             [class*="st-key-org_empresa_ativa_"] button p {
-                font-size: 0.82rem !important;
-                font-weight: 500 !important;
+                overflow: hidden;
+                color: var(--text-color) !important;
+                font-size: 0.78rem !important;
+                font-weight: 520 !important;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
-            [class*="st-key-org_empresa_ativa_"] button:hover p {
-                color: #22bfe6 !important;
-            }
-            @keyframes razyncSearchReveal {
-                from { opacity: 0; transform: translateY(-4px); }
-                to { opacity: 1; transform: translateY(0); }
+            [class*="st-key-org_empresa_ativa_"] button:hover {
+                border-color: rgba(34, 191, 230, 0.42) !important;
+                background: rgba(34, 191, 230, 0.05) !important;
             }
             @media (max-width: 640px) {
-                .rz-company-directory__heading { font-size: 1rem; }
                 [class*="st-key-org_busca_card_flutuante"] [data-testid="stTextInput"] input {
-                    min-height: 3.2rem;
-                    font-size: 0.84rem !important;
+                    min-height: 3rem;
                 }
             }
             </style>
-            <div class="rz-company-directory">
-                <div class="rz-company-directory__eyebrow">Diretório de empresas</div>
-                <p class="rz-company-directory__heading">Qual empresa você deseja acessar?</p>
-                <p class="rz-company-directory__meta">
-                    __TOTAL_EMPRESAS__ empresas cadastradas · pesquise pelo código ou pelo nome
-                </p>
-            </div>
-            """.replace("__TOTAL_EMPRESAS__", str(len(empresas_catalogo_completo))),
+            <p class="rz-search-section-title">Pesquisar empresa</p>
+            """,
             unsafe_allow_html=True,
         )
 
         with st.container(key='org_busca_card_flutuante'):
             termo_busca_empresas = st.text_input(
                 'Pesquisar empresa',
-                placeholder='Buscar empresa por código ou nome',
+                placeholder='Digite o código ou o nome da empresa',
                 key='org_busca_empresas_catalogo',
                 label_visibility='collapsed',
             )
@@ -6121,9 +6091,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
                 with st.container(key='org_resultados_flutuantes'):
                     if not empresas_encontradas:
-                        st.caption('Nenhuma empresa encontrada. Verifique o código ou o nome.')
+                        st.caption('Nenhuma empresa encontrada.')
                     else:
-                        st.caption(f"{len(empresas_encontradas)} resultado(s) encontrado(s)")
+                        st.caption(f"{len(empresas_encontradas)} resultado(s)")
                         for empresa_catalogo in empresas_encontradas[:8]:
                             regime_empresa = empresa_catalogo.get(
                                 'regime', 'Regime não informado'
@@ -6141,17 +6111,30 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         if len(empresas_encontradas) > 8:
                             st.caption('Continue digitando para refinar os resultados.')
 
+        st.markdown(
+            f'<p class="rz-search-section-help">Pesquise entre {len(empresas_catalogo_completo)} empresas cadastradas.</p>',
+            unsafe_allow_html=True,
+        )
+
         with st.container(key='org_empresas_ativas'):
-            with st.expander(
-                f'Empresas com ferramentas disponíveis · {len(empresas_ativas)}',
-                expanded=False
-            ):
-                st.caption('Atalhos para as empresas que já possuem ferramentas configuradas.')
-                for empresa_catalogo in empresas_ativas:
+            st.markdown(
+                '<p class="rz-active-companies-heading">Empresas com ferramentas</p>'
+                '<p class="rz-active-companies-help">Acesso rápido às áreas já configuradas.</p>',
+                unsafe_allow_html=True,
+            )
+            colunas_empresas_ativas = st.columns(2, gap='small')
+            for indice_empresa, empresa_catalogo in enumerate(empresas_ativas):
+                with colunas_empresas_ativas[indice_empresa % 2]:
+                    regime_ativo = empresa_catalogo.get(
+                        'regime', 'Regime não informado'
+                    ).title()
                     if st.button(
-                        f"{empresa_catalogo['codigo']} · {empresa_catalogo['nome']}",
+                        (
+                            f"{empresa_catalogo['codigo']} · "
+                            f"{empresa_catalogo['nome']} · {regime_ativo}"
+                        ),
                         type='tertiary',
-                        use_container_width=False,
+                        use_container_width=True,
                         key=f"org_empresa_ativa_{empresa_catalogo['codigo']}"
                     ):
                         _abrir_empresa_catalogo(empresa_catalogo)
