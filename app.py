@@ -578,6 +578,441 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
+# Camada visual unificada da reforma 2026.
+st.markdown("""
+<style>
+/* ---------- Razync Design System 2026 ---------- */
+:root {
+    --rz-bg: var(--hc-bg);
+    --rz-panel: var(--hc-surface);
+    --rz-panel-hover: var(--hc-surface-hover);
+    --rz-line: var(--hc-border);
+    --rz-line-strong: var(--hc-border-strong);
+    --rz-text: var(--hc-text);
+    --rz-muted: var(--hc-muted);
+    --rz-accent: var(--hc-accent);
+    --rz-accent-soft: var(--hc-accent-soft);
+    --rz-success: #22a06b;
+    --rz-warning: #d89b2b;
+    --rz-danger: #d95757;
+    --rz-radius-sm: 8px;
+    --rz-radius-md: 12px;
+    --rz-radius-lg: 16px;
+    --rz-shadow: 0 12px 34px rgba(2, 8, 23, 0.10);
+}
+
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"] {
+    background:
+        radial-gradient(circle at 76% -12%, rgba(19, 185, 232, 0.055), transparent 28rem),
+        var(--rz-bg) !important;
+}
+
+.block-container {
+    width: min(100%, 1500px) !important;
+    max-width: 1500px !important;
+    padding: 2.15rem clamp(1.15rem, 2.6vw, 3rem) 4rem !important;
+}
+
+h1 {
+    font-size: clamp(1.75rem, 3vw, 2.45rem) !important;
+    line-height: 1.12 !important;
+    font-weight: 720 !important;
+    letter-spacing: -0.038em !important;
+}
+h2 { font-size: clamp(1.35rem, 2vw, 1.75rem) !important; }
+h3 { font-size: 1.16rem !important; }
+h4, h5 { letter-spacing: -0.012em !important; }
+
+[data-testid="stCaptionContainer"] {
+    padding: 0 !important;
+    background: transparent !important;
+    border-left: 0 !important;
+}
+[data-testid="stCaptionContainer"] p {
+    color: var(--rz-muted) !important;
+    font-size: 0.87rem !important;
+    line-height: 1.55 !important;
+}
+
+/* ---------- Sidebar ---------- */
+section[data-testid="stSidebar"] {
+    width: 272px !important;
+    background: color-mix(in srgb, var(--rz-panel) 94%, var(--rz-bg)) !important;
+    border-right: 1px solid var(--rz-line) !important;
+}
+section[data-testid="stSidebar"] > div:first-child {
+    padding: 1.15rem 0.9rem !important;
+}
+.rz-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.72rem;
+    margin: 0.1rem 0 1.15rem;
+    padding: 0.25rem 0.35rem;
+}
+.rz-sidebar-brand-copy strong {
+    display: block;
+    color: var(--rz-text);
+    font-size: 0.98rem;
+    letter-spacing: -0.02em;
+}
+.rz-sidebar-brand-copy span {
+    color: var(--rz-muted);
+    font-size: 0.69rem;
+    letter-spacing: 0.055em;
+    text-transform: uppercase;
+}
+.rz-nav-label {
+    color: var(--rz-muted);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.105em;
+    text-transform: uppercase;
+    padding: 0 0.65rem;
+    margin: 0.3rem 0 0.4rem;
+}
+section[data-testid="stSidebar"] .stButton > button {
+    min-height: 2.55rem !important;
+    padding: 0.48rem 0.72rem !important;
+    margin-bottom: 0.18rem !important;
+    border: 1px solid transparent !important;
+    border-radius: 9px !important;
+    background: transparent !important;
+    color: var(--rz-muted) !important;
+    font-size: 0.84rem !important;
+    font-weight: 540 !important;
+    box-shadow: none !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: var(--rz-accent-soft) !important;
+    border-color: color-mix(in srgb, var(--rz-accent) 24%, transparent) !important;
+    color: var(--rz-text) !important;
+    transform: none !important;
+}
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: var(--rz-accent-soft) !important;
+    border-color: color-mix(in srgb, var(--rz-accent) 34%, transparent) !important;
+    color: var(--rz-accent) !important;
+}
+section[data-testid="stSidebar"] [data-testid="stRadio"] {
+    padding: 0.65rem 0.55rem 0.2rem;
+    margin-top: 0.65rem;
+    border-top: 1px solid var(--rz-line);
+}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label p {
+    font-size: 0.74rem !important;
+}
+
+/* ---------- Cabeçalhos ---------- */
+.rz-page-header {
+    margin: 0 0 1.45rem;
+    padding: 0 0 1.15rem;
+    border-bottom: 1px solid var(--rz-line);
+}
+.rz-page-kicker {
+    color: var(--rz-accent);
+    font-size: 0.67rem;
+    font-weight: 760;
+    letter-spacing: 0.115em;
+    text-transform: uppercase;
+    margin-bottom: 0.38rem;
+}
+.rz-page-title {
+    color: var(--rz-text);
+    font-size: clamp(1.65rem, 3vw, 2.35rem);
+    line-height: 1.15;
+    font-weight: 730;
+    letter-spacing: -0.038em;
+    margin: 0;
+}
+.rz-page-description {
+    max-width: 780px;
+    color: var(--rz-muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0.42rem 0 0;
+}
+
+/* ---------- Home ---------- */
+.rz-home-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 1.5rem;
+    padding: 0.45rem 0 1.55rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--rz-line);
+}
+.rz-home-eyebrow {
+    color: var(--rz-accent);
+    font-size: 0.68rem;
+    font-weight: 760;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+.rz-home-title {
+    color: var(--rz-text);
+    font-size: clamp(2rem, 4vw, 3.15rem);
+    font-weight: 735;
+    line-height: 1.02;
+    letter-spacing: -0.052em;
+}
+.rz-home-copy {
+    max-width: 680px;
+    color: var(--rz-muted);
+    font-size: 0.94rem;
+    line-height: 1.65;
+    margin-top: 0.65rem;
+}
+.rz-home-status {
+    color: var(--rz-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+    padding-bottom: 0.25rem;
+}
+.rz-home-status::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 0.45rem;
+    border-radius: 50%;
+    background: #22a06b;
+    box-shadow: 0 0 0 4px rgba(34,160,107,.10);
+}
+.rz-section-label {
+    color: var(--rz-muted);
+    font-size: 0.68rem;
+    font-weight: 720;
+    letter-spacing: 0.105em;
+    text-transform: uppercase;
+    margin: 1.2rem 0 0.65rem;
+}
+
+.st-key-home_card_extratos button,
+.st-key-home_card_razao button,
+.st-key-home_card_organizador button {
+    height: 126px !important;
+    min-height: 126px !important;
+    max-height: 126px !important;
+    padding: 1.05rem 1.1rem !important;
+    align-items: flex-start !important;
+    justify-content: flex-end !important;
+    text-align: left !important;
+    background: var(--rz-panel) !important;
+    border: 1px solid var(--rz-line) !important;
+    border-top: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius-md) !important;
+    box-shadow: none !important;
+    color: var(--rz-muted) !important;
+    font-size: 0.78rem !important;
+    line-height: 1.45 !important;
+}
+.st-key-home_card_extratos button:hover,
+.st-key-home_card_razao button:hover,
+.st-key-home_card_organizador button:hover {
+    background: var(--rz-panel-hover) !important;
+    border-color: color-mix(in srgb, var(--rz-accent) 48%, var(--rz-line)) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 10px 24px rgba(2,8,23,.08) !important;
+}
+.st-key-home_card_extratos button strong,
+.st-key-home_card_razao button strong,
+.st-key-home_card_organizador button strong {
+    color: var(--rz-text) !important;
+    font-size: 1rem !important;
+    font-weight: 650 !important;
+}
+
+/* ---------- Componentes de trabalho ---------- */
+[data-testid="stFileUploaderDropzone"] {
+    min-height: 116px !important;
+    padding: 1rem !important;
+    background: color-mix(in srgb, var(--rz-panel) 72%, transparent) !important;
+    border: 1px dashed var(--rz-line-strong) !important;
+    border-radius: var(--rz-radius-md) !important;
+    box-shadow: none !important;
+}
+[data-testid="stFileUploaderDropzone"]:hover {
+    background: var(--rz-accent-soft) !important;
+    border-color: var(--rz-accent) !important;
+}
+[data-testid="stFileUploaderDropzone"] button {
+    min-height: 2.25rem !important;
+    border-radius: var(--rz-radius-sm) !important;
+}
+
+.stTextInput input,
+.stNumberInput input,
+.stDateInput input,
+[data-baseweb="select"] > div {
+    min-height: 2.7rem !important;
+    border-radius: var(--rz-radius-sm) !important;
+    border-color: var(--rz-line) !important;
+    background: var(--rz-panel) !important;
+    box-shadow: none !important;
+}
+.stTextInput input:focus,
+.stNumberInput input:focus,
+.stDateInput input:focus {
+    border-color: var(--rz-accent) !important;
+    box-shadow: 0 0 0 3px var(--rz-accent-soft) !important;
+}
+
+[data-baseweb="tab-list"] {
+    gap: 0.3rem !important;
+    padding: 0.22rem !important;
+    border: 1px solid var(--rz-line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--rz-panel) 72%, transparent);
+}
+[data-baseweb="tab"] {
+    min-height: 2.5rem !important;
+    padding: 0.45rem 0.75rem !important;
+    border-radius: 7px !important;
+    font-size: 0.8rem !important;
+}
+[data-baseweb="tab"][aria-selected="true"] {
+    background: var(--rz-panel) !important;
+    color: var(--rz-text) !important;
+}
+
+[data-testid="stExpander"] {
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius-md) !important;
+    background: color-mix(in srgb, var(--rz-panel) 70%, transparent) !important;
+    box-shadow: none !important;
+}
+[data-testid="stExpander"] summary {
+    min-height: 2.9rem;
+}
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius-md) !important;
+    overflow: hidden;
+    box-shadow: none !important;
+}
+
+[data-testid="stMetric"] {
+    min-height: 96px;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--rz-line);
+    border-radius: var(--rz-radius-md);
+    background: var(--rz-panel);
+}
+[data-testid="stMetricLabel"] p {
+    color: var(--rz-muted) !important;
+    font-size: 0.71rem !important;
+    font-weight: 680 !important;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+[data-testid="stMetricValue"] {
+    color: var(--rz-text) !important;
+    font-size: 1.35rem !important;
+}
+
+.metric-card {
+    min-height: 96px;
+    padding: 0.85rem 0.95rem !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-radius: var(--rz-radius-md) !important;
+    background: var(--rz-panel) !important;
+    border: 1px solid var(--rz-line) !important;
+    box-shadow: none !important;
+}
+.metric-title { font-size: 0.66rem !important; letter-spacing: .055em !important; }
+.metric-value { font-size: 1.22rem !important; }
+
+.stAlert {
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius-md) !important;
+    box-shadow: none !important;
+}
+.aviso-banner {
+    margin: 0.8rem 0 1.1rem !important;
+    padding: 0.75rem 0.9rem !important;
+    border: 1px solid var(--rz-line) !important;
+    border-left: 3px solid var(--rz-accent) !important;
+    border-radius: 0 var(--rz-radius-sm) var(--rz-radius-sm) 0 !important;
+    background: color-mix(in srgb, var(--rz-panel) 75%, transparent) !important;
+}
+.aviso-banner p { margin: 0 !important; color: var(--rz-muted) !important; }
+
+.stDownloadButton > button {
+    min-height: 2.7rem !important;
+    border-radius: var(--rz-radius-sm) !important;
+    background: var(--rz-accent) !important;
+    border-color: var(--rz-accent) !important;
+    color: #03131a !important;
+    font-weight: 650 !important;
+}
+.stDownloadButton > button:hover {
+    filter: brightness(1.05);
+    transform: translateY(-1px) !important;
+}
+
+.stButton > button {
+    min-height: 2.55rem;
+    border-radius: var(--rz-radius-sm) !important;
+    font-size: 0.84rem !important;
+}
+.stButton > button:focus-visible,
+.stDownloadButton > button:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--rz-accent) !important;
+    outline-offset: 2px !important;
+}
+
+hr {
+    margin: 1.35rem 0 !important;
+    border-color: var(--rz-line) !important;
+}
+
+/* ---------- Responsividade ---------- */
+@media (max-width: 900px) {
+    .block-container { padding: 1.45rem 1rem 3rem !important; }
+    .rz-home-hero { grid-template-columns: 1fr; gap: 0.5rem; }
+    .rz-home-status { white-space: normal; }
+    [data-testid="stHorizontalBlock"] {
+        gap: 0.75rem !important;
+    }
+}
+@media (max-width: 640px) {
+    .block-container { padding-top: 1rem !important; }
+    .rz-page-title { font-size: 1.65rem; }
+    .rz-home-title { font-size: 2rem; }
+    .st-key-home_card_extratos button,
+    .st-key-home_card_razao button,
+    .st-key-home_card_organizador button {
+        height: 105px !important;
+        min-height: 105px !important;
+        max-height: 105px !important;
+    }
+    [data-baseweb="tab-list"] {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+    }
+    [data-baseweb="tab"] { white-space: nowrap !important; }
+    [data-testid="stDataFrame"] { max-width: calc(100vw - 2rem) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # CONTROLE DE ACESSO
 # ==============================================================================
@@ -588,7 +1023,25 @@ SEGURANCA_POR_SENHA_ATIVA = proteger_acesso()
 if "tema_razync" not in st.session_state:
     st.session_state["tema_razync"] = "Escuro"
 with st.sidebar:
-    tema = st.radio("Aparência", ["Escuro", "Claro"], horizontal=True, key="tema_razync_radio")
+    col_logo_sidebar, col_marca_sidebar = st.columns([0.24, 0.76], gap="small")
+    with col_logo_sidebar:
+        st.image("assets/razync-icon.png", width=46)
+    with col_marca_sidebar:
+        st.markdown(
+            """
+            <div class="rz-sidebar-brand-copy">
+                <strong>Razync</strong>
+                <span>Operações contábeis</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    tema = st.radio(
+        "Aparência",
+        ["Escuro", "Claro"],
+        horizontal=True,
+        key="tema_razync_radio",
+    )
 if tema != st.session_state["tema_razync"]:
     st.session_state["tema_razync"] = tema
 if st.session_state["tema_razync"] == "Claro":
@@ -4655,29 +5108,62 @@ def mudar_pagina(nome_pagina):
     st.session_state['animar_transicao'] = True
 
 # ==============================================================================
-# BARRA LATERAL DARK MINIMALISTA
+# BARRA LATERAL
 # ==============================================================================
-st.sidebar.image("assets/razync-icon.png", width=58)
-st.sidebar.markdown("<p style='font-size: 15px; font-weight: 700; color: #f4f7fa; margin: 8px 0 0;'>Razync</p>", unsafe_allow_html=True)
-st.sidebar.markdown("<p style='font-size: 11px; color: #94a4b3; margin-top: 3px;'>Operações bancárias</p>", unsafe_allow_html=True)
-st.sidebar.markdown("---")
+st.sidebar.markdown(
+    '<div class="rz-nav-label">Navegação</div>',
+    unsafe_allow_html=True,
+)
 
-if st.sidebar.button("Início", use_container_width=True, key="sb_home"): mudar_pagina('home')
-if st.sidebar.button("Conversor de Extratos", use_container_width=True, key="sb_extratos"): mudar_pagina('extratos')
-if st.sidebar.button("Conciliação com Razão", use_container_width=True, key="sb_razao"): mudar_pagina('razao')
-if st.sidebar.button("Organizador de Planilhas", use_container_width=True, key="sb_organizador"): mudar_pagina('organizador')
-st.sidebar.markdown("---")
+pagina_sidebar = st.session_state.get('pagina_ativa', 'home')
+if st.sidebar.button(
+    "⌂  Início",
+    use_container_width=True,
+    key="sb_home",
+    type="primary" if pagina_sidebar == "home" else "tertiary",
+):
+    mudar_pagina('home')
+if st.sidebar.button(
+    "⇄  Conversor de Extratos",
+    use_container_width=True,
+    key="sb_extratos",
+    type="primary" if pagina_sidebar == "extratos" else "tertiary",
+):
+    mudar_pagina('extratos')
+if st.sidebar.button(
+    "✓  Conciliação com Razão",
+    use_container_width=True,
+    key="sb_razao",
+    type="primary" if pagina_sidebar == "razao" else "tertiary",
+):
+    mudar_pagina('razao')
+if st.sidebar.button(
+    "▤  Organizador de Planilhas",
+    use_container_width=True,
+    key="sb_organizador",
+    type="primary" if pagina_sidebar == "organizador" else "tertiary",
+):
+    mudar_pagina('organizador')
+
 if SEGURANCA_POR_SENHA_ATIVA:
-    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        '<div class="rz-nav-label" style="margin-top:1rem;">Sessão</div>',
+        unsafe_allow_html=True,
+    )
     if st.sidebar.button(
         "Sair do sistema",
         use_container_width=True,
-        key="hc_encerrar_sessao"
+        key="hc_encerrar_sessao",
+        type="tertiary",
     ):
         st.session_state['_hc_acesso_autorizado'] = False
         st.rerun()
 
-st.sidebar.markdown("<p style='font-size: 10px; color: #6f8190; text-align: center;'>Razync · Operações bancárias</p>", unsafe_allow_html=True)
+st.sidebar.markdown(
+    "<p style='font-size:10px;color:var(--hc-muted);text-align:center;"
+    "margin-top:1.3rem;'>Razync · Ambiente protegido</p>",
+    unsafe_allow_html=True,
+)
 
 # O marcador ativa o CSS uma única vez e desaparece nos reruns de filtros/uploads.
 if st.session_state.pop('animar_transicao', False):
@@ -4690,60 +5176,76 @@ if st.session_state.pop('animar_transicao', False):
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
-    col_marca_logo, col_marca_texto = st.columns([0.7, 9.3])
-    with col_marca_logo:
-        st.image("assets/razync-icon.png", width=68)
-    with col_marca_texto:
-        st.markdown('<div class="hc-brand-title">Razync</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="hc-brand-subtitle">Organização, conversão e conferência de lançamentos bancários em um só lugar.</div>',
-            unsafe_allow_html=True
-        )
-    st.markdown("<div style='height: 24px; border-bottom: 1px solid rgba(39, 51, 62, 0.55); margin-bottom: 22px;'></div>", unsafe_allow_html=True)
-    col_t1, col_t2, col_t3 = st.columns(3)
+    st.markdown(
+        """
+        <section class="rz-home-hero" aria-labelledby="rz-home-title">
+            <div>
+                <div class="rz-home-eyebrow">Central operacional</div>
+                <div class="rz-home-title" id="rz-home-title">Rotinas bancárias, organizadas.</div>
+                <div class="rz-home-copy">
+                    Converta extratos, concilie movimentos e prepare arquivos para a Domínio
+                    em um ambiente único, seguro e objetivo.
+                </div>
+            </div>
+            <div class="rz-home-status">Sistema disponível</div>
+        </section>
+        <div class="rz-section-label">Escolha uma ferramenta</div>
+        """,
+        unsafe_allow_html=True,
+    )
 
+    col_t1, col_t2, col_t3 = st.columns(3, gap="medium")
     with col_t1:
         st.button(
-            "📊\n\n**Conversor de Extratos**\n\nConverta extratos para o formato de importação da Domínio.",
+            "⇄\n\n**Conversor de Extratos**\nPDF, OFX, CSV e Excel para o padrão Domínio.",
             key="home_card_extratos",
             use_container_width=True,
             on_click=mudar_pagina,
-            args=('extratos',)
+            args=('extratos',),
         )
-
     with col_t2:
         st.button(
-            "🔍\n\n**Conciliação com Razão**\n\nAnálise automatizada, rolagem de saldos e auditoria de divergências.",
+            "✓\n\n**Conciliação com Razão**\nCompare movimentos e identifique divergências.",
             key="home_card_razao",
             use_container_width=True,
             on_click=mudar_pagina,
-            args=('razao',)
+            args=('razao',),
         )
-
     with col_t3:
         st.button(
-            "🗂️\n\n**Organizador de Planilhas**\n\nConverta planilhas específicas de empresas para o Modelo Domínio.",
+            "▤\n\n**Organizador de Planilhas**\nAcesse os fluxos e regras de cada empresa.",
             key="home_card_organizador",
             use_container_width=True,
             on_click=mudar_pagina,
-            args=('organizador',)
+            args=('organizador',),
         )
 
 # ==============================================================================
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'extratos':
-    col_voltar, col_tit = st.columns([1.2, 8.8])
-    with col_voltar:
-        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-        if st.button("← Voltar", use_container_width=True, key="btn_voltar_home"):
-            mudar_pagina('home')
-            st.rerun()
-    with col_tit: st.title("Conversor de Extratos Bancários")
-    st.caption("Faça o upload dos arquivos para gerar os layouts compatíveis com a Domínio.")
-    st.markdown("---")
+    if st.button("← Início", key="btn_voltar_home", type="tertiary"):
+        mudar_pagina('home')
+        st.rerun()
+    st.markdown(
+        """
+        <header class="rz-page-header">
+            <div class="rz-page-kicker">Conversão bancária</div>
+            <div class="rz-page-title">Conversor de Extratos</div>
+            <div class="rz-page-description">
+                Envie um ou mais extratos e gere arquivos prontos para importação na Domínio.
+            </div>
+        </header>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    arquivos = st.file_uploader("Selecione os extratos (PDF, OFX, CSV, Excel)", type=["pdf", "ofx", "csv", "xlsx", "xls"], accept_multiple_files=True)
+    arquivos = st.file_uploader(
+        "Selecione os extratos",
+        type=["pdf", "ofx", "csv", "xlsx", "xls"],
+        accept_multiple_files=True,
+        help="Formatos aceitos: PDF, OFX, CSV, XLSX e XLS.",
+    )
 
     if arquivos:
         try:
@@ -6557,16 +7059,21 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 # TELA 4: CONCILIAÇÃO COM O RAZÃO DA DOMÍNIO
 # ==============================================================================
 elif st.session_state['pagina_ativa'] == 'razao':
-    col_voltar, col_tit = st.columns([1.2, 8.8])
-    with col_voltar:
-        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-        if st.button("← Voltar", use_container_width=True, key="btn_voltar_home_razao"): mudar_pagina('home'); st.rerun()
-    with col_tit: st.title("Conciliação: Extrato x Razão da Domínio")
-    
-    st.caption(
-        "A conciliação considera a natureza contábil inversa: saída no extrato "
-        "é comparada com entrada/débito no Razão; entrada no extrato é comparada "
-        "com saída/crédito no Razão."
+    if st.button("← Início", key="btn_voltar_home_razao", type="tertiary"):
+        mudar_pagina('home')
+        st.rerun()
+    st.markdown(
+        """
+        <header class="rz-page-header">
+            <div class="rz-page-kicker">Conferência contábil</div>
+            <div class="rz-page-title">Conciliação com Razão</div>
+            <div class="rz-page-description">
+                Compare o extrato bancário com o Razão da Domínio e identifique
+                diferenças diárias com a natureza contábil correta.
+            </div>
+        </header>
+        """,
+        unsafe_allow_html=True,
     )
     st.markdown("""<div class="aviso-banner"><p><strong>Formatos aceitos:</strong> CSV, XLSX e XLS antigo da Domínio. Quando necessário, o sistema recupera e normaliza o arquivo automaticamente antes da leitura.</p></div>""", unsafe_allow_html=True)
 
