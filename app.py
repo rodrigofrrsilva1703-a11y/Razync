@@ -5085,6 +5085,155 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft', bancos_config=N
     except Exception as erro:
         st.error(f"Não foi possível realizar a conferência: {erro}")
 
+
+st.markdown("""
+<style>
+/* Ajustes estruturais baseados na inspeção visual da Home publicada. */
+section[data-testid="stSidebar"] [data-testid="stRadio"] {
+    position: fixed !important;
+    left: 0.9rem;
+    bottom: 3.3rem;
+    width: 238px;
+    z-index: 5;
+    padding: 0.65rem 0.55rem 0.2rem !important;
+    margin: 0 !important;
+    background: color-mix(in srgb, var(--rz-panel) 96%, transparent);
+}
+section[data-testid="stSidebar"] .stButton > button {
+    margin-bottom: 0.08rem !important;
+}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+    gap: 0.28rem !important;
+}
+
+.rz-dashboard-intro {
+    max-width: 780px;
+    padding: 0.2rem 0 1.1rem;
+}
+.rz-dashboard-intro .rz-home-title {
+    font-size: clamp(2rem, 4vw, 3rem);
+}
+.rz-dashboard-grid-title {
+    color: var(--rz-muted);
+    font-size: 0.67rem;
+    font-weight: 730;
+    letter-spacing: 0.105em;
+    text-transform: uppercase;
+    margin: 0.65rem 0 0.55rem;
+}
+.st-key-home_action_organizador button,
+.st-key-home_action_extratos button,
+.st-key-home_action_razao button {
+    height: auto !important;
+    min-height: 82px !important;
+    max-height: none !important;
+    padding: 0.9rem 1rem !important;
+    margin: 0 0 0.48rem !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    text-align: left !important;
+    white-space: pre-line !important;
+    border: 1px solid var(--rz-line) !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--rz-muted) !important;
+    font-size: 0.76rem !important;
+    line-height: 1.42 !important;
+}
+.st-key-home_action_organizador button {
+    min-height: 104px !important;
+    background: var(--rz-panel) !important;
+    border-color: color-mix(in srgb, var(--rz-accent) 34%, var(--rz-line)) !important;
+}
+.st-key-home_action_organizador button:hover,
+.st-key-home_action_extratos button:hover,
+.st-key-home_action_razao button:hover {
+    background: var(--rz-accent-soft) !important;
+    border-color: var(--rz-accent) !important;
+    transform: translateX(3px) !important;
+}
+.st-key-home_action_organizador button p,
+.st-key-home_action_extratos button p,
+.st-key-home_action_razao button p {
+    margin: 0 !important;
+    white-space: pre-line !important;
+}
+.st-key-home_action_organizador button strong,
+.st-key-home_action_extratos button strong,
+.st-key-home_action_razao button strong {
+    color: var(--rz-text) !important;
+    font-size: 0.98rem !important;
+    font-weight: 650 !important;
+}
+
+.rz-overview-panel {
+    min-height: 286px;
+    padding: 1.15rem 1.2rem;
+    border: 1px solid var(--rz-line);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--rz-panel) 78%, transparent);
+}
+.rz-overview-kicker {
+    color: var(--rz-muted);
+    font-size: 0.66rem;
+    font-weight: 730;
+    letter-spacing: .105em;
+    text-transform: uppercase;
+    margin-bottom: 0.7rem;
+}
+.rz-overview-title {
+    color: var(--rz-text);
+    font-size: 1.08rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.35rem;
+}
+.rz-overview-copy {
+    color: var(--rz-muted);
+    font-size: 0.8rem;
+    line-height: 1.55;
+    margin-bottom: 1rem;
+}
+.rz-overview-row {
+    display: grid;
+    grid-template-columns: 8px 1fr;
+    gap: 0.65rem;
+    align-items: start;
+    padding: 0.68rem 0;
+    border-top: 1px solid var(--rz-line);
+}
+.rz-overview-dot {
+    width: 7px;
+    height: 7px;
+    margin-top: 0.34rem;
+    border-radius: 50%;
+    background: var(--rz-accent);
+}
+.rz-overview-row strong {
+    display: block;
+    color: var(--rz-text);
+    font-size: 0.78rem;
+    font-weight: 610;
+}
+.rz-overview-row span {
+    display: block;
+    color: var(--rz-muted);
+    font-size: 0.71rem;
+    line-height: 1.45;
+    margin-top: 0.12rem;
+}
+@media (max-width: 900px) {
+    section[data-testid="stSidebar"] [data-testid="stRadio"] {
+        position: static !important;
+        width: auto;
+        margin-top: 0.8rem !important;
+    }
+    .rz-overview-panel { min-height: auto; }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
@@ -5116,52 +5265,56 @@ st.sidebar.markdown(
 )
 
 pagina_sidebar = st.session_state.get('pagina_ativa', 'home')
-if st.sidebar.button(
+st.sidebar.button(
     "⌂  Início",
     use_container_width=True,
     key="sb_home",
     type="primary" if pagina_sidebar == "home" else "tertiary",
-):
-    mudar_pagina('home')
-if st.sidebar.button(
+    on_click=mudar_pagina,
+    args=('home',),
+)
+st.sidebar.button(
     "⇄  Conversor de Extratos",
     use_container_width=True,
     key="sb_extratos",
     type="primary" if pagina_sidebar == "extratos" else "tertiary",
-):
-    mudar_pagina('extratos')
-if st.sidebar.button(
+    on_click=mudar_pagina,
+    args=('extratos',),
+)
+st.sidebar.button(
     "✓  Conciliação com Razão",
     use_container_width=True,
     key="sb_razao",
     type="primary" if pagina_sidebar == "razao" else "tertiary",
-):
-    mudar_pagina('razao')
-if st.sidebar.button(
+    on_click=mudar_pagina,
+    args=('razao',),
+)
+st.sidebar.button(
     "▤  Organizador de Planilhas",
     use_container_width=True,
     key="sb_organizador",
     type="primary" if pagina_sidebar == "organizador" else "tertiary",
-):
-    mudar_pagina('organizador')
+    on_click=mudar_pagina,
+    args=('organizador',),
+)
 
 if SEGURANCA_POR_SENHA_ATIVA:
     st.sidebar.markdown(
-        '<div class="rz-nav-label" style="margin-top:1rem;">Sessão</div>',
+        '<div class="rz-nav-label" style="margin-top:0.9rem;">Sessão</div>',
         unsafe_allow_html=True,
     )
-    if st.sidebar.button(
+    st.sidebar.button(
         "Sair do sistema",
         use_container_width=True,
         key="hc_encerrar_sessao",
         type="tertiary",
-    ):
-        st.session_state['_hc_acesso_autorizado'] = False
-        st.rerun()
+        on_click=lambda: st.session_state.update({'_hc_acesso_autorizado': False}),
+    )
 
 st.sidebar.markdown(
     "<p style='font-size:10px;color:var(--hc-muted);text-align:center;"
-    "margin-top:1.3rem;'>Razync · Ambiente protegido</p>",
+    "position:fixed;left:1rem;bottom:1.25rem;width:230px;'>"
+    "Razync · Ambiente protegido</p>",
     unsafe_allow_html=True,
 )
 
@@ -5178,46 +5331,74 @@ if st.session_state.pop('animar_transicao', False):
 if st.session_state['pagina_ativa'] == 'home':
     st.markdown(
         """
-        <section class="rz-home-hero" aria-labelledby="rz-home-title">
-            <div>
-                <div class="rz-home-eyebrow">Central operacional</div>
-                <div class="rz-home-title" id="rz-home-title">Rotinas bancárias, organizadas.</div>
-                <div class="rz-home-copy">
-                    Converta extratos, concilie movimentos e prepare arquivos para a Domínio
-                    em um ambiente único, seguro e objetivo.
-                </div>
+        <section class="rz-dashboard-intro" aria-labelledby="rz-home-title">
+            <div class="rz-home-eyebrow">Central operacional</div>
+            <div class="rz-home-title" id="rz-home-title">O que você precisa fazer hoje?</div>
+            <div class="rz-home-copy">
+                Acesse diretamente o fluxo necessário. Cada ferramenta mantém as regras,
+                contas e formatos definidos para a operação contábil.
             </div>
-            <div class="rz-home-status">Sistema disponível</div>
         </section>
-        <div class="rz-section-label">Escolha uma ferramenta</div>
         """,
         unsafe_allow_html=True,
     )
 
-    col_t1, col_t2, col_t3 = st.columns(3, gap="medium")
-    with col_t1:
+    col_acoes, col_visao = st.columns([1.35, 0.65], gap="large")
+    with col_acoes:
+        st.markdown(
+            '<div class="rz-dashboard-grid-title">Ações operacionais</div>',
+            unsafe_allow_html=True,
+        )
         st.button(
-            "⇄\n\n**Conversor de Extratos**\nPDF, OFX, CSV e Excel para o padrão Domínio.",
-            key="home_card_extratos",
+            "▤  **Organizador de Planilhas**\nFluxos específicos, empresas e Base Inteligente.",
+            key="home_action_organizador",
+            use_container_width=True,
+            on_click=mudar_pagina,
+            args=('organizador',),
+        )
+        st.button(
+            "⇄  **Conversor de Extratos**\nPDF, OFX, CSV e Excel para o padrão Domínio.",
+            key="home_action_extratos",
             use_container_width=True,
             on_click=mudar_pagina,
             args=('extratos',),
         )
-    with col_t2:
         st.button(
-            "✓\n\n**Conciliação com Razão**\nCompare movimentos e identifique divergências.",
-            key="home_card_razao",
+            "✓  **Conciliação com Razão**\nConferência diária e identificação de divergências.",
+            key="home_action_razao",
             use_container_width=True,
             on_click=mudar_pagina,
             args=('razao',),
         )
-    with col_t3:
-        st.button(
-            "▤\n\n**Organizador de Planilhas**\nAcesse os fluxos e regras de cada empresa.",
-            key="home_card_organizador",
-            use_container_width=True,
-            on_click=mudar_pagina,
-            args=('organizador',),
+
+    with col_visao:
+        st.markdown(
+            """
+            <div class="rz-dashboard-grid-title">Visão do ambiente</div>
+            <section class="rz-overview-panel" aria-label="Recursos do Razync">
+                <div class="rz-overview-kicker">Razync</div>
+                <div class="rz-overview-title">Operação centralizada</div>
+                <div class="rz-overview-copy">
+                    Ferramentas bancárias e contábeis reunidas em um único fluxo de trabalho.
+                </div>
+                <div class="rz-overview-row">
+                    <i class="rz-overview-dot"></i>
+                    <div><strong>48 empresas cadastradas</strong>
+                    <span>Áreas individuais preparadas para regras específicas.</span></div>
+                </div>
+                <div class="rz-overview-row">
+                    <i class="rz-overview-dot"></i>
+                    <div><strong>Arquivos bancários</strong>
+                    <span>PDF, OFX, CSV, XLSX e XLS.</span></div>
+                </div>
+                <div class="rz-overview-row">
+                    <i class="rz-overview-dot"></i>
+                    <div><strong>Saída para a Domínio</strong>
+                    <span>Modelo preservado, classificação e conferência.</span></div>
+                </div>
+            </section>
+            """,
+            unsafe_allow_html=True,
         )
 
 # ==============================================================================
