@@ -5944,7 +5944,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         ]
 
         st.markdown(
-            f"""
+            """
             <style>
             .rz-company-directory {
                 max-width: 920px;
@@ -6094,10 +6094,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 <div class="rz-company-directory__eyebrow">Diretório de empresas</div>
                 <p class="rz-company-directory__heading">Qual empresa você deseja acessar?</p>
                 <p class="rz-company-directory__meta">
-                    {len(empresas_catalogo_completo)} empresas cadastradas · pesquise pelo código ou pelo nome
+                    __TOTAL_EMPRESAS__ empresas cadastradas · pesquise pelo código ou pelo nome
                 </p>
             </div>
-            """,
+            """.replace("__TOTAL_EMPRESAS__", str(len(empresas_catalogo_completo))),
             unsafe_allow_html=True,
         )
 
