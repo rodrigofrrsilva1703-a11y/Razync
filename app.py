@@ -6040,7 +6040,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 box-shadow: 0 0 0 3px rgba(32, 185, 223, 0.09) !important;
             }
             [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input::placeholder {
-                color: #91a4b5 !important;
+                color: #b2c0cc !important;
+                -webkit-text-fill-color: #b2c0cc !important;
                 opacity: 1 !important;
             }
             [class*="st-key-org_campo_pesquisa"] {
@@ -6115,10 +6116,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 box-shadow: none !important;
             }
             [class*="st-key-org_linha_empresa_"] button p {
+                width: 100% !important;
                 overflow: hidden;
                 color: #f3f6f8 !important;
                 font-size: 0.8rem !important;
                 font-weight: 560 !important;
+                text-align: left !important;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
@@ -6154,18 +6157,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         )
 
         with st.container(key='org_pesquisa_nativa'):
-            col_campo_pesquisa, col_respiro_pesquisa = st.columns(
-                [0.60, 0.40],
-                gap='small',
-            )
-            with col_campo_pesquisa:
-                with st.container(key='org_campo_pesquisa'):
-                    termo_busca_empresas = st.text_input(
-                        'Pesquisar empresa',
-                        placeholder='Digite código ou nome e pressione Enter',
-                        key='org_busca_empresas_catalogo',
-                        label_visibility='collapsed',
-                    )
+            with st.container(key='org_campo_pesquisa'):
+                termo_busca_empresas = st.text_input(
+                    'Pesquisar empresa',
+                    placeholder='Digite o código ou o nome da empresa e pressione Enter',
+                    key='org_busca_empresas_catalogo',
+                    label_visibility='collapsed',
+                )
 
             termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
             if termo_normalizado:
