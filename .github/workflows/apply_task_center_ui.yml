@@ -1,0 +1,37 @@
+name: Aplicar Central de Tarefas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/add_task_center_ui.py'
+      - '.github/workflows/apply_task_center_ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Integrar Central de Tarefas
+        run: python scripts/add_task_center_ui.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/task_center.py
+      - name: Rodar testes da Central
+        run: python -m pytest tests/test_task_center.py tests/test_task_deadlines.py -q
+      - name: Registrar integração e limpar patch temporário
+        run: |
+          rm scripts/add_task_center_ui.py
+          rm .github/workflows/apply_task_center_ui.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/add_task_center_ui.py .github/workflows/apply_task_center_ui.yml
+          git commit -m 'Adiciona Central profissional de Tarefas e Prazos'
+          git push
