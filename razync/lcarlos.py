@@ -5,6 +5,9 @@ import unicodedata
 import pandas as pd
 
 
+CONTA_SANTANDER_LCARLOS = '513'
+
+
 def _normalizar(valor):
     texto = unicodedata.normalize('NFKD', str(valor or ''))
     return ''.join(c for c in texto if not unicodedata.combining(c)).casefold().strip()
@@ -20,6 +23,26 @@ def _data_excel(valor):
     if isinstance(valor, (int, float)) and not isinstance(valor, bool):
         return pd.Timestamp('1899-12-30') + pd.to_timedelta(float(valor), unit='D')
     return pd.to_datetime(valor, dayfirst=True, errors='coerce')
+
+
+def _historico_lcarlos(historico, valor):
+    historico = str(historico or '').strip()
+    prefixo = 'Recebido:' if float(valor) > 0 else 'Pago:'
+    historico_normalizado = _normalizar(historico)
+    if historico_normalizado.startswith('recebido:') or historico_normalizado.startswith('pago:'):
+        return historico
+    return f'{prefixo} {historico}'.strip()
+
+
+def _linha_modelo(data, valor, historico):
+    valor = round(float(valor), 2)
+    return {
+        'DATA': data.strftime('%d/%m/%Y'),
+        'DÉBITO': CONTA_SANTANDER_LCARLOS if valor > 0 else '',
+        'CRÉDITO': CONTA_SANTANDER_LCARLOS if valor < 0 else '',
+        'VALOR': valor,
+        'HISTÓRICO': _historico_lcarlos(historico, valor),
+    }
 
 
 def processar_planilhas_lcarlos(jaguar_bytes, entradas_bytes):
@@ -107,13 +130,13 @@ def processar_planilhas_lcarlos(jaguar_bytes, entradas_bytes):
     for movimento in movimentos:
         descricao_norm = _normalizar(movimento['descricao'])
         if 'recebimento vendas nf' not in descricao_norm:
-            linhas_modelo.append({
-                'DATA': movimento['data'].strftime('%d/%m/%Y'),
-                'DÉBITO': '',
-                'CRÉDITO': '',
-                'VALOR': movimento['valor'],
-                'HISTÓRICO': movimento['descricao'],
-            })
+            linhas_modelo.append(
+                _linha_modelo(
+                    movimento['data'],
+                    movimento['valor'],
+                    movimento['descricao'],
+                )
+            )
             continue
 
         disponiveis = [grupo for grupo in grupos_info if not grupo['usado']]
@@ -137,13 +160,13 @@ def processar_planilhas_lcarlos(jaguar_bytes, entradas_bytes):
             )
 
         if grupo is None:
-            linhas_modelo.append({
-                'DATA': movimento['data'].strftime('%d/%m/%Y'),
-                'DÉBITO': '',
-                'CRÉDITO': '',
-                'VALOR': movimento['valor'],
-                'HISTÓRICO': movimento['descricao'],
-            })
+            linhas_modelo.append(
+                _linha_modelo(
+                    movimento['data'],
+                    movimento['valor'],
+                    movimento['descricao'],
+                )
+            )
             conciliacao.append({
                 'Data Jaguar': movimento['data'].strftime('%d/%m/%Y'),
                 'Data Entradas': '',
@@ -164,13 +187,13 @@ def processar_planilhas_lcarlos(jaguar_bytes, entradas_bytes):
             situacao = 'Data ajustada pela Jaguar'
 
         for detalhe in grupo['detalhes']:
-            linhas_modelo.append({
-                'DATA': movimento['data'].strftime('%d/%m/%Y'),
-                'DÉBITO': '',
-                'CRÉDITO': '',
-                'VALOR': detalhe['valor'],
-                'HISTÓRICO': detalhe['historico'],
-            })
+            linhas_modelo.append(
+                _linha_modelo(
+                    movimento['data'],
+                    detalhe['valor'],
+                    detalhe['historico'],
+                )
+            )
         conciliacao.append({
             'Data Jaguar': movimento['data'].strftime('%d/%m/%Y'),
             'Data Entradas': grupo['data'].strftime('%d/%m/%Y'),
@@ -205,5 +228,7 @@ def processar_planilhas_lcarlos(jaguar_bytes, entradas_bytes):
         'lancamentos_jaguar': len(movimentos),
         'lancamentos_modelo': len(df_modelo),
         'grupos_com_alerta': int((df_conciliacao['Situação'] != 'Conciliado').sum()),
+        'banco': 'Santander',
+        'conta_bancaria': CONTA_SANTANDER_LCARLOS,
     }
     return df_modelo, df_conciliacao, resumo
