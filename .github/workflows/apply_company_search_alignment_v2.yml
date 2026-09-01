@@ -1,0 +1,35 @@
+name: Aplicar alinhamento da pesquisa v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix_company_search_alignment_v2.py'
+      - '.github/workflows/apply_company_search_alignment_v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar correção visual
+        run: python scripts/fix_company_search_alignment_v2.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py
+      - name: Registrar alteração e limpar patch temporário
+        run: |
+          rm scripts/fix_company_search_alignment_v2.py
+          rm .github/workflows/apply_company_search_alignment_v2.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/fix_company_search_alignment_v2.py .github/workflows/apply_company_search_alignment_v2.yml
+          git commit -m 'Corrige de vez alinhamento e tamanho na pesquisa de empresas'
+          git push
