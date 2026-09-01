@@ -3322,7 +3322,7 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
                 if col_descricao is not None else ''
             ) or banco_aba or banco_arquivo
             assinatura = criar_assinatura_classificacao(historico)
-            if banco_linha not in {'itau', 'bradesco', 'fibra', 'daycoval', 'sicredi'} or not assinatura:
+            if banco_linha not in {'itau', 'bradesco', 'fibra', 'daycoval', 'sicredi', 'santander'} or not assinatura:
                 continue
             data_lancamento = (
                 pd.to_datetime(linha[col_data], dayfirst=True, errors='coerce')
@@ -4411,6 +4411,8 @@ def identificar_chave_banco_empresa(valor):
         return 'daycoval'
     if 'sicredi' in texto:
         return 'sicredi'
+    if 'santander' in texto:
+        return 'santander'
     if 'banco do brasil' in texto:
         return 'banco_brasil'
     return ''
@@ -4419,7 +4421,7 @@ def nome_banco_por_chave(chave):
     return {
         'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra',
         'daycoval': 'Daycoval', 'sicredi': 'Sicredi',
-        'banco_brasil': 'Banco do Brasil'
+        'santander': 'Santander', 'banco_brasil': 'Banco do Brasil'
     }.get(chave, chave)
 
 def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
@@ -4483,7 +4485,8 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
                 descricao = {
                     'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO',
                     'fibra': 'BANCO FIBRA', 'daycoval': 'BANCO DAYCOVAL',
-                    'sicredi': 'SICREDI', 'banco_brasil': 'BANCO DO BRASIL'
+                    'sicredi': 'SICREDI', 'santander': 'BANCO SANTANDER',
+                    'banco_brasil': 'BANCO DO BRASIL'
                 }[banco_alvo]
             historico_valor = linha[col_hist]
             historico = (
@@ -4905,21 +4908,25 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft', bancos_config=N
         "Envie a planilha final organizada e os extratos correspondentes. "
         "Cada banco terá seu próprio relatório diário."
     )
-    conferir_todos = st.checkbox(
-        "Conferir os dois bancos",
-        value=False,
-        key=f"{prefixo_chaves}_conferir_todos"
-    )
-    if conferir_todos:
+    if len(configs) == 1:
         bancos_escolhidos = nomes_bancos
-        st.caption("Serão apresentados relatórios separados para os bancos selecionados.")
+        st.caption(f"Banco da conferência: {nomes_bancos[0]}.")
     else:
-        bancos_escolhidos = st.multiselect(
-            "Bancos que serão conferidos",
-            nomes_bancos,
-            default=[nomes_bancos[0]],
-            key=f"{prefixo_chaves}_bancos_conferencia"
+        conferir_todos = st.checkbox(
+            "Conferir todos os bancos",
+            value=False,
+            key=f"{prefixo_chaves}_conferir_todos"
         )
+        if conferir_todos:
+            bancos_escolhidos = nomes_bancos
+            st.caption("Serão apresentados relatórios separados para os bancos selecionados.")
+        else:
+            bancos_escolhidos = st.multiselect(
+                "Bancos que serão conferidos",
+                nomes_bancos,
+                default=[nomes_bancos[0]],
+                key=f"{prefixo_chaves}_bancos_conferencia"
+            )
 
     if not bancos_escolhidos:
         st.info("Selecione pelo menos um banco para realizar a conferência.")
@@ -6405,125 +6412,147 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         )
 
     if st.session_state['empresa_organizador'] == 'lcarlos':
-        st.markdown('#### Jaguar → Modelo Domínio')
-        st.caption(
-            'Envie a planilha bancária Jaguar e a planilha auxiliar de Entradas. '
-            'Os recebimentos agrupados serão substituídos pelos detalhes do mesmo período.'
-        )
-        col_jaguar, col_entradas = st.columns(2)
-        with col_jaguar:
-            arquivo_jaguar = st.file_uploader(
-                '1º · Planilha Jaguar',
-                type=['xlsx', 'xls'],
-                key='lcarlos_upload_jaguar',
-                help='A Jaguar define o período, as datas bancárias e os movimentos principais.',
-            )
-        with col_entradas:
-            arquivo_entradas_lcarlos = st.file_uploader(
-                '2º · Planilha de Entradas',
-                type=['xlsx', 'xls'],
-                key='lcarlos_upload_entradas',
-                help='Contém os recebimentos detalhados por nota fiscal e cliente.',
+        contas_lcarlos = {'santander': '513'}
+        aba_operacoes_lcarlos, aba_base_lcarlos = st.tabs([
+            'Organizar arquivos',
+            'Base Inteligente',
+        ])
+
+        with aba_base_lcarlos:
+            renderizar_base_inteligente_empresa(
+                'lcarlos',
+                '285 - L. Carlos Gomes',
+                {'santander'},
+                contas_lcarlos,
             )
 
-        if arquivo_jaguar is not None and arquivo_entradas_lcarlos is not None:
-            try:
-                (
-                    df_modelo_lcarlos,
-                    df_conciliacao_lcarlos,
-                    resumo_lcarlos,
-                ) = executar_com_loading(
-                    'Conferindo recebimentos e preparando o Modelo Domínio...',
-                    processar_planilhas_lcarlos,
-                    arquivo_jaguar.getvalue(),
-                    arquivo_entradas_lcarlos.getvalue(),
+        with aba_operacoes_lcarlos:
+            st.markdown('#### Jaguar → Modelo Domínio')
+            st.caption(
+                'Envie a planilha bancária Jaguar e a planilha auxiliar de Entradas. '
+                'Os recebimentos agrupados serão substituídos pelos detalhes do mesmo período.'
+            )
+            col_jaguar, col_entradas = st.columns(2)
+            with col_jaguar:
+                arquivo_jaguar = st.file_uploader(
+                    '1º · Planilha Jaguar',
+                    type=['xlsx', 'xls'],
+                    key='lcarlos_upload_jaguar',
+                    help='A Jaguar define o período, as datas bancárias e os movimentos principais.',
+                )
+            with col_entradas:
+                arquivo_entradas_lcarlos = st.file_uploader(
+                    '2º · Planilha de Entradas',
+                    type=['xlsx', 'xls'],
+                    key='lcarlos_upload_entradas',
+                    help='Contém os recebimentos detalhados por nota fiscal e cliente.',
                 )
 
-                st.markdown('##### Conferência do período')
-                metrica_1, metrica_2, metrica_3, metrica_4 = st.columns(4)
-                metrica_1.metric('Período', resumo_lcarlos['periodo'])
-                metrica_2.metric(
-                    'Movimentos Jaguar',
-                    resumo_lcarlos['lancamentos_jaguar'],
-                )
-                metrica_3.metric(
-                    'Lançamentos gerados',
-                    resumo_lcarlos['lancamentos_modelo'],
-                )
-                metrica_4.metric(
-                    'Diferença total',
-                    formatar_moeda(resumo_lcarlos['diferenca_total']),
-                )
-
-                if resumo_lcarlos['grupos_com_alerta']:
-                    st.warning(
-                        f"{resumo_lcarlos['grupos_com_alerta']} grupo(s) precisam "
-                        'de conferência. O arquivo pode ser gerado, mas nenhuma '
-                        'diferença foi compensada automaticamente.'
-                    )
-                else:
-                    st.success(
-                        'Todos os recebimentos detalhados coincidem com os totais da Jaguar.'
+            if arquivo_jaguar is not None and arquivo_entradas_lcarlos is not None:
+                try:
+                    (
+                        df_modelo_lcarlos,
+                        df_conciliacao_lcarlos,
+                        resumo_lcarlos,
+                    ) = executar_com_loading(
+                        'Conferindo recebimentos e preparando o Modelo Domínio...',
+                        processar_planilhas_lcarlos,
+                        arquivo_jaguar.getvalue(),
+                        arquivo_entradas_lcarlos.getvalue(),
                     )
 
-                st.dataframe(
-                    df_conciliacao_lcarlos,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'Total Jaguar': st.column_config.NumberColumn(
-                            format='R$ %.2f'
-                        ),
-                        'Total detalhado': st.column_config.NumberColumn(
-                            format='R$ %.2f'
-                        ),
-                        'Diferença': st.column_config.NumberColumn(
-                            format='R$ %.2f'
-                        ),
-                    },
-                )
+                    st.markdown('##### Conferência do período')
+                    metrica_1, metrica_2, metrica_3, metrica_4 = st.columns(4)
+                    metrica_1.metric('Período', resumo_lcarlos['periodo'])
+                    metrica_2.metric(
+                        'Movimentos Jaguar',
+                        resumo_lcarlos['lancamentos_jaguar'],
+                    )
+                    metrica_3.metric(
+                        'Lançamentos gerados',
+                        resumo_lcarlos['lancamentos_modelo'],
+                    )
+                    metrica_4.metric(
+                        'Diferença total',
+                        formatar_moeda(resumo_lcarlos['diferenca_total']),
+                    )
 
-                with st.expander('Prévia do Modelo Domínio'):
+                    if resumo_lcarlos['grupos_com_alerta']:
+                        st.warning(
+                            f"{resumo_lcarlos['grupos_com_alerta']} grupo(s) precisam "
+                            'de conferência. O arquivo pode ser gerado, mas nenhuma '
+                            'diferença foi compensada automaticamente.'
+                        )
+                    else:
+                        st.success(
+                            'Todos os recebimentos detalhados coincidem com os totais da Jaguar.'
+                        )
+
                     st.dataframe(
-                        df_modelo_lcarlos.head(30),
+                        df_conciliacao_lcarlos,
                         use_container_width=True,
                         hide_index=True,
+                        column_config={
+                            'Total Jaguar': st.column_config.NumberColumn(
+                                format='R$ %.2f'
+                            ),
+                            'Total detalhado': st.column_config.NumberColumn(
+                                format='R$ %.2f'
+                            ),
+                            'Diferença': st.column_config.NumberColumn(
+                                format='R$ %.2f'
+                            ),
+                        },
                     )
 
-                arquivo_excel_lcarlos = gerar_excel_modelo_dominio(
-                    df_modelo_lcarlos
-                )
-                col_download_excel, col_download_txt = st.columns(2)
-                col_download_excel.download_button(
-                    'Baixar Modelo Domínio (.XLSX)',
-                    data=arquivo_excel_lcarlos,
-                    file_name=(
-                        f"Modelo_Dominio_LCarlos_"
-                        f"{resumo_lcarlos['periodo'].replace('/', '_')}.xlsx"
-                    ),
-                    mime=(
-                        'application/vnd.openxmlformats-officedocument.'
-                        'spreadsheetml.sheet'
-                    ),
-                    use_container_width=True,
-                    key='lcarlos_download_excel',
-                )
-                col_download_txt.download_button(
-                    'Baixar TXT para Domínio',
-                    data=gerar_txt_dominio(df_modelo_lcarlos),
-                    file_name=(
-                        f"Modelo_Dominio_LCarlos_"
-                        f"{resumo_lcarlos['periodo'].replace('/', '_')}.txt"
-                    ),
-                    mime='text/plain',
-                    use_container_width=True,
-                    key='lcarlos_download_txt',
-                )
-            except Exception as erro_lcarlos:
-                st.error(
-                    'Não foi possível processar as planilhas da empresa 285: '
-                    f'{erro_lcarlos}'
-                )
+                    with st.expander('Prévia do Modelo Domínio'):
+                        st.dataframe(
+                            df_modelo_lcarlos.head(30),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
+                    arquivo_excel_lcarlos = gerar_excel_modelo_dominio(
+                        df_modelo_lcarlos
+                    )
+                    col_download_excel, col_download_txt = st.columns(2)
+                    col_download_excel.download_button(
+                        'Baixar Modelo Domínio (.XLSX)',
+                        data=arquivo_excel_lcarlos,
+                        file_name=(
+                            f"Modelo_Dominio_LCarlos_"
+                            f"{resumo_lcarlos['periodo'].replace('/', '_')}.xlsx"
+                        ),
+                        mime=(
+                            'application/vnd.openxmlformats-officedocument.'
+                            'spreadsheetml.sheet'
+                        ),
+                        use_container_width=True,
+                        key='lcarlos_download_excel',
+                    )
+                    col_download_txt.download_button(
+                        'Baixar TXT para Domínio',
+                        data=gerar_txt_dominio(df_modelo_lcarlos),
+                        file_name=(
+                            f"Modelo_Dominio_LCarlos_"
+                            f"{resumo_lcarlos['periodo'].replace('/', '_')}.txt"
+                        ),
+                        mime='text/plain',
+                        use_container_width=True,
+                        key='lcarlos_download_txt',
+                    )
+                except Exception as erro_lcarlos:
+                    st.error(
+                        'Não foi possível processar as planilhas da empresa 285: '
+                        f'{erro_lcarlos}'
+                    )
+
+
+            st.markdown('#### Conferência — 285 - L. Carlos Gomes')
+            renderizar_conferencia_autokraft(
+                'lcarlos',
+                bancos_config=[{'nome': 'Santander', 'slug': 'santander'}],
+            )
 
     if st.session_state['empresa_organizador'] in {
         'autokraft_industrial', 'autokraft_projetos', 'isa'
