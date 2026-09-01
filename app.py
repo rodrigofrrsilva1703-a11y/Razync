@@ -6167,7 +6167,19 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             }
             </style>
             """,
-                    termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
+            unsafe_allow_html=True,
+        )
+
+        with st.container(key='org_pesquisa_nativa'):
+            with st.container(key='org_campo_pesquisa'):
+                termo_busca_empresas = st.text_input(
+                    'Pesquisar empresa',
+                    placeholder='Digite o código ou o nome da empresa e pressione Enter',
+                    key='org_busca_empresas_catalogo',
+                    label_visibility='collapsed',
+                )
+
+            termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
             if termo_normalizado:
                 empresas_exibidas = []
                 for empresa_catalogo in empresas_catalogo_completo:
