@@ -5660,6 +5660,163 @@ section[data-testid="stSidebar"] .hc-brand-subtitle {
 </style>
 """, unsafe_allow_html=True)
 
+
+
+# Home visual refinement v3
+st.markdown("""
+<style>
+/* Home premium: apenas apresentação, sem alterar comportamento. */
+.stApp {
+    background:
+        radial-gradient(circle at 34% 8%, rgba(18, 133, 173, 0.10), transparent 32%),
+        linear-gradient(180deg, #071019 0%, #07111a 42%, #081019 100%) !important;
+}
+.block-container {
+    padding-top: 2.2rem !important;
+    padding-left: clamp(1.5rem, 3vw, 3.2rem) !important;
+    padding-right: clamp(1.5rem, 3vw, 3.2rem) !important;
+}
+.rz-dashboard-intro {
+    position: relative !important;
+    max-width: 920px !important;
+    margin: 0 0 1.65rem 0 !important;
+    padding: 1.15rem 1.25rem 1.3rem 1.35rem !important;
+    border: 1px solid rgba(91, 139, 170, 0.15) !important;
+    border-radius: 16px !important;
+    background:
+        radial-gradient(circle at 0% 0%, rgba(19,185,232,.11), transparent 42%),
+        linear-gradient(145deg, rgba(12,25,36,.88), rgba(8,17,26,.72)) !important;
+    box-shadow: 0 18px 48px rgba(0,0,0,.20) !important;
+    overflow: hidden !important;
+}
+.rz-dashboard-intro::after {
+    content: '' !important;
+    position: absolute !important;
+    left: 1.35rem !important;
+    bottom: 0 !important;
+    width: 84px !important;
+    height: 2px !important;
+    border-radius: 999px !important;
+    background: linear-gradient(90deg, #13b9e8, rgba(19,185,232,0)) !important;
+}
+.rz-home-eyebrow {
+    margin-bottom: .55rem !important;
+    color: #55c9e7 !important;
+    font-size: .70rem !important;
+    font-weight: 720 !important;
+    letter-spacing: .12em !important;
+    text-transform: uppercase !important;
+}
+.rz-dashboard-intro .rz-home-title {
+    margin: 0 !important;
+    font-size: clamp(2rem, 4vw, 3.25rem) !important;
+    line-height: 1.03 !important;
+    font-weight: 760 !important;
+    letter-spacing: -.045em !important;
+    color: #f4f8fb !important;
+}
+.rz-home-copy {
+    max-width: 690px !important;
+    margin-top: .72rem !important;
+    color: #8fa4b5 !important;
+    font-size: .94rem !important;
+    line-height: 1.65 !important;
+}
+.rz-dashboard-grid-title {
+    margin: .15rem 0 .7rem !important;
+    color: #8195a7 !important;
+    font-size: .72rem !important;
+    font-weight: 720 !important;
+    letter-spacing: .09em !important;
+    text-transform: uppercase !important;
+}
+.st-key-home_action_organizador button,
+.st-key-home_action_extratos button,
+.st-key-home_action_razao button {
+    min-height: 98px !important;
+    height: 98px !important;
+    margin-bottom: .68rem !important;
+    padding: 1rem 1.1rem 1rem 4.05rem !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(73, 113, 140, .28) !important;
+    background:
+        linear-gradient(135deg, rgba(15,29,41,.96), rgba(9,19,29,.96)) !important;
+    box-shadow: 0 10px 28px rgba(0,0,0,.14) !important;
+}
+.st-key-home_action_organizador button:hover,
+.st-key-home_action_extratos button:hover,
+.st-key-home_action_razao button:hover {
+    border-color: rgba(19,185,232,.52) !important;
+    background:
+        radial-gradient(circle at 0% 50%, rgba(19,185,232,.10), transparent 38%),
+        linear-gradient(135deg, rgba(17,34,47,.98), rgba(10,22,32,.98)) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 14px 34px rgba(0,0,0,.20) !important;
+}
+.st-key-home_action_organizador button::before,
+.st-key-home_action_extratos button::before,
+.st-key-home_action_razao button::before {
+    left: 1.18rem !important;
+    width: 2rem !important;
+    height: 2rem !important;
+    border-radius: 9px !important;
+    border-color: rgba(19,185,232,.22) !important;
+    background: rgba(19,185,232,.06) !important;
+    color: #36c4e8 !important;
+}
+.st-key-home_action_organizador button p,
+.st-key-home_action_extratos button p,
+.st-key-home_action_razao button p {
+    color: #8fa4b5 !important;
+    line-height: 1.55 !important;
+}
+.st-key-home_action_organizador button strong,
+.st-key-home_action_extratos button strong,
+.st-key-home_action_razao button strong {
+    display: block !important;
+    margin-bottom: .16rem !important;
+    color: #f1f6fa !important;
+    font-size: .98rem !important;
+    font-weight: 690 !important;
+}
+.rz-overview-panel {
+    min-height: 314px !important;
+    height: 314px !important;
+    padding: 1.15rem 1.2rem !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(73,113,140,.28) !important;
+    background:
+        radial-gradient(circle at 100% 0%, rgba(19,185,232,.07), transparent 35%),
+        linear-gradient(150deg, rgba(14,28,40,.96), rgba(8,18,27,.96)) !important;
+    box-shadow: 0 12px 34px rgba(0,0,0,.16) !important;
+}
+.rz-overview-title {
+    color: #f2f7fa !important;
+    font-size: 1.12rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -.02em !important;
+}
+.rz-overview-copy { color: #8ba0b2 !important; }
+.rz-overview-row {
+    border-top: 1px solid rgba(90,121,143,.16) !important;
+}
+.rz-overview-row strong { color: #dfe8ee !important; }
+.rz-overview-row span { color: #7e93a5 !important; }
+
+@media (max-width: 900px) {
+    .block-container { padding-top: 1.35rem !important; }
+    .rz-dashboard-intro { padding: 1rem !important; border-radius: 13px !important; }
+    .st-key-home_action_organizador button,
+    .st-key-home_action_extratos button,
+    .st-key-home_action_razao button {
+        min-height: 90px !important;
+        height: 90px !important;
+    }
+    .rz-overview-panel { height: auto !important; min-height: 0 !important; }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # CONTROLE DE ESTADO DE NAVEGAÇÃO
 # ==============================================================================
@@ -5770,10 +5927,9 @@ if st.session_state['pagina_ativa'] == 'home':
         """
         <section class="rz-dashboard-intro" aria-labelledby="rz-home-title">
             <div class="rz-home-eyebrow">Central operacional</div>
-            <div class="rz-home-title" id="rz-home-title">O que você precisa fazer hoje?</div>
+            <div class="rz-home-title" id="rz-home-title">Vamos organizar seu dia.</div>
             <div class="rz-home-copy">
-                Acesse diretamente o fluxo necessário. Cada ferramenta mantém as regras,
-                contas e formatos definidos para a operação contábil.
+                Centralize suas rotinas contábeis em um só lugar e acesse rapidamente cada ferramenta da operação.
             </div>
         </section>
         """,
@@ -5783,7 +5939,7 @@ if st.session_state['pagina_ativa'] == 'home':
     col_acoes, col_visao = st.columns([1.35, 0.65], gap="large")
     with col_acoes:
         st.markdown(
-            '<div class="rz-dashboard-grid-title">Ações operacionais</div>',
+            '<div class="rz-dashboard-grid-title">Ações rápidas</div>',
             unsafe_allow_html=True,
         )
         st.button(
