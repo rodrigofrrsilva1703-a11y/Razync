@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: transparent; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .search { position: relative; width: 100%; }
+    .icon { position: absolute; left: 15px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: #8da0b2; pointer-events: none; }
+    input {
+      width: 100%; height: 48px; padding: 0 15px 0 43px;
+      color: #f4f7fa; background: #101820;
+      border: 1px solid #314150; border-radius: 8px;
+      outline: none; font: 500 13.5px/1.2 inherit;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+    input::placeholder { color: #aebdca; opacity: 1; }
+    input:focus { border-color: #20b9df; box-shadow: 0 0 0 3px rgba(32,185,223,.09); }
+  </style>
+</head>
+<body>
+  <div class="search">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+      <path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <input id="company-search" type="search" autocomplete="off" spellcheck="false" aria-label="Pesquisar empresa">
+  </div>
+  <script>
+    const input = document.getElementById("company-search");
+    let timer = null;
+    let initialized = false;
+
+    const post = (type, payload = {}) => {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...payload }, "*");
+    };
+
+    const sendValue = () => {
+      post("streamlit:setComponentValue", { value: input.value, dataType: "json" });
+    };
+
+    window.addEventListener("message", (event) => {
+      if (event.data?.type !== "streamlit:render") return;
+      const args = event.data.args || {};
+      input.placeholder = args.placeholder || "Pesquisar empresa";
+      if (!initialized) {
+        input.value = args.value || "";
+        initialized = true;
+      }
+      post("streamlit:setFrameHeight", { height: 52 });
+    });
+
+    input.addEventListener("input", () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(sendValue, 120);
+    });
+
+    post("streamlit:componentReady", { apiVersion: 1 });
+    post("streamlit:setFrameHeight", { height: 52 });
+  </script>
+</body>
+</html>
