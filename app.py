@@ -6251,11 +6251,22 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 align-items: center;
             }
             [class*="st-key-org_linha_empresa_"] [data-testid="stColumn"] {
-                display: flex;
-                align-items: center;
-                min-height: 2.25rem;
+                display: flex !important;
+                align-items: center !important;
+                min-height: 2.55rem !important;
             }
             [class*="st-key-org_linha_empresa_"] [data-testid="stColumn"] > div {
+                width: 100%;
+            }
+            [class*="st-key-org_linha_empresa_"] [data-testid="stMarkdown"] {
+                display: flex !important;
+                align-items: center !important;
+                min-height: 2rem !important;
+            }
+            [class*="st-key-org_linha_empresa_"] [data-testid="stMarkdownContainer"] {
+                display: flex !important;
+                align-items: center !important;
+                min-height: 2rem !important;
                 width: 100%;
             }
             [class*="st-key-org_linha_empresa_"] p {
@@ -6263,13 +6274,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             }
             [class*="st-key-org_linha_empresa_"] [data-testid="stMarkdownContainer"] p {
                 color: #7f91a1;
-                font-size: 0.76rem !important;
+                font-size: 0.82rem !important;
                 line-height: 1.35 !important;
             }
             [class*="st-key-org_linha_empresa_"] button {
-                width: auto !important;
-                min-height: 1.9rem !important;
-                padding: 0.12rem 0 !important;
+                width: 100% !important;
+                min-height: 2rem !important;
+                height: auto !important;
+                padding: 0 !important;
+                display: flex !important;
+                align-items: center !important;
                 justify-content: flex-start !important;
                 text-align: left !important;
                 border: 0 !important;
@@ -6281,7 +6295,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             }
             [class*="st-key-org_linha_empresa_"] button p {
                 color: #e7edf2 !important;
-                font-size: 0.76rem !important;
+                font-size: 0.82rem !important;
                 font-weight: 600 !important;
                 line-height: 1.35 !important;
                 text-align: left !important;
@@ -6293,13 +6307,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 text-underline-offset: 3px;
             }
             .rz-company-code {
-                display: inline-flex;
-                align-items: center;
-                min-height: 1.9rem;
+                display: inline-flex !important;
+                align-items: center !important;
+                min-height: 2rem !important;
                 color: #7f91a1;
-                font-size: 0.76rem;
-                font-weight: 600;
-                line-height: 1.35;
+                font-size: 0.82rem !important;
+                font-weight: 600 !important;
+                line-height: 1.35 !important;
             }
             .rz-company-empty {
                 margin: 0;
