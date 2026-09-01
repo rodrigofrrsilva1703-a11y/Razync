@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 # Deploy sync: pesquisa de empresas aprovada em 2026-09-01.
 import pandas as pd
 import re
@@ -31,6 +32,15 @@ st.set_page_config(
     page_icon="assets/razync-icon.png", 
     layout="wide",
     initial_sidebar_state="expanded"
+)
+
+_pesquisa_empresa_instantanea = components.declare_component(
+    "razync_company_search",
+    path=os.path.join(
+        os.path.dirname(__file__),
+        "components",
+        "company_search",
+    ),
 )
 
 # ==============================================================================
@@ -5989,9 +5999,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.markdown(
             """
             <style>
-            [class*="st-key-org_diretorio_header"],
-            [class*="st-key-org_pesquisa_nativa"] {
+            [class*="st-key-org_diretorio_header"] {
                 width: min(100%, 900px);
+                margin-left: 0;
+                margin-right: auto;
+            }
+            [class*="st-key-org_pesquisa_nativa"] {
+                width: min(100%, 680px);
                 margin-left: 0;
                 margin-right: auto;
             }
@@ -6023,40 +6037,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 margin-bottom: 0.15rem !important;
             }
             [class*="st-key-org_pesquisa_nativa"] {
-                margin-top: 0.8rem;
+                margin-top: 0.2rem;
             }
-            [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input {
-                min-height: 3rem;
-                padding: 0 0.95rem 0 2.75rem !important;
-                color: var(--text-color) !important;
-                background: #101820 !important;
-                border: 1px solid #314150 !important;
-                border-radius: 8px !important;
-                box-shadow: none !important;
-                font-size: 0.86rem !important;
-            }
-            [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input:focus {
-                border-color: #20b9df !important;
-                box-shadow: 0 0 0 3px rgba(32, 185, 223, 0.09) !important;
-            }
-            [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input::placeholder {
-                color: #b2c0cc !important;
-                -webkit-text-fill-color: #b2c0cc !important;
-                opacity: 1 !important;
-            }
-            [class*="st-key-org_campo_pesquisa"] {
-                position: relative;
-            }
-            [class*="st-key-org_campo_pesquisa"]::before {
-                content: "⌕";
-                position: absolute;
-                z-index: 2;
-                top: 0.34rem;
-                left: 0.9rem;
-                color: #8da0b2;
-                font-size: 1.35rem;
-                line-height: 2rem;
-                pointer-events: none;
+            [class*="st-key-org_campo_pesquisa"] iframe {
+                display: block;
+                width: 100%;
+                height: 52px;
+                border: 0;
             }
             [class*="st-key-org_acesso_rapido"] {
                 width: min(100%, 560px);
@@ -6151,12 +6138,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         with st.container(key='org_pesquisa_nativa'):
             with st.container(key='org_campo_pesquisa'):
-                termo_busca_empresas = st.text_input(
-                    'Pesquisar empresa',
-                    placeholder='Digite o código ou o nome da empresa e pressione Enter',
-                    key='org_busca_empresas_catalogo',
-                    label_visibility='collapsed',
-                )
+                termo_busca_empresas = _pesquisa_empresa_instantanea(
+                    value='',
+                    placeholder='Digite o código ou o nome da empresa',
+                    key='org_busca_empresas_instantanea',
+                    default='',
+                ) or ''
 
             termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
             if termo_normalizado:
