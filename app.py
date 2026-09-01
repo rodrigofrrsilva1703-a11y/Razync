@@ -5951,78 +5951,74 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 margin: 1.15rem auto 0;
             }
             [class*="st-key-org_seletor_empresa"] [data-testid="stPopover"] > button {
-                min-height: 3.35rem !important;
+                min-height: 3.25rem !important;
                 padding: 0 1rem !important;
                 justify-content: flex-start !important;
                 color: #9aabba !important;
-                background: rgba(148, 163, 184, 0.045) !important;
+                background: rgba(148, 163, 184, 0.04) !important;
                 border: 1px solid rgba(148, 163, 184, 0.24) !important;
-                border-radius: 10px !important;
+                border-radius: 9px !important;
                 box-shadow: none !important;
-                font-size: 0.88rem !important;
+                font-size: 0.87rem !important;
                 font-weight: 500 !important;
                 text-align: left !important;
             }
             [class*="st-key-org_seletor_empresa"] [data-testid="stPopover"] > button:hover {
                 color: var(--text-color) !important;
                 border-color: rgba(34, 191, 230, 0.55) !important;
-                background: rgba(34, 191, 230, 0.045) !important;
+                background: rgba(34, 191, 230, 0.04) !important;
+            }
+            div[data-testid="stPopoverBody"] {
+                width: min(680px, calc(100vw - 32px)) !important;
+                max-width: min(680px, calc(100vw - 32px)) !important;
+                padding: 1rem !important;
+                border: 1px solid rgba(148, 163, 184, 0.24) !important;
+                border-radius: 10px !important;
+                background: #0b121a !important;
+                box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34) !important;
             }
             .rz-company-picker__eyebrow {
-                margin: 0 0 0.25rem;
+                margin: 0 0 0.18rem;
                 color: #22bfe6;
-                font-size: 0.65rem;
+                font-size: 0.64rem;
                 font-weight: 750;
                 letter-spacing: 0.1em;
                 text-transform: uppercase;
             }
             .rz-company-picker__title {
-                margin: 0 0 0.8rem;
+                margin: 0 0 0.75rem;
                 color: var(--text-color);
                 font-size: 0.95rem;
                 font-weight: 680;
             }
             [class*="st-key-org_busca_no_popover"] [data-testid="stTextInput"] input {
-                min-height: 2.9rem;
+                min-height: 3rem;
                 color: var(--text-color) !important;
-                background: rgba(148, 163, 184, 0.055) !important;
-                border: 1px solid rgba(148, 163, 184, 0.22) !important;
-                border-radius: 8px !important;
+                background: #0d1721 !important;
+                border: 1px solid rgba(34, 191, 230, 0.62) !important;
+                border-radius: 7px !important;
                 box-shadow: none !important;
                 font-size: 0.84rem !important;
             }
             [class*="st-key-org_busca_no_popover"] [data-testid="stTextInput"] input:focus {
-                border-color: rgba(34, 191, 230, 0.72) !important;
-                box-shadow: 0 0 0 3px rgba(34, 191, 230, 0.08) !important;
+                border-color: #22bfe6 !important;
+                box-shadow: 0 0 0 2px rgba(34, 191, 230, 0.08) !important;
             }
-            [class*="st-key-org_resultado_empresa_"] button {
-                width: 100% !important;
-                min-height: 2.55rem !important;
-                padding: 0.42rem 0.55rem !important;
-                justify-content: flex-start !important;
-                text-align: left !important;
-                border: 0 !important;
-                border-top: 1px solid rgba(148, 163, 184, 0.10) !important;
-                border-radius: 5px !important;
-                background: transparent !important;
-                box-shadow: none !important;
+            [class*="st-key-org_resultados_em_tabela"] {
+                margin-top: 0.55rem;
             }
-            [class*="st-key-org_resultado_empresa_"] button p {
-                color: var(--text-color) !important;
-                font-size: 0.8rem !important;
-                font-weight: 500 !important;
-                margin: 0 !important;
-            }
-            [class*="st-key-org_resultado_empresa_"] button:hover {
-                background: rgba(34, 191, 230, 0.065) !important;
-            }
-            [class*="st-key-org_resultado_empresa_"] button:hover p {
-                color: #22bfe6 !important;
+            [class*="st-key-org_resultados_em_tabela"] [data-testid="stDataFrame"] {
+                border: 1px solid rgba(148, 163, 184, 0.2);
+                border-radius: 7px;
+                overflow: hidden;
             }
             @media (max-width: 640px) {
                 [class*="st-key-org_seletor_empresa"] {
                     width: 100%;
                     margin-top: 0.75rem;
+                }
+                div[data-testid="stPopoverBody"] {
+                    padding: 0.8rem !important;
                 }
             }
             </style>
@@ -6032,7 +6028,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         with st.container(key='org_seletor_empresa'):
             with st.popover(
-                '⌕   Selecionar empresa',
+                '⌕   Pesquisar empresa',
                 use_container_width=True,
             ):
                 st.markdown(
@@ -6043,7 +6039,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 with st.container(key='org_busca_no_popover'):
                     termo_busca_empresas = st.text_input(
                         'Pesquisar empresa',
-                        placeholder='Digite o código ou o nome',
+                        placeholder='Digite o código ou nome',
                         key='org_busca_empresas_catalogo',
                         label_visibility='collapsed',
                     )
@@ -6063,20 +6059,48 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     if not empresas_encontradas:
                         st.caption('Nenhuma empresa encontrada.')
                     else:
-                        for empresa_catalogo in empresas_encontradas[:8]:
-                            regime_empresa = empresa_catalogo.get(
-                                'regime', 'Regime não informado'
-                            ).title()
-                            if st.button(
-                                (
-                                    f"{empresa_catalogo['codigo']}  ·  "
-                                    f"{empresa_catalogo['nome']}  ·  {regime_empresa}"
-                                ),
-                                type='tertiary',
+                        empresas_exibidas = empresas_encontradas[:8]
+                        dados_resultados_empresa = pd.DataFrame([
+                            {
+                                'Código': str(empresa_catalogo['codigo']),
+                                'Empresa': empresa_catalogo['nome'],
+                                'Regime': empresa_catalogo.get(
+                                    'regime', 'Não informado'
+                                ).title(),
+                            }
+                            for empresa_catalogo in empresas_exibidas
+                        ])
+                        with st.container(key='org_resultados_em_tabela'):
+                            evento_resultado_empresa = st.dataframe(
+                                dados_resultados_empresa,
+                                hide_index=True,
                                 use_container_width=True,
-                                key=f"org_resultado_empresa_{empresa_catalogo['codigo']}"
-                            ):
-                                _abrir_empresa_catalogo(empresa_catalogo)
+                                height=min(
+                                    360,
+                                    38 + (len(dados_resultados_empresa) * 42)
+                                ),
+                                column_config={
+                                    'Código': st.column_config.TextColumn(
+                                        'Código', width='small'
+                                    ),
+                                    'Empresa': st.column_config.TextColumn(
+                                        'Empresa', width='large'
+                                    ),
+                                    'Regime': st.column_config.TextColumn(
+                                        'Regime', width='medium'
+                                    ),
+                                },
+                                on_select='rerun',
+                                selection_mode='single-row',
+                                key='org_tabela_resultados_empresa',
+                            )
+                        linhas_resultado = evento_resultado_empresa.selection.rows
+                        if linhas_resultado:
+                            indice_resultado = linhas_resultado[0]
+                            if 0 <= indice_resultado < len(empresas_exibidas):
+                                _abrir_empresa_catalogo(
+                                    empresas_exibidas[indice_resultado]
+                                )
                         if len(empresas_encontradas) > 8:
                             st.caption('Continue digitando para refinar a pesquisa.')
 
