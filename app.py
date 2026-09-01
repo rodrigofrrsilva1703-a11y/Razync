@@ -5503,6 +5503,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# Sidebar spacing refinement v3
+st.markdown("""
+<style>
+/* Desce levemente o bloco de navegação lateral sem alterar a estrutura. */
+section[data-testid="stSidebar"] .rz-nav-label {
+    margin-top: 1.15rem !important;
+}
+section[data-testid="stSidebar"] .rz-nav-title-gap {
+    height: 0.82rem !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"]:first-of-type {
+    margin-top: 0.3rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Sidebar refinement v2
 st.markdown("""
 <style>
