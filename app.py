@@ -6250,12 +6250,21 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             [class*="st-key-org_linha_empresa_"] [data-testid="stHorizontalBlock"] {
                 align-items: center;
             }
+            [class*="st-key-org_linha_empresa_"] [data-testid="stColumn"] {
+                display: flex;
+                align-items: center;
+                min-height: 2.25rem;
+            }
+            [class*="st-key-org_linha_empresa_"] [data-testid="stColumn"] > div {
+                width: 100%;
+            }
             [class*="st-key-org_linha_empresa_"] p {
                 margin: 0 !important;
             }
             [class*="st-key-org_linha_empresa_"] [data-testid="stMarkdownContainer"] p {
                 color: #7f91a1;
-                font-size: 0.73rem;
+                font-size: 0.76rem !important;
+                line-height: 1.35 !important;
             }
             [class*="st-key-org_linha_empresa_"] button {
                 width: auto !important;
@@ -6272,8 +6281,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             }
             [class*="st-key-org_linha_empresa_"] button p {
                 color: #e7edf2 !important;
-                font-size: 0.78rem !important;
-                font-weight: 560 !important;
+                font-size: 0.76rem !important;
+                font-weight: 600 !important;
+                line-height: 1.35 !important;
                 text-align: left !important;
                 text-decoration: none !important;
             }
@@ -6283,9 +6293,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 text-underline-offset: 3px;
             }
             .rz-company-code {
+                display: inline-flex;
+                align-items: center;
+                min-height: 1.9rem;
                 color: #7f91a1;
-                font-size: 0.73rem;
-                font-weight: 650;
+                font-size: 0.76rem;
+                font-weight: 600;
+                line-height: 1.35;
             }
             .rz-company-empty {
                 margin: 0;
