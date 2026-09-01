@@ -5832,18 +5832,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         elif empresas_mesma_chave:
             empresa_catalogo_atual = empresas_mesma_chave[0]
 
-    col_voltar, col_tit = st.columns([1.2, 8.8])
-    with col_voltar:
-        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-        if empresa_organizador:
-            if st.button(
-                "← Empresas", use_container_width=True, key="btn_voltar_empresas_org"
-            ):
-                st.session_state['empresa_organizador'] = None
-                st.rerun()
-        elif st.button("← Voltar", use_container_width=True, key="btn_voltar_home_org"):
-            mudar_pagina('home')
-            st.rerun()
     estabelecimento_ng_atual = st.session_state.get(
         'org_estabelecimento_nova_geracao_card', 'matriz'
     )
@@ -5852,37 +5840,91 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         if estabelecimento_ng_atual == 'filial'
         else '266 - Nova Geração'
     )
-
-    with col_tit:
-        st.title({
-            'nova_geracao': titulo_nova_geracao_atual,
-            'autokraft_industrial': '3 - Autokraft Industrial',
-            'autokraft_projetos': '178 - Autokraft Projetos',
-            'isa': '343 - I.S.A',
-            'accede_automacao': '1000 - ACCEDE AUTOMAÇÃO',
-            'accede_equipamentos': '1001 - ACCEDE EQUIPAMENTOS',
-            'dias_pereira': '1529 - Dias e Pereira'
-        }.get(
-            empresa_organizador,
-            empresa_catalogo_atual['rotulo'] if empresa_catalogo_atual else 'Organizador de Planilhas'
-        ))
-    st.caption({
-        'nova_geracao': f'Organize, confira e classifique os movimentos da {titulo_nova_geracao_atual}.',
-        'autokraft_industrial': 'Organize os mapas diários e confira os extratos da 3 - Autokraft Industrial.',
-        'autokraft_projetos': 'Organize os mapas diários e confira os extratos da 178 - Autokraft Projetos.',
-        'isa': 'Organize os mapas diários e confira os extratos da 343 - I.S.A.',
-        'accede_automacao': 'Organize as planilhas SIG e confira Itaú e Sicredi da 1000 - ACCEDE AUTOMAÇÃO.',
-        'accede_equipamentos': 'Organize as planilhas SIG e confira Itaú e Sicredi da 1001 - ACCEDE EQUIPAMENTOS.',
-        'dias_pereira': 'Converta o relatório visual do Nibo da 1529 - Dias e Pereira diretamente para o Modelo Domínio.'
+    titulo_pagina_organizador = {
+        'nova_geracao': titulo_nova_geracao_atual,
+        'autokraft_industrial': '3 - Autokraft Industrial',
+        'autokraft_projetos': '178 - Autokraft Projetos',
+        'isa': '343 - I.S.A',
+        'accede_automacao': '1000 - ACCEDE AUTOMAÇÃO',
+        'accede_equipamentos': '1001 - ACCEDE EQUIPAMENTOS',
+        'dias_pereira': '1529 - Dias e Pereira',
     }.get(
         empresa_organizador,
         (
-            f"{empresa_catalogo_atual['regime'].title()} · Área cadastrada para receber ferramentas específicas."
+            empresa_catalogo_atual['rotulo']
             if empresa_catalogo_atual
-            else 'Pesquise uma empresa para acessar sua área de organização e Base Inteligente.'
-        )
-    ))
-    st.markdown("---")
+            else 'Organizador de Planilhas'
+        ),
+    )
+    descricao_pagina_organizador = {
+        'nova_geracao': (
+            f'Organize, confira e classifique os movimentos da '
+            f'{titulo_nova_geracao_atual}.'
+        ),
+        'autokraft_industrial': (
+            'Organize os mapas diários e confira os extratos da '
+            '3 - Autokraft Industrial.'
+        ),
+        'autokraft_projetos': (
+            'Organize os mapas diários e confira os extratos da '
+            '178 - Autokraft Projetos.'
+        ),
+        'isa': 'Organize os mapas diários e confira os extratos da 343 - I.S.A.',
+        'accede_automacao': (
+            'Organize as planilhas SIG e confira Itaú e Sicredi da '
+            '1000 - ACCEDE AUTOMAÇÃO.'
+        ),
+        'accede_equipamentos': (
+            'Organize as planilhas SIG e confira Itaú e Sicredi da '
+            '1001 - ACCEDE EQUIPAMENTOS.'
+        ),
+        'dias_pereira': (
+            'Converta o relatório visual do Nibo da 1529 - Dias e Pereira '
+            'diretamente para o Modelo Domínio.'
+        ),
+    }.get(
+        empresa_organizador,
+        (
+            f"{empresa_catalogo_atual['regime'].title()} · "
+            'Área cadastrada para receber ferramentas específicas.'
+            if empresa_catalogo_atual
+            else 'Pesquise pelo código ou nome para abrir a área da empresa.'
+        ),
+    )
+
+    if empresa_organizador is None:
+        with st.container(key='org_diretorio_header'):
+            if st.button(
+                '← Início',
+                key='btn_voltar_home_org',
+                type='tertiary',
+            ):
+                mudar_pagina('home')
+                st.rerun()
+            st.markdown(
+                '<div class="rz-directory-eyebrow">Empresas</div>',
+                unsafe_allow_html=True,
+            )
+            st.title(titulo_pagina_organizador)
+            st.caption(descricao_pagina_organizador)
+    else:
+        col_voltar, col_tit = st.columns([1.2, 8.8])
+        with col_voltar:
+            st.markdown(
+                "<div style='height: 4px;'></div>",
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                '← Empresas',
+                use_container_width=True,
+                key='btn_voltar_empresas_org',
+            ):
+                st.session_state['empresa_organizador'] = None
+                st.rerun()
+        with col_tit:
+            st.title(titulo_pagina_organizador)
+        st.caption(descricao_pagina_organizador)
+        st.markdown('---')
 
     if empresa_organizador:
         regime_workspace = (
@@ -5947,9 +5989,41 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         st.markdown(
             """
             <style>
+            [class*="st-key-org_diretorio_header"],
             [class*="st-key-org_pesquisa_nativa"] {
-                width: min(100%, 840px);
-                margin: 0.65rem auto 0;
+                width: min(100%, 900px);
+                margin-left: 0;
+                margin-right: auto;
+            }
+            [class*="st-key-org_diretorio_header"] {
+                margin-top: 0;
+            }
+            [class*="st-key-org_diretorio_header"] button {
+                width: auto !important;
+                min-height: 2rem !important;
+                padding: 0.2rem 0 !important;
+                border: 0 !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                color: #8fa1b2 !important;
+                font-size: 0.76rem !important;
+            }
+            [class*="st-key-org_diretorio_header"] button:hover {
+                color: #20b9df !important;
+            }
+            .rz-directory-eyebrow {
+                margin: 1rem 0 0.2rem;
+                color: #20b9df;
+                font-size: 0.66rem;
+                font-weight: 750;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+            }
+            [class*="st-key-org_diretorio_header"] h1 {
+                margin-bottom: 0.15rem !important;
+            }
+            [class*="st-key-org_pesquisa_nativa"] {
+                margin-top: 0.8rem;
             }
             [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input {
                 min-height: 3rem;
@@ -5984,12 +6058,15 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 pointer-events: none;
             }
             [class*="st-key-org_resultados_nativos"] {
-                margin-top: 0.55rem;
+                margin-top: 0.45rem;
                 overflow: hidden;
                 border: 1px solid #2b3b49;
                 border-radius: 9px;
                 background: #0d151d;
                 box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+            }
+            [class*="st-key-org_resultados_nativos"] div[data-testid="stVerticalBlock"] {
+                gap: 0 !important;
             }
             [class*="st-key-org_cabecalho_resultados"] {
                 min-height: 2.2rem;
@@ -6078,7 +6155,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         with st.container(key='org_pesquisa_nativa'):
             col_campo_pesquisa, col_respiro_pesquisa = st.columns(
-                [0.56, 0.44],
+                [0.60, 0.40],
                 gap='small',
             )
             with col_campo_pesquisa:
