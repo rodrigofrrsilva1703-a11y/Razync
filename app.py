@@ -6129,6 +6129,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 background: transparent !important;
                 box-shadow: none !important;
             }
+            [class*="st-key-org_linha_empresa_"] button > div {
+                width: 100% !important;
+                justify-content: flex-start !important;
+            }
             [class*="st-key-org_linha_empresa_"] button p {
                 width: 100% !important;
                 overflow: hidden;
