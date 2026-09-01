@@ -6249,14 +6249,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
                     if len(empresas_exibidas) > 8:
                         st.caption('Continue digitando para refinar a pesquisa.')
-                use_container_width=True,
-                                        key=f"org_abrir_empresa_{codigo_empresa}",
-                                    ):
-                                        _abrir_empresa_catalogo(empresa_catalogo)
-                                col_regime.markdown(regime_empresa)
-
-                        if len(empresas_encontradas) > 7:
-                            st.caption('Continue digitando para refinar a pesquisa.')
 
     if empresa_catalogo_atual and not empresa_catalogo_atual.get('chave_sistema'):
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
