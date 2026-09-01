@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 
 import pandas as pd
 
@@ -103,3 +104,15 @@ def test_funciona_em_outro_periodo_sem_regra_fixa_de_julho():
     ]
     assert modelo['DÉBITO'].tolist() == ['513', '']
     assert modelo['CRÉDITO'].tolist() == ['', '513']
+
+
+def test_app_integra_base_inteligente_e_conferencia_santander():
+    app = Path('app.py').read_text(encoding='utf-8')
+
+    assert "if 'santander' in texto:" in app
+    assert "return 'santander'" in app
+    assert "'santander': 'Santander'" in app
+    assert "contas_lcarlos = {'santander': '513'}" in app
+    assert "'Base Inteligente'" in app
+    assert "renderizar_base_inteligente_empresa(\n                'lcarlos'" in app
+    assert "bancos_config=[{'nome': 'Santander', 'slug': 'santander'}]" in app
