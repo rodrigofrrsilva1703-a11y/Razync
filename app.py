@@ -6785,15 +6785,25 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     if termo_normalizado in alvo:
                         empresas_encontradas.append(empresa_catalogo)
 
-                empresas_encontradas.sort(
-                    key=lambda empresa: (
-                        prioridades_empresas[str(empresa['codigo'])]['ordem'],
-                        prioridades_empresas[str(empresa['codigo'])]['vencimento'],
-                        int(empresa['codigo']),
-                    )
-                )
+                def _relevancia_busca_empresa(empresa):
+                    codigo = str(empresa['codigo'])
+                    nome = _normalizar_busca_empresa(empresa['nome'])
+                    termo = termo_normalizado
+                    if termo == codigo:
+                        return (0, int(codigo))
+                    if termo == nome:
+                        return (1, int(codigo))
+                    if codigo.startswith(termo):
+                        return (2, int(codigo))
+                    if nome.startswith(termo):
+                        return (3, int(codigo))
+                    return (4, int(codigo))
+
+                # A busca serve para acessar ferramentas. O status da tarefa mensal
+                # não pode esconder nem rebaixar uma empresa concluída.
+                empresas_encontradas.sort(key=_relevancia_busca_empresa)
                 st.markdown(
-                    '<div class="rz-company-section">Resultados por prioridade</div>',
+                    '<div class="rz-company-section">Resultados da pesquisa</div>',
                     unsafe_allow_html=True,
                 )
                 with st.container(key='org_resultados_nativos'):
