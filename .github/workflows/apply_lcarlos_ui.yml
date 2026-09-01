@@ -1,0 +1,34 @@
+name: Aplicar integração 285
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/apply_lcarlos_ui_patch.py'
+      - '.github/workflows/apply_lcarlos_ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar patch da empresa 285
+        run: python scripts/apply_lcarlos_ui_patch.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/*.py
+      - name: Registrar alteração e remover patch temporário
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git rm scripts/apply_lcarlos_ui_patch.py .github/workflows/apply_lcarlos_ui.yml
+          git commit -m 'Integra Base Inteligente e conferência Santander na empresa 285'
+          git push
