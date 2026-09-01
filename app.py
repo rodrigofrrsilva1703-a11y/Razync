@@ -22,11 +22,12 @@ from zoneinfo import ZoneInfo
 from pypdf import PdfReader
 
 from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
-from razync.company_catalog import EMPRESAS_POR_REGIME, EMPRESAS_POR_CHAVE
+from razync.company_catalog import EMPRESAS, EMPRESAS_POR_REGIME, EMPRESAS_POR_CHAVE
 from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
 from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
 from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia_operacional
+from razync.task_center import classificar_tarefa, ordenar_tarefas, resumir_tarefas
 from razync.lcarlos import processar_planilhas_lcarlos
 
 # Configuração da página Web
@@ -3282,6 +3283,60 @@ def salvar_status_tarefa_empresa(codigo_empresa, competencia, concluida):
     carregar_tarefas_competencia.clear()
 
 
+@st.cache_data(show_spinner=False, ttl=15)
+def carregar_tarefas_central():
+    registros = requisicao_classificacao_online(
+        'tarefas_central?select=id,titulo,descricao,codigo_empresa,categoria,prioridade,status,prazo,concluida_em,criado_em,atualizado_em&order=prazo.asc.nullslast,criado_em.desc'
+    )
+    return registros if isinstance(registros, list) else []
+
+
+def criar_tarefa_central(titulo, descricao, codigo_empresa, categoria, prioridade, prazo):
+    agora = datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat()
+    registro = {
+        'titulo': str(titulo).strip(),
+        'descricao': str(descricao or '').strip(),
+        'codigo_empresa': str(codigo_empresa).strip() if codigo_empresa else None,
+        'categoria': str(categoria or 'Geral').strip(),
+        'prioridade': str(prioridade or 'Normal'),
+        'status': 'Pendente',
+        'prazo': prazo.isoformat() if prazo else None,
+        'atualizado_em': agora,
+    }
+    requisicao_classificacao_online(
+        'tarefas_central',
+        metodo='POST',
+        dados=[registro],
+        prefer='return=minimal',
+    )
+    carregar_tarefas_central.clear()
+
+
+def atualizar_status_tarefa_central(tarefa_id, status):
+    agora = datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat()
+    dados = {
+        'status': status,
+        'concluida_em': agora if status == 'Concluída' else None,
+        'atualizado_em': agora,
+    }
+    requisicao_classificacao_online(
+        'tarefas_central?id=eq.' + urllib.parse.quote(str(tarefa_id)),
+        metodo='PATCH',
+        dados=dados,
+        prefer='return=minimal',
+    )
+    carregar_tarefas_central.clear()
+
+
+def excluir_tarefa_central(tarefa_id):
+    requisicao_classificacao_online(
+        'tarefas_central?id=eq.' + urllib.parse.quote(str(tarefa_id)),
+        metodo='DELETE',
+        prefer='return=minimal',
+    )
+    carregar_tarefas_central.clear()
+
+
 def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
     """Lê planilha revisada e cria padrões exclusivos da empresa informada."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -5426,6 +5481,7 @@ section[data-testid="stSidebar"] .st-key-sb_home button::before { content: "⌂"
 section[data-testid="stSidebar"] .st-key-sb_extratos button::before { content: "⇄"; }
 section[data-testid="stSidebar"] .st-key-sb_razao button::before { content: "✓"; }
 section[data-testid="stSidebar"] .st-key-sb_organizador button::before { content: "▤"; }
+section[data-testid="stSidebar"] .st-key-sb_tarefas button::before { content: "✓"; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -5511,6 +5567,14 @@ st.sidebar.button(
     type="primary" if pagina_sidebar == "organizador" else "tertiary",
     on_click=mudar_pagina,
     args=('organizador',),
+)
+st.sidebar.button(
+    "Central de Tarefas",
+    use_container_width=True,
+    key="sb_tarefas",
+    type="primary" if pagina_sidebar == "tarefas" else "tertiary",
+    on_click=mudar_pagina,
+    args=('tarefas',),
 )
 
 if SEGURANCA_POR_SENHA_ATIVA:
@@ -5615,6 +5679,213 @@ if st.session_state['pagina_ativa'] == 'home':
             """,
             unsafe_allow_html=True,
         )
+
+# ==============================================================================
+# CENTRAL DE TAREFAS E PRAZOS
+# ==============================================================================
+elif st.session_state['pagina_ativa'] == 'tarefas':
+    if st.button("← Início", key="btn_voltar_home_tarefas", type="tertiary"):
+        mudar_pagina('home')
+        st.rerun()
+
+    st.markdown("## Central de Tarefas e Prazos")
+    st.caption(
+        "Controle operacional das obrigações das empresas e das suas tarefas manuais, "
+        "com prioridade, prazo, atraso e progresso em um só lugar."
+    )
+
+    hoje_tarefas, competencia_tarefas = obter_competencia_operacional()
+    try:
+        tarefas_manuais = carregar_tarefas_central()
+        tarefas_empresas_status = carregar_tarefas_competencia(competencia_tarefas.isoformat())
+        erro_central_tarefas = ''
+    except Exception as erro_tarefas_central:
+        tarefas_manuais = []
+        tarefas_empresas_status = {}
+        erro_central_tarefas = str(erro_tarefas_central)
+
+    resumo_manual = resumir_tarefas(tarefas_manuais, hoje_tarefas)
+    prioridades_auto = [
+        (empresa, calcular_prioridade_empresa(
+            empresa, tarefas_empresas_status, hoje_tarefas, competencia_tarefas
+        ))
+        for empresa in EMPRESAS
+    ]
+    auto_abertas = sum(1 for _, p in prioridades_auto if not p['concluida'])
+    auto_atrasadas = sum(1 for _, p in prioridades_auto if p['status'] == 'Atrasada')
+    auto_urgentes = sum(1 for _, p in prioridades_auto if p['status'] == 'Urgente')
+    auto_concluidas = sum(1 for _, p in prioridades_auto if p['concluida'])
+    total_geral = len(prioridades_auto) + resumo_manual['total']
+    concluidas_geral = auto_concluidas + resumo_manual['concluidas']
+    progresso_geral = round((concluidas_geral / total_geral) * 100) if total_geral else 0
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric('Pendentes', auto_abertas + resumo_manual['abertas'])
+    m2.metric('Atrasadas', auto_atrasadas + resumo_manual['atrasadas'])
+    m3.metric('Urgentes / hoje', auto_urgentes + resumo_manual['hoje'])
+    m4.metric('Concluídas', concluidas_geral)
+    m5.metric('Progresso', f'{progresso_geral}%')
+    st.progress(progresso_geral / 100 if progresso_geral else 0)
+
+    if erro_central_tarefas:
+        st.warning('O painel abriu, mas a sincronização online das tarefas não está disponível agora.')
+
+    aba_painel, aba_nova = st.tabs(['Painel operacional', 'Nova tarefa'])
+
+    with aba_nova:
+        st.markdown('### Criar tarefa')
+        opcoes_empresas_tarefa = ['Sem empresa'] + [
+            f"{empresa['codigo']} - {empresa['nome']}" for empresa in EMPRESAS
+        ]
+        with st.form('form_nova_tarefa_central', clear_on_submit=True):
+            titulo_tarefa = st.text_input('Tarefa', placeholder='Ex.: Conferir movimento bancário de agosto')
+            col_empresa_tarefa, col_categoria_tarefa = st.columns(2)
+            empresa_tarefa = col_empresa_tarefa.selectbox('Empresa', opcoes_empresas_tarefa)
+            categoria_tarefa = col_categoria_tarefa.selectbox(
+                'Categoria', ['Contábil', 'Fiscal', 'Financeiro', 'Conferência', 'Cliente', 'Interno', 'Geral']
+            )
+            col_prioridade_tarefa, col_prazo_tarefa = st.columns(2)
+            prioridade_tarefa = col_prioridade_tarefa.selectbox(
+                'Prioridade', ['Normal', 'Alta', 'Urgente', 'Baixa']
+            )
+            sem_prazo_tarefa = col_prazo_tarefa.checkbox('Sem prazo')
+            prazo_tarefa = None if sem_prazo_tarefa else col_prazo_tarefa.date_input(
+                'Prazo', value=hoje_tarefas
+            )
+            descricao_tarefa = st.text_area('Observações', height=90)
+            salvar_tarefa = st.form_submit_button('Adicionar tarefa', use_container_width=True)
+        if salvar_tarefa:
+            if not titulo_tarefa.strip():
+                st.error('Informe o nome da tarefa.')
+            else:
+                codigo_tarefa = None
+                if empresa_tarefa != 'Sem empresa':
+                    codigo_tarefa = empresa_tarefa.split(' - ', 1)[0]
+                try:
+                    criar_tarefa_central(
+                        titulo_tarefa, descricao_tarefa, codigo_tarefa, categoria_tarefa,
+                        prioridade_tarefa, prazo_tarefa
+                    )
+                    st.success('Tarefa adicionada à Central.')
+                    st.rerun()
+                except Exception as erro_criar_tarefa:
+                    st.error(f'Não foi possível salvar a tarefa: {erro_criar_tarefa}')
+
+    with aba_painel:
+        st.markdown('### Obrigações das empresas')
+        f1, f2, f3 = st.columns([1.3, 1.3, 2.4])
+        filtro_status_auto = f1.selectbox(
+            'Status', ['Todos', 'Atrasada', 'Urgente', 'Próxima', 'No prazo', 'Concluída'],
+            key='tarefas_filtro_status_auto'
+        )
+        filtro_regime_auto = f2.selectbox(
+            'Regime', ['Todos', 'LUCRO REAL', 'LUCRO PRESUMIDO', 'SIMPLES NACIONAL'],
+            key='tarefas_filtro_regime_auto'
+        )
+        busca_auto = f3.text_input('Buscar empresa', key='tarefas_busca_empresa_auto')
+
+        linhas_auto = []
+        for empresa, prioridade in prioridades_auto:
+            if filtro_status_auto != 'Todos' and prioridade['status'] != filtro_status_auto:
+                continue
+            if filtro_regime_auto != 'Todos' and empresa['regime'] != filtro_regime_auto:
+                continue
+            alvo_busca = f"{empresa['codigo']} {empresa['nome']}".casefold()
+            if busca_auto.strip() and busca_auto.casefold().strip() not in alvo_busca:
+                continue
+            dias = prioridade['dias_restantes']
+            linhas_auto.append({
+                'Código': str(empresa['codigo']),
+                'Empresa': empresa['nome'],
+                'Regime': empresa['regime'].title(),
+                'Status': prioridade['status'],
+                'Prazo': prioridade['vencimento'].strftime('%d/%m/%Y'),
+                'Dias': dias,
+            })
+        linhas_auto.sort(key=lambda item: (
+            {'Atrasada': 0, 'Urgente': 1, 'Próxima': 2, 'No prazo': 3, 'Concluída': 4}.get(item['Status'], 5),
+            item['Dias'] if item['Dias'] is not None else 9999,
+            int(item['Código']),
+        ))
+        st.dataframe(pd.DataFrame(linhas_auto), use_container_width=True, hide_index=True)
+
+        st.markdown('#### Atualização rápida de uma empresa')
+        opcoes_auto = [f"{e['codigo']} - {e['nome']}" for e in EMPRESAS]
+        col_auto_empresa, col_auto_concluir, col_auto_reabrir = st.columns([5, 1.2, 1.2])
+        empresa_auto_escolhida = col_auto_empresa.selectbox(
+            'Empresa', opcoes_auto, key='tarefas_empresa_atualizar', label_visibility='collapsed'
+        )
+        codigo_auto_escolhido = empresa_auto_escolhida.split(' - ', 1)[0]
+        if col_auto_concluir.button('Concluir', key='tarefas_auto_concluir', use_container_width=True):
+            try:
+                salvar_status_tarefa_empresa(codigo_auto_escolhido, competencia_tarefas, True)
+                st.rerun()
+            except Exception as erro_status_auto:
+                st.error(f'Não foi possível concluir: {erro_status_auto}')
+        if col_auto_reabrir.button('Reabrir', key='tarefas_auto_reabrir', use_container_width=True):
+            try:
+                salvar_status_tarefa_empresa(codigo_auto_escolhido, competencia_tarefas, False)
+                st.rerun()
+            except Exception as erro_status_auto:
+                st.error(f'Não foi possível reabrir: {erro_status_auto}')
+
+        st.divider()
+        st.markdown('### Minhas tarefas')
+        c1, c2, c3 = st.columns([1.3, 1.3, 2.4])
+        filtro_status_manual = c1.selectbox(
+            'Status manual', ['Todos', 'Pendente', 'Em andamento', 'Concluída', 'Cancelada'],
+            key='tarefas_filtro_status_manual'
+        )
+        filtro_prioridade_manual = c2.selectbox(
+            'Prioridade', ['Todas', 'Urgente', 'Alta', 'Normal', 'Baixa'],
+            key='tarefas_filtro_prioridade_manual'
+        )
+        busca_manual = c3.text_input('Buscar tarefa', key='tarefas_busca_manual')
+
+        tarefas_filtradas = []
+        for tarefa in ordenar_tarefas(tarefas_manuais, hoje_tarefas):
+            if filtro_status_manual != 'Todos' and tarefa.get('status') != filtro_status_manual:
+                continue
+            if filtro_prioridade_manual != 'Todas' and tarefa.get('prioridade') != filtro_prioridade_manual:
+                continue
+            alvo = f"{tarefa.get('titulo','')} {tarefa.get('descricao','')} {tarefa.get('codigo_empresa','')}".casefold()
+            if busca_manual.strip() and busca_manual.casefold().strip() not in alvo:
+                continue
+            tarefas_filtradas.append(tarefa)
+
+        if not tarefas_filtradas:
+            st.info('Nenhuma tarefa encontrada com esses filtros.')
+        else:
+            nomes_empresas = {str(e['codigo']): e['nome'] for e in EMPRESAS}
+            for tarefa in tarefas_filtradas:
+                faixa = classificar_tarefa(tarefa, hoje_tarefas)
+                codigo = str(tarefa.get('codigo_empresa') or '')
+                empresa_nome = nomes_empresas.get(codigo, 'Sem empresa') if codigo else 'Sem empresa'
+                prazo_txt = tarefa.get('prazo') or 'Sem prazo'
+                titulo_expander = (
+                    f"{faixa['faixa']} · {tarefa.get('prioridade','Normal')} · "
+                    f"{tarefa.get('titulo','Tarefa')} — {prazo_txt}"
+                )
+                with st.expander(titulo_expander):
+                    st.caption(
+                        f"{empresa_nome} · {tarefa.get('categoria','Geral')} · "
+                        f"Status: {tarefa.get('status','Pendente')}"
+                    )
+                    if tarefa.get('descricao'):
+                        st.write(tarefa['descricao'])
+                    a1, a2, a3, a4 = st.columns(4)
+                    if a1.button('Em andamento', key=f"andamento_{tarefa['id']}", use_container_width=True):
+                        atualizar_status_tarefa_central(tarefa['id'], 'Em andamento')
+                        st.rerun()
+                    if a2.button('Concluir', key=f"concluir_{tarefa['id']}", use_container_width=True):
+                        atualizar_status_tarefa_central(tarefa['id'], 'Concluída')
+                        st.rerun()
+                    if a3.button('Reabrir', key=f"reabrir_{tarefa['id']}", use_container_width=True):
+                        atualizar_status_tarefa_central(tarefa['id'], 'Pendente')
+                        st.rerun()
+                    if a4.button('Excluir', key=f"excluir_{tarefa['id']}", use_container_width=True):
+                        excluir_tarefa_central(tarefa['id'])
+                        st.rerun()
 
 # ==============================================================================
 # TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
