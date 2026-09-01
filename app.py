@@ -27,6 +27,7 @@ from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
 from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
 from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia_operacional
+from razync.lcarlos import processar_planilhas_lcarlos
 
 # Configuração da página Web
 st.set_page_config(
@@ -5934,6 +5935,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         'accede_automacao': '1000 - ACCEDE AUTOMAÇÃO',
         'accede_equipamentos': '1001 - ACCEDE EQUIPAMENTOS',
         'dias_pereira': '1529 - Dias e Pereira',
+        'lcarlos': '285 - L. Carlos Gomes',
     }.get(
         empresa_organizador,
         (
@@ -5967,6 +5969,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         'dias_pereira': (
             'Converta o relatório visual do Nibo da 1529 - Dias e Pereira '
             'diretamente para o Modelo Domínio.'
+        ),
+        'lcarlos': (
+            'Substitua os recebimentos agrupados da Jaguar pelos lançamentos '
+            'detalhados e gere o Modelo Domínio da 285 - L. Carlos Gomes.'
         ),
     }.get(
         empresa_organizador,
@@ -6397,6 +6403,127 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "Empresa cadastrada no Razync. As ferramentas específicas desta empresa "
             "ainda não foram configuradas."
         )
+
+    if st.session_state['empresa_organizador'] == 'lcarlos':
+        st.markdown('#### Jaguar → Modelo Domínio')
+        st.caption(
+            'Envie a planilha bancária Jaguar e a planilha auxiliar de Entradas. '
+            'Os recebimentos agrupados serão substituídos pelos detalhes do mesmo período.'
+        )
+        col_jaguar, col_entradas = st.columns(2)
+        with col_jaguar:
+            arquivo_jaguar = st.file_uploader(
+                '1º · Planilha Jaguar',
+                type=['xlsx', 'xls'],
+                key='lcarlos_upload_jaguar',
+                help='A Jaguar define o período, as datas bancárias e os movimentos principais.',
+            )
+        with col_entradas:
+            arquivo_entradas_lcarlos = st.file_uploader(
+                '2º · Planilha de Entradas',
+                type=['xlsx', 'xls'],
+                key='lcarlos_upload_entradas',
+                help='Contém os recebimentos detalhados por nota fiscal e cliente.',
+            )
+
+        if arquivo_jaguar is not None and arquivo_entradas_lcarlos is not None:
+            try:
+                (
+                    df_modelo_lcarlos,
+                    df_conciliacao_lcarlos,
+                    resumo_lcarlos,
+                ) = executar_com_loading(
+                    'Conferindo recebimentos e preparando o Modelo Domínio...',
+                    processar_planilhas_lcarlos,
+                    arquivo_jaguar.getvalue(),
+                    arquivo_entradas_lcarlos.getvalue(),
+                )
+
+                st.markdown('##### Conferência do período')
+                metrica_1, metrica_2, metrica_3, metrica_4 = st.columns(4)
+                metrica_1.metric('Período', resumo_lcarlos['periodo'])
+                metrica_2.metric(
+                    'Movimentos Jaguar',
+                    resumo_lcarlos['lancamentos_jaguar'],
+                )
+                metrica_3.metric(
+                    'Lançamentos gerados',
+                    resumo_lcarlos['lancamentos_modelo'],
+                )
+                metrica_4.metric(
+                    'Diferença total',
+                    formatar_moeda(resumo_lcarlos['diferenca_total']),
+                )
+
+                if resumo_lcarlos['grupos_com_alerta']:
+                    st.warning(
+                        f"{resumo_lcarlos['grupos_com_alerta']} grupo(s) precisam "
+                        'de conferência. O arquivo pode ser gerado, mas nenhuma '
+                        'diferença foi compensada automaticamente.'
+                    )
+                else:
+                    st.success(
+                        'Todos os recebimentos detalhados coincidem com os totais da Jaguar.'
+                    )
+
+                st.dataframe(
+                    df_conciliacao_lcarlos,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        'Total Jaguar': st.column_config.NumberColumn(
+                            format='R$ %.2f'
+                        ),
+                        'Total detalhado': st.column_config.NumberColumn(
+                            format='R$ %.2f'
+                        ),
+                        'Diferença': st.column_config.NumberColumn(
+                            format='R$ %.2f'
+                        ),
+                    },
+                )
+
+                with st.expander('Prévia do Modelo Domínio'):
+                    st.dataframe(
+                        df_modelo_lcarlos.head(30),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                arquivo_excel_lcarlos = gerar_excel_modelo_dominio(
+                    df_modelo_lcarlos
+                )
+                col_download_excel, col_download_txt = st.columns(2)
+                col_download_excel.download_button(
+                    'Baixar Modelo Domínio (.XLSX)',
+                    data=arquivo_excel_lcarlos,
+                    file_name=(
+                        f"Modelo_Dominio_LCarlos_"
+                        f"{resumo_lcarlos['periodo'].replace('/', '_')}.xlsx"
+                    ),
+                    mime=(
+                        'application/vnd.openxmlformats-officedocument.'
+                        'spreadsheetml.sheet'
+                    ),
+                    use_container_width=True,
+                    key='lcarlos_download_excel',
+                )
+                col_download_txt.download_button(
+                    'Baixar TXT para Domínio',
+                    data=gerar_txt_dominio(df_modelo_lcarlos),
+                    file_name=(
+                        f"Modelo_Dominio_LCarlos_"
+                        f"{resumo_lcarlos['periodo'].replace('/', '_')}.txt"
+                    ),
+                    mime='text/plain',
+                    use_container_width=True,
+                    key='lcarlos_download_txt',
+                )
+            except Exception as erro_lcarlos:
+                st.error(
+                    'Não foi possível processar as planilhas da empresa 285: '
+                    f'{erro_lcarlos}'
+                )
 
     if st.session_state['empresa_organizador'] in {
         'autokraft_industrial', 'autokraft_projetos', 'isa'

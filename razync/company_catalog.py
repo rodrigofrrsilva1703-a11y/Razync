@@ -13,7 +13,7 @@ EMPRESAS = [
     {"codigo": 257, "nome": "F. CHAUVIN INDÚSTRIA, COMÉRCIO, IMPORTAÇÃO E EXPORTAÇÃO DE COSMÉTICOS LTDA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 266, "nome": "NOVA GERACAO COMERCIAL ELETRICA LTDA", "regime": "LUCRO PRESUMIDO", "chave_sistema": "nova_geracao", "estabelecimento": "matriz"},
     {"codigo": 242, "nome": "ELETRO FORTE COMERCIAL ELETRICA LTDA", "regime": "LUCRO REAL"},
-    {"codigo": 285, "nome": "L. CARLOS GOMES – ME", "regime": "LUCRO REAL"},
+    {"codigo": 285, "nome": "L. CARLOS GOMES – ME", "regime": "LUCRO REAL", "chave_sistema": "lcarlos"},
     {"codigo": 321, "nome": "SISTEMA SERVICOS DE AUTOMACAO LTDA EPP", "regime": "SIMPLES NACIONAL"},
     {"codigo": 336, "nome": "BRAMEX-FER COMERCIO DE FERROS E RECICLÁVEIS LTDA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 343, "nome": "ISA - INTEGRADORA DE SISTEMAS DE AUTOMACAO COMERCIO E INDUSTRIA EIRELI", "regime": "SIMPLES NACIONAL", "chave_sistema": "isa"},
