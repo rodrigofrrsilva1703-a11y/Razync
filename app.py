@@ -6058,71 +6058,49 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 line-height: 2rem;
                 pointer-events: none;
             }
-            .rz-company-section {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin: 1.35rem 0 0.5rem;
-                color: #a9b8c5;
-                font-size: 0.73rem;
-                font-weight: 650;
+            [class*="st-key-org_acesso_rapido"] {
+                width: min(100%, 560px);
+                margin-top: 0.75rem;
             }
-            .rz-company-section strong {
-                color: #718598;
-                font-size: 0.68rem;
-                font-weight: 650;
+            [class*="st-key-org_acesso_rapido"] label p {
+                color: #8799aa !important;
+                font-size: 0.72rem !important;
+                font-weight: 600 !important;
             }
             [class*="st-key-org_resultados_nativos"] {
-                margin-top: 0;
-                overflow: hidden;
-                border: 1px solid #2b3b49;
-                border-radius: 9px;
-                background: #0d151d;
-                box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+                margin-top: 0.85rem;
+                border: 0;
+                background: transparent;
+                box-shadow: none;
             }
             [class*="st-key-org_resultados_nativos"] div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
             }
-            [class*="st-key-org_cabecalho_resultados"] {
-                min-height: 2.2rem;
-                padding: 0.15rem 0.85rem;
-                background: #111b25;
-                border-bottom: 1px solid #2b3b49;
-            }
-            [class*="st-key-org_cabecalho_resultados"] [data-testid="stHorizontalBlock"],
-            [class*="st-key-org_linha_empresa_"] [data-testid="stHorizontalBlock"] {
-                align-items: center;
-            }
-            [class*="st-key-org_cabecalho_resultados"] p {
-                margin: 0 !important;
-                color: #718598 !important;
-                font-size: 0.64rem !important;
-                font-weight: 750 !important;
-                letter-spacing: 0.07em !important;
-                text-transform: uppercase;
+            .rz-company-section {
+                margin: 0 0 0.35rem;
+                color: #7f91a1;
+                font-size: 0.7rem;
+                font-weight: 650;
             }
             [class*="st-key-org_linha_empresa_"] {
-                min-height: 2.75rem;
-                padding: 0.08rem 0.85rem;
-                border-bottom: 1px solid rgba(113, 133, 152, 0.18);
-                transition: background 120ms ease;
+                min-height: 2.35rem;
+                padding: 0.04rem 0;
+                border-bottom: 1px solid rgba(113, 133, 152, 0.16);
             }
-            [class*="st-key-org_linha_empresa_"]:last-child {
-                border-bottom: 0;
-            }
-            [class*="st-key-org_linha_empresa_"]:hover {
-                background: rgba(32, 185, 223, 0.065);
+            [class*="st-key-org_linha_empresa_"] [data-testid="stHorizontalBlock"] {
+                align-items: center;
             }
             [class*="st-key-org_linha_empresa_"] p {
                 margin: 0 !important;
             }
             [class*="st-key-org_linha_empresa_"] [data-testid="stMarkdownContainer"] p {
-                color: #91a4b5;
-                font-size: 0.76rem;
+                color: #7f91a1;
+                font-size: 0.73rem;
             }
             [class*="st-key-org_linha_empresa_"] button {
-                min-height: 2.05rem !important;
-                padding: 0.2rem 0.35rem !important;
+                width: auto !important;
+                min-height: 1.9rem !important;
+                padding: 0.12rem 0 !important;
                 justify-content: flex-start !important;
                 text-align: left !important;
                 border: 0 !important;
@@ -6130,33 +6108,30 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 box-shadow: none !important;
             }
             [class*="st-key-org_linha_empresa_"] button > div {
-                width: 100% !important;
                 justify-content: flex-start !important;
             }
             [class*="st-key-org_linha_empresa_"] button p {
-                width: 100% !important;
-                overflow: hidden;
-                color: #f3f6f8 !important;
-                font-size: 0.8rem !important;
+                color: #e7edf2 !important;
+                font-size: 0.78rem !important;
                 font-weight: 560 !important;
                 text-align: left !important;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                text-decoration: none !important;
             }
             [class*="st-key-org_linha_empresa_"] button:hover p {
                 color: #20b9df !important;
+                text-decoration: underline !important;
+                text-underline-offset: 3px;
             }
             .rz-company-code {
-                color: #e9f0f5;
-                font-size: 0.78rem;
-                font-weight: 700;
+                color: #7f91a1;
+                font-size: 0.73rem;
+                font-weight: 650;
             }
             .rz-company-empty {
                 margin: 0;
-                padding: 1rem;
+                padding: 0.7rem 0;
                 color: #8799aa;
-                font-size: 0.76rem;
-                text-align: center;
+                font-size: 0.75rem;
             }
             @media (max-width: 640px) {
                 [class*="st-key-org_pesquisa_nativa"] {
@@ -6185,74 +6160,66 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
             termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
             if termo_normalizado:
-                empresas_exibidas = []
+                empresas_encontradas = []
                 for empresa_catalogo in empresas_catalogo_completo:
                     alvo = _normalizar_busca_empresa(
                         f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
                     )
                     if termo_normalizado in alvo:
-                        empresas_exibidas.append(empresa_catalogo)
-                titulo_lista_empresas = 'Resultados da pesquisa'
-            else:
-                empresas_exibidas = empresas_ativas
-                titulo_lista_empresas = 'Empresas com ferramentas'
+                        empresas_encontradas.append(empresa_catalogo)
 
-            total_empresas_exibidas = len(empresas_exibidas)
-            st.markdown(
-                (
-                    '<div class="rz-company-section">'
-                    f'<span>{titulo_lista_empresas}</span>'
-                    f'<strong>{total_empresas_exibidas} '
-                    f'{"empresa" if total_empresas_exibidas == 1 else "empresas"}</strong>'
-                    '</div>'
-                ),
-                unsafe_allow_html=True,
-            )
-
-            with st.container(key='org_resultados_nativos'):
-                if not empresas_exibidas:
-                    st.markdown(
-                        '<p class="rz-company-empty">Nenhuma empresa encontrada.</p>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    with st.container(key='org_cabecalho_resultados'):
-                        col_codigo_cab, col_empresa_cab, col_regime_cab = st.columns(
-                            [0.9, 6.0, 2.1],
-                            gap='small',
+                st.markdown(
+                    '<div class="rz-company-section">Resultados da pesquisa</div>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key='org_resultados_nativos'):
+                    if not empresas_encontradas:
+                        st.markdown(
+                            '<p class="rz-company-empty">Nenhuma empresa encontrada.</p>',
+                            unsafe_allow_html=True,
                         )
-                        col_codigo_cab.markdown('Código')
-                        col_empresa_cab.markdown('Empresa')
-                        col_regime_cab.markdown('Regime')
+                    else:
+                        for empresa_catalogo in empresas_encontradas[:8]:
+                            codigo_empresa = str(empresa_catalogo['codigo'])
+                            regime_empresa = empresa_catalogo.get(
+                                'regime', 'Não informado'
+                            ).title()
+                            with st.container(
+                                key=f"org_linha_empresa_{codigo_empresa}"
+                            ):
+                                col_codigo, col_nome, col_regime = st.columns(
+                                    [0.8, 6.5, 2.0],
+                                    gap='small',
+                                )
+                                col_codigo.markdown(
+                                    f'<span class="rz-company-code">{codigo_empresa}</span>',
+                                    unsafe_allow_html=True,
+                                )
+                                with col_nome:
+                                    if st.button(
+                                        empresa_catalogo['nome'],
+                                        type='tertiary',
+                                        key=f"org_abrir_empresa_{codigo_empresa}",
+                                    ):
+                                        _abrir_empresa_catalogo(empresa_catalogo)
+                                col_regime.markdown(regime_empresa)
 
-                    for empresa_catalogo in empresas_exibidas[:8]:
-                        codigo_empresa = str(empresa_catalogo['codigo'])
-                        regime_empresa = empresa_catalogo.get(
-                            'regime', 'Não informado'
-                        ).title()
-                        with st.container(
-                            key=f"org_linha_empresa_{codigo_empresa}"
-                        ):
-                            col_codigo, col_nome, col_regime = st.columns(
-                                [0.9, 6.0, 2.1],
-                                gap='small',
-                            )
-                            col_codigo.markdown(
-                                f'<span class="rz-company-code">{codigo_empresa}</span>',
-                                unsafe_allow_html=True,
-                            )
-                            with col_nome:
-                                if st.button(
-                                    empresa_catalogo['nome'],
-                                    type='tertiary',
-                                    use_container_width=True,
-                                    key=f"org_abrir_empresa_{codigo_empresa}",
-                                ):
-                                    _abrir_empresa_catalogo(empresa_catalogo)
-                            col_regime.markdown(regime_empresa)
-
-                    if len(empresas_exibidas) > 8:
-                        st.caption('Continue digitando para refinar a pesquisa.')
+                        if len(empresas_encontradas) > 8:
+                            st.caption('Continue digitando para refinar a pesquisa.')
+            else:
+                with st.container(key='org_acesso_rapido'):
+                    empresa_rapida = st.selectbox(
+                        'Empresas com ferramentas',
+                        options=empresas_ativas,
+                        index=None,
+                        placeholder='Selecionar empresa',
+                        format_func=lambda empresa: (
+                            f"{empresa['codigo']} — {empresa['nome']}"
+                        ),
+                        key='org_empresa_ferramenta_rapida',
+                    )
+                if empresa_rapida is not None:
+                    _abrir_empresa_catalogo(empresa_rapida)
 
     if empresa_catalogo_atual and not empresa_catalogo_atual.get('chave_sistema'):
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
