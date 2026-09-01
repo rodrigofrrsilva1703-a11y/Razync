@@ -18,6 +18,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pypdf import PdfReader
 
 from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
@@ -25,6 +26,7 @@ from razync.company_catalog import EMPRESAS_POR_REGIME, EMPRESAS_POR_CHAVE
 from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
 from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
+from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia_operacional
 
 # Configuração da página Web
 st.set_page_config(
@@ -3246,6 +3248,39 @@ def salvar_classificacoes_online(registros, empresa='nova_geracao'):
     carregar_classificacoes_online.clear()
     return len(registros)
 
+
+@st.cache_data(show_spinner=False, ttl=20)
+def carregar_tarefas_competencia(competencia_iso):
+    consulta = (
+        'tarefas_empresas?competencia=eq.'
+        + urllib.parse.quote(competencia_iso)
+        + '&select=codigo_empresa,competencia,concluida,concluida_em'
+    )
+    registros = requisicao_classificacao_online(consulta)
+    return {
+        str(registro['codigo_empresa']): registro
+        for registro in registros
+    }
+
+
+def salvar_status_tarefa_empresa(codigo_empresa, competencia, concluida):
+    agora = datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat()
+    registro = {
+        'codigo_empresa': str(codigo_empresa),
+        'competencia': competencia.isoformat(),
+        'concluida': bool(concluida),
+        'concluida_em': agora if concluida else None,
+        'atualizado_em': agora,
+    }
+    requisicao_classificacao_online(
+        'tarefas_empresas?on_conflict=codigo_empresa,competencia',
+        metodo='POST',
+        dados=[registro],
+        prefer='resolution=merge-duplicates,return=minimal',
+    )
+    carregar_tarefas_competencia.clear()
+
+
 def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
     """Lê planilha revisada e cria padrões exclusivos da empresa informada."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -5750,7 +5785,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         <style>
         .rz-company-workspace {
             display: grid;
-            grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 0.9fr));
             gap: 0;
             margin: -0.35rem 0 1.4rem;
             border-top: 1px solid rgba(148, 163, 184, 0.22);
@@ -5780,6 +5815,37 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             font-size: 0.84rem;
             font-weight: 600;
             line-height: 1.35;
+        }
+        .rz-task-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.38rem;
+            color: #a9b8c5;
+            font-size: 0.76rem;
+            font-weight: 650;
+        }
+        .rz-task-status::before {
+            width: 0.43rem;
+            height: 0.43rem;
+            border-radius: 999px;
+            background: #6f8292;
+            content: "";
+        }
+        .rz-task-status--atrasada::before { background: #ef5b66; }
+        .rz-task-status--urgente::before { background: #f59e42; }
+        .rz-task-status--proxima::before { background: #e9c84a; }
+        .rz-task-status--no-prazo::before { background: #20b9df; }
+        .rz-task-status--concluida::before { background: #38c987; }
+        [class*="st-key-org_acao_tarefa"] {
+            margin: -0.75rem 0 1.15rem;
+        }
+        [class*="st-key-org_acao_tarefa"] [data-testid="stHorizontalBlock"] {
+            align-items: center;
+        }
+        [class*="st-key-org_acao_tarefa"] button {
+            min-height: 2rem !important;
+            padding: 0.2rem 0.7rem !important;
+            font-size: 0.72rem !important;
         }
         [data-testid="stTabs"] {
             margin-top: 0.15rem;
@@ -5841,6 +5907,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             )
         elif empresas_mesma_chave:
             empresa_catalogo_atual = empresas_mesma_chave[0]
+
+    hoje_operacional, competencia_operacional = obter_competencia_operacional()
+    erro_controle_tarefas = ''
+    try:
+        tarefas_competencia_atual = carregar_tarefas_competencia(
+            competencia_operacional.isoformat()
+        )
+    except Exception as erro_tarefas:
+        tarefas_competencia_atual = {}
+        erro_controle_tarefas = str(erro_tarefas)
 
     estabelecimento_ng_atual = st.session_state.get(
         'org_estabelecimento_nova_geracao_card', 'matriz'
@@ -5942,6 +6018,31 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             if empresa_catalogo_atual
             else 'Regime cadastrado'
         )
+        prioridade_workspace = (
+            calcular_prioridade_empresa(
+                empresa_catalogo_atual,
+                tarefas_competencia_atual,
+                hoje_operacional,
+                competencia_operacional,
+            )
+            if empresa_catalogo_atual
+            else None
+        )
+        prazo_workspace = (
+            prioridade_workspace['vencimento'].strftime('%d/%m/%Y')
+            if prioridade_workspace
+            else 'Não informado'
+        )
+        status_workspace = (
+            prioridade_workspace['status']
+            if prioridade_workspace
+            else 'Não informado'
+        )
+        classe_workspace = (
+            prioridade_workspace['classe']
+            if prioridade_workspace
+            else 'no-prazo'
+        )
         st.markdown(
             f"""
             <div class="rz-company-workspace" aria-label="Resumo da área da empresa">
@@ -5954,13 +6055,55 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     <span class="rz-company-workspace__value">{regime_workspace}</span>
                 </div>
                 <div class="rz-company-workspace__item">
-                    <span class="rz-company-workspace__label">Ferramentas</span>
-                    <span class="rz-company-workspace__value">Organização · Base Inteligente</span>
+                    <span class="rz-company-workspace__label">Vencimento</span>
+                    <span class="rz-company-workspace__value">{prazo_workspace}</span>
+                </div>
+                <div class="rz-company-workspace__item">
+                    <span class="rz-company-workspace__label">Situação</span>
+                    <span class="rz-task-status rz-task-status--{classe_workspace}">{status_workspace}</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
+
+        if empresa_catalogo_atual and prioridade_workspace:
+            codigo_tarefa_atual = str(empresa_catalogo_atual['codigo'])
+            with st.container(key='org_acao_tarefa'):
+                col_competencia, col_acao_tarefa = st.columns([7.8, 2.2])
+                col_competencia.caption(
+                    f"Competência {competencia_operacional.strftime('%m/%Y')} · "
+                    f"{prioridade_workspace['prazo_dias']} dias corridos"
+                )
+                with col_acao_tarefa:
+                    rotulo_acao = (
+                        'Reabrir tarefa'
+                        if prioridade_workspace['concluida']
+                        else 'Marcar como concluída'
+                    )
+                    if st.button(
+                        rotulo_acao,
+                        key=f"org_alterar_tarefa_{codigo_tarefa_atual}",
+                        use_container_width=True,
+                    ):
+                        try:
+                            salvar_status_tarefa_empresa(
+                                codigo_tarefa_atual,
+                                competencia_operacional,
+                                not prioridade_workspace['concluida'],
+                            )
+                            st.rerun()
+                        except Exception as erro_salvar_tarefa:
+                            st.error(
+                                'Não foi possível atualizar esta tarefa agora: '
+                                f'{erro_salvar_tarefa}'
+                            )
+
+        if erro_controle_tarefas:
+            st.info(
+                'O controle de prazos está temporariamente indisponível. '
+                'As ferramentas da empresa continuam funcionando normalmente.'
+            )
 
     if empresa_organizador is None:
         def _normalizar_busca_empresa(valor):
@@ -5995,6 +6138,23 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             for empresa in empresas_catalogo_completo
             if empresa.get('chave_sistema')
         ]
+        prioridades_empresas = {
+            str(empresa['codigo']): calcular_prioridade_empresa(
+                empresa,
+                tarefas_competencia_atual,
+                hoje_operacional,
+                competencia_operacional,
+            )
+            for empresa in empresas_catalogo_completo
+        }
+        empresas_ativas_priorizadas = sorted(
+            empresas_ativas,
+            key=lambda empresa: (
+                prioridades_empresas[str(empresa['codigo'])]['ordem'],
+                prioridades_empresas[str(empresa['codigo'])]['vencimento'],
+                int(empresa['codigo']),
+            ),
+        )
 
         st.markdown(
             """
@@ -6155,8 +6315,15 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     if termo_normalizado in alvo:
                         empresas_encontradas.append(empresa_catalogo)
 
+                empresas_encontradas.sort(
+                    key=lambda empresa: (
+                        prioridades_empresas[str(empresa['codigo'])]['ordem'],
+                        prioridades_empresas[str(empresa['codigo'])]['vencimento'],
+                        int(empresa['codigo']),
+                    )
+                )
                 st.markdown(
-                    '<div class="rz-company-section">Resultados da pesquisa</div>',
+                    '<div class="rz-company-section">Resultados por prioridade</div>',
                     unsafe_allow_html=True,
                 )
                 with st.container(key='org_resultados_nativos'):
@@ -6171,11 +6338,15 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             regime_empresa = empresa_catalogo.get(
                                 'regime', 'Não informado'
                             ).title()
+                            prioridade_empresa = prioridades_empresas[codigo_empresa]
+                            prazo_empresa = prioridade_empresa[
+                                'vencimento'
+                            ].strftime('%d/%m')
                             with st.container(
                                 key=f"org_linha_empresa_{codigo_empresa}"
                             ):
-                                col_codigo, col_nome, col_regime = st.columns(
-                                    [0.8, 6.5, 2.0],
+                                col_codigo, col_nome, col_regime, col_prazo = st.columns(
+                                    [0.7, 4.5, 1.7, 2.1],
                                     gap='small',
                                 )
                                 col_codigo.markdown(
@@ -6190,18 +6361,29 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                     ):
                                         _abrir_empresa_catalogo(empresa_catalogo)
                                 col_regime.markdown(regime_empresa)
+                                col_prazo.markdown(
+                                    (
+                                        f'<span class="rz-task-status '
+                                        f'rz-task-status--{prioridade_empresa["classe"]}">'
+                                        f'{prioridade_empresa["status"]} · {prazo_empresa}'
+                                        '</span>'
+                                    ),
+                                    unsafe_allow_html=True,
+                                )
 
                         if len(empresas_encontradas) > 8:
                             st.caption('Continue digitando para refinar a pesquisa.')
             else:
                 with st.container(key='org_acesso_rapido'):
                     empresa_rapida = st.selectbox(
-                        'Empresas com ferramentas',
-                        options=empresas_ativas,
+                        'Próximas tarefas · empresas com ferramentas',
+                        options=empresas_ativas_priorizadas,
                         index=None,
-                        placeholder='Selecionar empresa',
+                        placeholder='Selecionar empresa por prioridade',
                         format_func=lambda empresa: (
-                            f"{empresa['codigo']} — {empresa['nome']}"
+                            f"{prioridades_empresas[str(empresa['codigo'])]['status']} · "
+                            f"{empresa['codigo']} — {empresa['nome']} · "
+                            f"{prioridades_empresas[str(empresa['codigo'])]['vencimento'].strftime('%d/%m')}"
                         ),
                         key='org_empresa_ferramenta_rapida',
                     )
