@@ -6058,8 +6058,22 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 line-height: 2rem;
                 pointer-events: none;
             }
+            .rz-company-section {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin: 1.35rem 0 0.5rem;
+                color: #a9b8c5;
+                font-size: 0.73rem;
+                font-weight: 650;
+            }
+            .rz-company-section strong {
+                color: #718598;
+                font-size: 0.68rem;
+                font-weight: 650;
+            }
             [class*="st-key-org_resultados_nativos"] {
-                margin-top: 0.45rem;
+                margin-top: 0;
                 overflow: hidden;
                 border: 1px solid #2b3b49;
                 border-radius: 9px;
@@ -6167,58 +6181,74 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
             termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
             if termo_normalizado:
-                empresas_encontradas = []
+                empresas_exibidas = []
                 for empresa_catalogo in empresas_catalogo_completo:
                     alvo = _normalizar_busca_empresa(
                         f"{empresa_catalogo['codigo']} {empresa_catalogo['nome']}"
                     )
                     if termo_normalizado in alvo:
-                        empresas_encontradas.append(empresa_catalogo)
+                        empresas_exibidas.append(empresa_catalogo)
+                titulo_lista_empresas = 'Resultados da pesquisa'
+            else:
+                empresas_exibidas = empresas_ativas
+                titulo_lista_empresas = 'Empresas com ferramentas'
 
-                with st.container(key='org_resultados_nativos'):
-                    if not empresas_encontradas:
-                        st.markdown(
-                            '<p class="rz-company-empty">Nenhuma empresa encontrada.</p>',
-                            unsafe_allow_html=True,
+            total_empresas_exibidas = len(empresas_exibidas)
+            st.markdown(
+                (
+                    '<div class="rz-company-section">'
+                    f'<span>{titulo_lista_empresas}</span>'
+                    f'<strong>{total_empresas_exibidas} '
+                    f'{"empresa" if total_empresas_exibidas == 1 else "empresas"}</strong>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+            with st.container(key='org_resultados_nativos'):
+                if not empresas_exibidas:
+                    st.markdown(
+                        '<p class="rz-company-empty">Nenhuma empresa encontrada.</p>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    with st.container(key='org_cabecalho_resultados'):
+                        col_codigo_cab, col_empresa_cab, col_regime_cab = st.columns(
+                            [0.9, 6.0, 2.1],
+                            gap='small',
                         )
-                    else:
-                        with st.container(key='org_cabecalho_resultados'):
-                            col_codigo_cab, col_empresa_cab, col_regime_cab = st.columns(
+                        col_codigo_cab.markdown('Código')
+                        col_empresa_cab.markdown('Empresa')
+                        col_regime_cab.markdown('Regime')
+
+                    for empresa_catalogo in empresas_exibidas[:8]:
+                        codigo_empresa = str(empresa_catalogo['codigo'])
+                        regime_empresa = empresa_catalogo.get(
+                            'regime', 'Não informado'
+                        ).title()
+                        with st.container(
+                            key=f"org_linha_empresa_{codigo_empresa}"
+                        ):
+                            col_codigo, col_nome, col_regime = st.columns(
                                 [0.9, 6.0, 2.1],
                                 gap='small',
                             )
-                            col_codigo_cab.markdown('Código')
-                            col_empresa_cab.markdown('Empresa')
-                            col_regime_cab.markdown('Regime')
+                            col_codigo.markdown(
+                                f'<span class="rz-company-code">{codigo_empresa}</span>',
+                                unsafe_allow_html=True,
+                            )
+                            with col_nome:
+                                if st.button(
+                                    empresa_catalogo['nome'],
+                                    type='tertiary',
+                                    use_container_width=True,
+                                    key=f"org_abrir_empresa_{codigo_empresa}",
+                                ):
+                                    _abrir_empresa_catalogo(empresa_catalogo)
+                            col_regime.markdown(regime_empresa)
 
-                        for empresa_catalogo in empresas_encontradas[:7]:
-                            codigo_empresa = str(empresa_catalogo['codigo'])
-                            regime_empresa = empresa_catalogo.get(
-                                'regime', 'Não informado'
-                            ).title()
-                            with st.container(
-                                key=f"org_linha_empresa_{codigo_empresa}"
-                            ):
-                                col_codigo, col_nome, col_regime = st.columns(
-                                    [0.9, 6.0, 2.1],
-                                    gap='small',
-                                )
-                                col_codigo.markdown(
-                                    f'<span class="rz-company-code">{codigo_empresa}</span>',
-                                    unsafe_allow_html=True,
-                                )
-                                with col_nome:
-                                    if st.button(
-                                        empresa_catalogo['nome'],
-                                        type='tertiary',
-                                        use_container_width=True,
-                                        key=f"org_abrir_empresa_{codigo_empresa}",
-                                    ):
-                                        _abrir_empresa_catalogo(empresa_catalogo)
-                                col_regime.markdown(regime_empresa)
-
-                        if len(empresas_encontradas) > 7:
-                            st.caption('Continue digitando para refinar a pesquisa.')
+                    if len(empresas_exibidas) > 8:
+                        st.caption('Continue digitando para refinar a pesquisa.')
 
     if empresa_catalogo_atual and not empresa_catalogo_atual.get('chave_sistema'):
         st.markdown(f"### {empresa_catalogo_atual['rotulo']}")
