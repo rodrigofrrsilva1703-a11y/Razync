@@ -5948,11 +5948,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             """
             <style>
             [class*="st-key-org_pesquisa_nativa"] {
-                width: min(100%, 760px);
-                margin: 1rem auto 0;
+                width: min(100%, 840px);
+                margin: 0.65rem auto 0;
             }
             [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input {
-                min-height: 3.15rem;
+                min-height: 3rem;
                 padding: 0 0.95rem 0 2.75rem !important;
                 color: var(--text-color) !important;
                 background: #101820 !important;
@@ -5964,6 +5964,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input:focus {
                 border-color: #20b9df !important;
                 box-shadow: 0 0 0 3px rgba(32, 185, 223, 0.09) !important;
+            }
+            [class*="st-key-org_pesquisa_nativa"] [data-testid="stTextInput"] input::placeholder {
+                color: #91a4b5 !important;
+                opacity: 1 !important;
             }
             [class*="st-key-org_campo_pesquisa"] {
                 position: relative;
@@ -6006,8 +6010,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 text-transform: uppercase;
             }
             [class*="st-key-org_linha_empresa_"] {
-                min-height: 3.15rem;
-                padding: 0.18rem 0.85rem;
+                min-height: 2.75rem;
+                padding: 0.08rem 0.85rem;
                 border-bottom: 1px solid rgba(113, 133, 152, 0.18);
                 transition: background 120ms ease;
             }
@@ -6025,7 +6029,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 font-size: 0.76rem;
             }
             [class*="st-key-org_linha_empresa_"] button {
-                min-height: 2.35rem !important;
+                min-height: 2.05rem !important;
                 padding: 0.2rem 0.35rem !important;
                 justify-content: flex-start !important;
                 text-align: left !important;
@@ -6074,14 +6078,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         with st.container(key='org_pesquisa_nativa'):
             col_campo_pesquisa, col_respiro_pesquisa = st.columns(
-                [0.58, 0.42],
+                [0.56, 0.44],
                 gap='small',
             )
             with col_campo_pesquisa:
                 with st.container(key='org_campo_pesquisa'):
                     termo_busca_empresas = st.text_input(
                         'Pesquisar empresa',
-                        placeholder='Pesquisar empresa',
+                        placeholder='Digite código ou nome e pressione Enter',
                         key='org_busca_empresas_catalogo',
                         label_visibility='collapsed',
                     )
@@ -6105,7 +6109,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     else:
                         with st.container(key='org_cabecalho_resultados'):
                             col_codigo_cab, col_empresa_cab, col_regime_cab = st.columns(
-                                [1.05, 5.2, 2.25],
+                                [0.9, 6.0, 2.1],
                                 gap='small',
                             )
                             col_codigo_cab.markdown('Código')
@@ -6121,7 +6125,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                                 key=f"org_linha_empresa_{codigo_empresa}"
                             ):
                                 col_codigo, col_nome, col_regime = st.columns(
-                                    [1.05, 5.2, 2.25],
+                                    [0.9, 6.0, 2.1],
                                     gap='small',
                                 )
                                 col_codigo.markdown(
