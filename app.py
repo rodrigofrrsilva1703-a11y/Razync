@@ -1,4 +1,5 @@
 import streamlit as st
+# Deploy sync: pesquisa de empresas aprovada em 2026-09-01.
 import pandas as pd
 import re
 import struct
