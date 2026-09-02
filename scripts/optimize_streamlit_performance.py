@@ -52,7 +52,7 @@ text = text.replace(
     1,
 )
 
-marker = '''def gerar_txt_dominio(df):'''
+marker = 'def gerar_txt_dominio(df):'
 if marker not in text:
     raise SystemExit('Marcador para helper de modelo não encontrado')
 helper = '''@st.cache_data(show_spinner=False, max_entries=2)\ndef carregar_modelo_dominio_base():\n    """Lê o arquivo-base uma vez e reutiliza entre reruns do Streamlit."""\n    colunas = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']\n    caminho = "Modelo dominio.xlsx"\n    if not os.path.exists(caminho):\n        return pd.DataFrame(columns=colunas)\n    try:\n        df = pd.read_excel(caminho)\n    except Exception:\n        return pd.DataFrame(columns=colunas)\n    if 'DESCRIÇÃO' not in df.columns:\n        return pd.DataFrame(columns=colunas)\n    return df\n\n\n'''
@@ -114,9 +114,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 \n'''
-route_marker = '# ==============================================================================\n# CONTROLE DE ESTADO DE NAVEGAÇÃO'
+route_marker = '# TELA 1: MENU PRINCIPAL (HOME)'
 if route_marker not in text:
-    raise SystemExit('Marcador de navegação não encontrado')
+    raise SystemExit('Marcador da Home não encontrado')
 if '# PERFORMANCE VISUAL V1' not in text:
     text = text.replace(route_marker, perf_css + route_marker, 1)
 
