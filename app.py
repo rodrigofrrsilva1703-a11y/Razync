@@ -8666,52 +8666,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         empresa_radani = config_radani['empresa']
         slug_radani = config_radani['slug']
 
-        # Navegação visual padronizada com as demais empresas, mantendo execução
-        # preguiçosa por trás para a 968 não voltar a ficar pesada.
-        st.markdown(
-            """
-            <style>
-            [class*="st-key-radani_modo_ferramenta"] > div:first-child {
-                gap: 1.2rem !important;
-                border-bottom: 1px solid rgba(73, 108, 132, .24) !important;
-                margin: .05rem 0 .62rem !important;
-            }
-            [class*="st-key-radani_modo_ferramenta"] label {
-                min-height: 2.35rem !important;
-                padding: .42rem .08rem .5rem !important;
-                margin: 0 !important;
-                border-radius: 0 !important;
-                background: transparent !important;
-                border: 0 !important;
-                font-size: .78rem !important;
-                font-weight: 500 !important;
-                color: #91a2b2 !important;
-            }
-            [class*="st-key-radani_modo_ferramenta"] label:has(input:checked) {
-                color: #f3f7fa !important;
-                box-shadow: inset 0 -2px 0 #20bee9 !important;
-            }
-            [class*="st-key-radani_modo_ferramenta"] [data-testid="stMarkdownContainer"] p {
-                font-size: .78rem !important;
-            }
-            [class*="st-key-radani_modo_ferramenta"] input,
-            [class*="st-key-radani_modo_ferramenta"] [data-testid="stWidgetLabel"] {
-                display: none !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-        modo_radani = st.radio(
-            'Ferramenta da 968',
-            ['Organizar arquivos', 'Base Inteligente'],
-            horizontal=True,
-            label_visibility='collapsed',
-            key='radani_modo_ferramenta',
-        )
+        aba_operacoes_radani, aba_base_radani = st.tabs([
+            'Organizar arquivos',
+            'Base Inteligente'
+        ])
 
-        if modo_radani == 'Base Inteligente':
-            st.caption('Base exclusiva da 968 · Itaú conta 508 · Bradesco conta 9.')
+        with aba_base_radani:
             renderizar_base_inteligente_empresa(
                 slug_radani,
                 empresa_radani,
@@ -8719,7 +8679,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 config_radani['contas_bancarias']
             )
 
-        else:
+        with aba_operacoes_radani:
             st.caption(
                 'O extrato define o período e os totais oficiais. Somente os comprovantes de salários do Itaú '
                 'são usados como apoio para desmembrar SISPAG.'
@@ -8954,20 +8914,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
 
             st.markdown(f'#### Conferência — {empresa_radani}')
-            abrir_conferencia_radani = st.checkbox(
-                'Abrir Conferência com o extrato',
-                value=False,
-                key='radani_abrir_conferencia',
-                help='A conferência fica dentro do Organizador como nas demais empresas, mas só carrega quando aberta para preservar a performance.'
+            renderizar_conferencia_autokraft(
+                slug_radani,
+                bancos_config=[
+                    {'nome': 'Itaú', 'slug': 'itau'},
+                    {'nome': 'Bradesco', 'slug': 'bradesco'},
+                ]
             )
-            if abrir_conferencia_radani:
-                renderizar_conferencia_autokraft(
-                    slug_radani,
-                    bancos_config=[
-                        {'nome': 'Itaú', 'slug': 'itau'},
-                        {'nome': 'Bradesco', 'slug': 'bradesco'},
-                    ]
-                )
 
     if st.session_state['empresa_organizador'] == 'up_pack':
         config_up_pack = CONFIGURACOES_UP_PACK['up_pack']
