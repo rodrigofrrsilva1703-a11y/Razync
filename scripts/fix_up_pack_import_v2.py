@@ -14,3 +14,4 @@ if 'Configuração local da UP PACK' not in s:
         raise SystemExit('Import do processador UP PACK não encontrado')
     s = s.replace(anchor, anchor + config, 1)
 p.write_text(s, encoding='utf-8')
+# trigger
