@@ -35,3 +35,4 @@ if old in catalog:
 elif new not in catalog:
     raise SystemExit('Empresa 968 não encontrada no catálogo')
 catalog_path.write_text(catalog, encoding='utf-8')
+# trigger
