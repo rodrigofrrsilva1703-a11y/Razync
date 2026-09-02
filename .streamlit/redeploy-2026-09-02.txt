@@ -8,3 +8,4 @@ Nova sincronização 2026-09-02 14:56 - uploads da empresa 1096 separados por Sa
 Nova sincronização 2026-09-02 15:06 - leitor específico para extrato Santander Empresarial Data/Historico/Valor.
 Nova sincronização 2026-09-02 16:00 - empresa 968 Radani com análise inteligente Jaguar, Base Inteligente e Conferência.
 Nova sincronização 2026-09-02 17:05 - contas Itaú 508 e Bradesco 9, com comprovantes SISPAG como evidência prioritária.
+Nova sincronização 2026-09-02 17:29 - otimização de performance da 968 com processamento sob demanda, cache e ferramentas isoladas.
