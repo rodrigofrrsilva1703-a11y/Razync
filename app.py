@@ -32,7 +32,7 @@ from razync.task_center import classificar_tarefa, ordenar_tarefas, resumir_tare
 from razync.lcarlos import processar_planilhas_lcarlos
 from razync.up_pack import identificar_banco_up_pack, processar_planilha_up_pack
 from razync.santander_statement import (parece_extrato_santander_empresarial, processar_extrato_santander_empresarial_texto)
-from razync.radani import analisar_desmembramentos, consolidar_jaguares
+from razync.radani import analisar_desmembramentos, consolidar_jaguares, consolidar_comprovantes_sispag
 
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
@@ -41,7 +41,7 @@ CONFIGURACOES_RADANI = {
         "empresa": "968 - RADANI ELETRONICA E AUTOMACAO LTDA",
         "slug": "radani",
         "arquivo": "RADANI",
-        "contas_bancarias": {"itau": "", "bradesco": ""},
+        "contas_bancarias": {"itau": "508", "bradesco": "9"},
     }
 }
 
@@ -8647,12 +8647,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         ])
 
         with aba_base_radani:
-            st.info(
-                'A Base Inteligente da 968 é isolada das demais empresas. '
-                'As contas bancárias do Domínio ainda não foram informadas; '
-                'o aprendizado de contrapartidas funciona normalmente, mas a conta do banco '
-                'só será preenchida automaticamente depois da configuração.'
-            )
+            st.caption('Base exclusiva da 968 · Itaú conta 508 · Bradesco conta 9.')
             renderizar_base_inteligente_empresa(
                 slug_radani,
                 empresa_radani,
@@ -8694,6 +8689,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 accept_multiple_files=True,
                 key='radani_jaguares',
                 help='Pode enviar arquivos Jaguar do ano e lançamentos diversos. O Razync usa somente o período dos extratos.'
+            )
+
+            comprovantes_sispag_radani = st.file_uploader(
+                'Comprovantes de salários / SISPAG',
+                type=['pdf'],
+                accept_multiple_files=True,
+                key='radani_comprovantes_sispag',
+                help='Opcional, mas recomendado. Nome, valor e data dos comprovantes têm prioridade para detalhar SISPAG quando fecham o total do extrato.'
             )
 
             try:
@@ -8752,8 +8755,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     jaguar_periodo_radani = consolidar_jaguares(
                         arquivos_jaguar_radani, inicio_radani, fim_radani
                     )
+                    arquivos_comprovantes_radani = [
+                        (arq.name, arq.getvalue()) for arq in (comprovantes_sispag_radani or [])
+                    ]
+                    comprovantes_periodo_radani = consolidar_comprovantes_sispag(
+                        arquivos_comprovantes_radani, inicio_radani, fim_radani
+                    )
                     analise_radani = analisar_desmembramentos(
-                        df_extrato_radani, jaguar_periodo_radani, nome_banco_radani
+                        df_extrato_radani,
+                        jaguar_periodo_radani,
+                        nome_banco_radani,
+                        comprovantes=comprovantes_periodo_radani,
                     )
                     dados_radani[nome_banco_radani] = {
                         'principal': analise_radani.organizado,

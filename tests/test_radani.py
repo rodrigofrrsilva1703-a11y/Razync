@@ -49,3 +49,18 @@ def test_pix_identificado_nao_e_desmembrado():
     assert len(res.organizado) == 1
     assert res.organizado.iloc[0]['HISTÓRICO'].startswith('PIX ENVIADO')
     assert res.revisoes.empty
+
+
+def test_comprovantes_sispag_tem_prioridade():
+    comprovantes = pd.DataFrame([
+        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'FUNC A VALE', 'VALOR': -20000.0, 'ARQUIVO': 'C', 'TIPO': 'VALE', 'FONTE': 'Comprovante SISPAG'},
+        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'FUNC B VALE', 'VALOR': -13000.0, 'ARQUIVO': 'C', 'TIPO': 'VALE', 'FONTE': 'Comprovante SISPAG'},
+    ])
+    jaguar = pd.DataFrame([
+        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'OUTRO A VALE', 'VALOR': -18000.0, 'ARQUIVO': 'J', 'ABA': 'Junho'},
+        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'OUTRO B VALE', 'VALOR': -15000.0, 'ARQUIVO': 'J', 'ABA': 'Junho'},
+    ])
+    res = analisar_desmembramentos(_extrato(), jaguar, 'Itaú', comprovantes=comprovantes)
+    assert set(res.organizado['HISTÓRICO']) == {'FUNC A VALE', 'FUNC B VALE'}
+    assert set(res.detalhamentos['FONTE']) == {'Comprovante SISPAG'}
+    assert res.revisoes.empty

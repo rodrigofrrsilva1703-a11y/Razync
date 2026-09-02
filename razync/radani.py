@@ -13,6 +13,7 @@ import re
 import unicodedata
 
 import pandas as pd
+from pypdf import PdfReader
 
 
 GENERICOS_FORTES = (
@@ -121,6 +122,69 @@ def ler_jaguar(arquivo_bytes: bytes, nome_arquivo: str = "Jaguar") -> pd.DataFra
     return pd.concat(partes, ignore_index=True).sort_values("DATA", kind="stable").reset_index(drop=True)
 
 
+def ler_comprovantes_sispag_pdf(arquivo_bytes: bytes, nome_arquivo: str = "Comprovantes SISPAG") -> pd.DataFrame:
+    """Extrai beneficiário, valor, data e tipo de cada comprovante Itaú SISPAG."""
+    try:
+        reader = PdfReader(BytesIO(arquivo_bytes), strict=False)
+    except Exception:
+        return pd.DataFrame(columns=["DATA", "HISTÓRICO", "VALOR", "ARQUIVO", "TIPO", "FONTE"])
+
+    linhas = []
+    for pagina in reader.pages:
+        texto = pagina.extract_text() or ""
+        norm = _norm(texto)
+        if "SISPAG SALARIOS" not in norm:
+            continue
+
+        m_nome = re.search(r"Nome:\s*(.*?)\s+Ag[êe]ncia:", texto, flags=re.I | re.S)
+        m_valor = re.search(r"Valor:\s*R\$\s*([\d.]+,\d{2})", texto, flags=re.I)
+        m_data = re.search(r"Transfer[êe]ncia efetuada em\s*(\d{2}/\d{2}/\d{4})", texto, flags=re.I)
+        m_tipo = re.search(
+            r"Informa[cç][õo]es fornecidas pelo\s*pagador:\s*(.*?)\s*Transfer[êe]ncia efetuada em",
+            texto,
+            flags=re.I | re.S,
+        )
+        if not (m_nome and m_valor and m_data):
+            continue
+
+        nome = re.sub(r"\s+", " ", m_nome.group(1)).strip()
+        tipo = re.sub(r"\s+", " ", m_tipo.group(1)).strip() if m_tipo else "SALARIO"
+        valor = _valor_num(m_valor.group(1))
+        data = pd.to_datetime(m_data.group(1), dayfirst=True, errors="coerce")
+        if valor is None or pd.isna(data):
+            continue
+
+        linhas.append({
+            "DATA": data,
+            "HISTÓRICO": f"{nome} {tipo}".strip(),
+            "VALOR": -abs(float(valor)),
+            "ARQUIVO": nome_arquivo,
+            "TIPO": tipo,
+            "FONTE": "Comprovante SISPAG",
+        })
+
+    if not linhas:
+        return pd.DataFrame(columns=["DATA", "HISTÓRICO", "VALOR", "ARQUIVO", "TIPO", "FONTE"])
+    return pd.DataFrame(linhas).sort_values(["DATA", "HISTÓRICO"], kind="stable").reset_index(drop=True)
+
+
+def consolidar_comprovantes_sispag(arquivos: list[tuple[str, bytes]], inicio, fim) -> pd.DataFrame:
+    partes = []
+    for nome, conteudo in arquivos:
+        try:
+            df = ler_comprovantes_sispag_pdf(conteudo, nome)
+            if not df.empty:
+                partes.append(df)
+        except Exception:
+            continue
+    if not partes:
+        return pd.DataFrame(columns=["DATA", "HISTÓRICO", "VALOR", "ARQUIVO", "TIPO", "FONTE"])
+    df = pd.concat(partes, ignore_index=True)
+    ini = pd.Timestamp(inicio).normalize()
+    final = pd.Timestamp(fim).normalize()
+    return df[(df["DATA"].dt.normalize() >= ini) & (df["DATA"].dt.normalize() <= final)].reset_index(drop=True)
+
+
 def consolidar_jaguares(arquivos: list[tuple[str, bytes]], inicio, fim) -> pd.DataFrame:
     partes = []
     for nome, conteudo in arquivos:
@@ -197,7 +261,7 @@ class AnaliseRadani:
     detalhamentos: pd.DataFrame
 
 
-def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco: str) -> AnaliseRadani:
+def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco: str, comprovantes: pd.DataFrame | None = None) -> AnaliseRadani:
     """Desmembra somente correspondências fortes; demais candidatas ficam para revisão."""
     if extrato is None or extrato.empty:
         vazio = pd.DataFrame()
@@ -209,8 +273,11 @@ def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco:
     df = df.dropna(subset=["DATA", "VALOR"]).reset_index(drop=True)
     if jaguar is None:
         jaguar = pd.DataFrame()
+    if comprovantes is None:
+        comprovantes = pd.DataFrame()
 
     usados_jaguar = set()
+    usados_comprovantes = set()
     saida = []
     revisoes = []
     detalhes = []
@@ -219,11 +286,42 @@ def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco:
         hist = str(mov["HISTÓRICO"])
         valor = float(mov["VALOR"])
         forte, moderado = _eh_generico(hist)
+        data = pd.Timestamp(mov["DATA"]).normalize()
+
+        # Para SISPAG, comprovantes bancários são a evidência mais forte.
+        # Se beneficiários do mesmo dia fecharem exatamente o total do extrato,
+        # substitui o consolidado antes de consultar a Jaguar.
+        eh_sispag = "SISPAG" in _norm(hist) or "SALAR" in _norm(hist) or "FOLHA" in _norm(hist)
+        if eh_sispag and not comprovantes.empty:
+            comp_disp = comprovantes.loc[~comprovantes.index.isin(usados_comprovantes)].copy()
+            comp_dia = comp_disp[comp_disp["DATA"].dt.normalize() == data].copy()
+            if valor < 0:
+                comp_dia = comp_dia[comp_dia["VALOR"] < 0]
+            elif valor > 0:
+                comp_dia = comp_dia[comp_dia["VALOR"] > 0]
+            grupo_comp = _subset_exato(comp_dia, valor, hist, limite=80)
+            if grupo_comp is not None and len(grupo_comp) >= 2:
+                for cidx, det in grupo_comp.iterrows():
+                    novo = mov.to_dict()
+                    novo["DATA"] = pd.Timestamp(det["DATA"])
+                    novo["VALOR"] = float(det["VALOR"])
+                    novo["HISTÓRICO"] = str(det["HISTÓRICO"])
+                    novo["DESCRIÇÃO"] = mov.get("DESCRIÇÃO", banco)
+                    saida.append(novo)
+                    usados_comprovantes.add(cidx)
+                    detalhes.append({
+                        "BANCO": banco, "DATA BANCO": data, "HISTÓRICO BANCO": hist,
+                        "VALOR BANCO": valor, "DATA DETALHE": det["DATA"],
+                        "HISTÓRICO DETALHE": det["HISTÓRICO"], "VALOR DETALHE": det["VALOR"],
+                        "STATUS": "Identificado - comprovante SISPAG",
+                        "FONTE": "Comprovante SISPAG",
+                    })
+                continue
+
         if not (forte or moderado) or jaguar.empty:
             saida.append(mov.to_dict())
             continue
 
-        data = pd.Timestamp(mov["DATA"]).normalize()
         disponiveis = jaguar.loc[~jaguar.index.isin(usados_jaguar)].copy()
         # Primeiro tenta o mesmo dia. Para SISPAG/RH dá peso extra a históricos típicos.
         mesmo_dia = disponiveis[disponiveis["DATA"].dt.normalize() == data].copy()
@@ -252,6 +350,7 @@ def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco:
                     "VALOR BANCO": valor, "DATA DETALHE": det["DATA"],
                     "HISTÓRICO DETALHE": det["HISTÓRICO"], "VALOR DETALHE": det["VALOR"],
                     "STATUS": "Identificado - desmembrado",
+                    "FONTE": "Planilha Jaguar",
                 })
             continue
 
