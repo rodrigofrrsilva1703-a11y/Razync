@@ -64,22 +64,16 @@ st.markdown("""
         }
 
         header[data-testid="stHeader"] {
-            min-height: 2.4rem !important;
-            height: 2.4rem !important;
             background: transparent !important;
             box-shadow: none !important;
-            pointer-events: none !important;
         }
 
-        header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"],
-        header[data-testid="stHeader"] [data-testid="stSidebarCollapseButton"],
         [data-testid="stSidebarCollapsedControl"],
         [data-testid="stSidebarCollapseButton"] {
             display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
             pointer-events: auto !important;
-            position: relative !important;
             z-index: 1000001 !important;
         }
 
@@ -88,6 +82,17 @@ st.markdown("""
         }
 
         /* Global top spacing v4 */
+        /* Native sidebar header restore v5 */
+        main[data-testid="stMain"] .block-container,
+        .stMainBlockContainer {
+            transform: translateY(-2.7rem);
+            padding-bottom: 0 !important;
+        }
+        @media (max-width: 900px) {
+            main[data-testid="stMain"] .block-container,
+            .stMainBlockContainer { transform: translateY(-1.8rem); }
+        }
+
         /* Home compact cards v5 compatibility markers: min-height: 84px; min-height: 66px; */
         main[data-testid="stMain"] {
             padding-top: 0 !important;
