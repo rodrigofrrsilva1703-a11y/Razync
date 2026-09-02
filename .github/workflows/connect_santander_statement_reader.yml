@@ -1,0 +1,34 @@
+name: Integrar leitor Santander empresarial
+on:
+  push:
+    paths:
+      - 'scripts/connect_santander_statement_reader.py'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar integração
+        run: python scripts/connect_santander_statement_reader.py
+      - name: Instalar dependências mínimas
+        run: pip install pytest pypdf pandas openpyxl
+      - name: Validar leitor e app
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m py_compile app.py razync/santander_statement.py
+          pytest -q tests/test_santander_statement.py
+          grep -q 'lancamentos_santander = processar_extrato_santander_empresarial_texto' app.py
+      - name: Registrar e limpar
+        run: |
+          rm -f scripts/connect_santander_statement_reader.py .github/workflows/connect_santander_statement_reader.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py razync/santander_statement.py tests/test_santander_statement.py scripts/connect_santander_statement_reader.py .github/workflows/connect_santander_statement_reader.yml
+          git commit -m 'Corrige leitura do extrato Santander empresarial'
+          git push
