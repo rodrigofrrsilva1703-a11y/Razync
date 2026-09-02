@@ -1,0 +1,31 @@
+name: Restaurar sidebar anterior
+on:
+  push:
+    paths:
+      - 'scripts/restore_sidebar_before_customization_v10.py'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Restaurar sidebar
+        run: python scripts/restore_sidebar_before_customization_v10.py
+      - name: Validar
+        run: |
+          python -m py_compile app.py
+          grep -q 'Sidebar restaurada ao comportamento anterior v10' app.py
+          ! grep -q 'Botão lateral Razync v8' app.py
+          ! grep -q 'Razync sidebar-only chrome v9' app.py
+      - name: Registrar e limpar
+        run: |
+          rm -f scripts/restore_sidebar_before_customization_v10.py .github/workflows/restore_sidebar_before_customization_v10.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/restore_sidebar_before_customization_v10.py .github/workflows/restore_sidebar_before_customization_v10.yml
+          git commit -m 'Restaura sidebar ao estado anterior'
+          git push
