@@ -1,1 +1,2 @@
 Redeploy solicitado em 2026-09-02 para sincronizar o Streamlit Cloud com o estado atual da branch main.
+Nova sincronização 2026-09-02 10:36 - correção do botão lateral recolhido.
