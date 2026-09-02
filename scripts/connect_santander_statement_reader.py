@@ -22,3 +22,4 @@ if 'lancamentos_santander = processar_extrato_santander_empresarial_texto' not i
     s = s.replace(anchor, insert, 1)
 
 p.write_text(s, encoding='utf-8')
+# trigger
