@@ -16,7 +16,7 @@ jobs:
       - name: Aplicar integração
         run: python scripts/integrate_up_pack_1096.py
       - name: Instalar dependências mínimas
-        run: pip install pandas openpyxl
+        run: pip install pandas openpyxl pytest
       - name: Validar sintaxe e testes da UP PACK
         run: |
           python -m py_compile app.py razync/up_pack.py razync/companies.py razync/company_catalog.py
