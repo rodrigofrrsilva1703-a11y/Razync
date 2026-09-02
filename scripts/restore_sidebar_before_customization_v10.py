@@ -38,3 +38,4 @@ if 'Botão lateral Razync v8' not in old:
     raise SystemExit('Customização atual da sidebar não encontrada')
 s = s[:start] + new + s[end:]
 p.write_text(s, encoding='utf-8')
+# trigger
