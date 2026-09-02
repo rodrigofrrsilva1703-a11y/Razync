@@ -1,0 +1,30 @@
+name: Restaurar header nativo da sidebar
+on:
+  push:
+    paths:
+      - 'scripts/restore_native_sidebar_header.py'
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar correção
+        run: python scripts/restore_native_sidebar_header.py
+      - name: Validar
+        run: |
+          python -m py_compile app.py
+          grep -q 'Native sidebar header restore v5' app.py
+          grep -q 'transform: translateY(-2.7rem)' app.py
+      - name: Registrar e limpar
+        run: |
+          rm -f scripts/restore_native_sidebar_header.py .github/workflows/restore_native_sidebar_header.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/restore_native_sidebar_header.py .github/workflows/restore_native_sidebar_header.yml
+          git commit -m 'Restaura controle nativo e clicável da sidebar'
+          git push
