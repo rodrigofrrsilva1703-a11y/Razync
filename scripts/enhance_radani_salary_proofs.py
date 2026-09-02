@@ -92,11 +92,9 @@ if anchor_loop not in s:
     raise SystemExit('Loop anchor not found')
 s = s.replace(anchor_loop, new_loop, 1)
 
-# Add FONTE to Jaguar detail for transparency.
 s = s.replace('''                    "STATUS": "Identificado - desmembrado",\n                })''', '''                    "STATUS": "Identificado - desmembrado",\n                    "FONTE": "Planilha Jaguar",\n                })''', 1)
 radani_path.write_text(s, encoding='utf-8')
 
-# App integration
 app_path = Path('app.py')
 app = app_path.read_text(encoding='utf-8')
 app = app.replace(
@@ -125,10 +123,9 @@ if analysis_old not in app:
 app = app.replace(analysis_old, analysis_new, 1)
 app_path.write_text(app, encoding='utf-8')
 
-# Tests
 p = Path('tests/test_radani.py')
 t = p.read_text(encoding='utf-8')
-t = t.replace('from razync.radani import analisar_desmembramentos\n', 'from razync.radani import analisar_desmembramentos\n', 1)
 if 'test_comprovantes_sispag_tem_prioridade' not in t:
     t += '''\n\ndef test_comprovantes_sispag_tem_prioridade():\n    comprovantes = pd.DataFrame([\n        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'FUNC A VALE', 'VALOR': -20000.0, 'ARQUIVO': 'C', 'TIPO': 'VALE', 'FONTE': 'Comprovante SISPAG'},\n        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'FUNC B VALE', 'VALOR': -13000.0, 'ARQUIVO': 'C', 'TIPO': 'VALE', 'FONTE': 'Comprovante SISPAG'},\n    ])\n    jaguar = pd.DataFrame([\n        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'OUTRO A VALE', 'VALOR': -18000.0, 'ARQUIVO': 'J', 'ABA': 'Junho'},\n        {'DATA': pd.Timestamp('2026-06-15'), 'HISTÓRICO': 'OUTRO B VALE', 'VALOR': -15000.0, 'ARQUIVO': 'J', 'ABA': 'Junho'},\n    ])\n    res = analisar_desmembramentos(_extrato(), jaguar, 'Itaú', comprovantes=comprovantes)\n    assert set(res.organizado['HISTÓRICO']) == {'FUNC A VALE', 'FUNC B VALE'}\n    assert set(res.detalhamentos['FONTE']) == {'Comprovante SISPAG'}\n    assert res.revisoes.empty\n'''
 p.write_text(t, encoding='utf-8')
+# trigger
