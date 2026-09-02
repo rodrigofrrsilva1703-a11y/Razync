@@ -33,6 +33,7 @@ from razync.lcarlos import processar_planilhas_lcarlos
 from razync.up_pack import identificar_banco_up_pack, processar_planilha_up_pack
 from razync.santander_statement import (parece_extrato_santander_empresarial, processar_extrato_santander_empresarial_texto)
 from razync.radani import analisar_desmembramentos, consolidar_comprovantes_sispag
+from razync.bradesco_radani import processar_extrato_bradesco_radani
 
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
@@ -69,6 +70,11 @@ def _radani_cache_extrato_pdf(conteudo: bytes, nome_arquivo: str):
     finally:
         if caminho and os.path.exists(caminho):
             os.unlink(caminho)
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=8)
+def _radani_cache_bradesco_pdf(conteudo: bytes):
+    return processar_extrato_bradesco_radani(conteudo)
 
 
 @st.cache_data(show_spinner=False, ttl=1800, max_entries=8)
@@ -8766,16 +8772,29 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
                     with st.spinner('Analisando a 968...'):
                         for nome_banco_radani, arquivo_extrato_radani in arquivos_ativos_radani:
-                            movs_radani = _radani_cache_extrato_pdf(
-                                arquivo_extrato_radani.getvalue(),
-                                arquivo_extrato_radani.name,
-                            )
+                            diagnostico_bradesco_radani = None
+                            if nome_banco_radani == 'Bradesco':
+                                movs_radani, diagnostico_bradesco_radani = _radani_cache_bradesco_pdf(
+                                    arquivo_extrato_radani.getvalue()
+                                )
+                            else:
+                                movs_radani = _radani_cache_extrato_pdf(
+                                    arquivo_extrato_radani.getvalue(),
+                                    arquivo_extrato_radani.name,
+                                )
                             df_extrato_radani = pd.DataFrame(movs_radani or [])
                             if df_extrato_radani.empty:
                                 st.warning(
                                     f'Nenhum lançamento foi reconhecido no extrato do {nome_banco_radani}.'
                                 )
                                 continue
+                            if diagnostico_bradesco_radani and not diagnostico_bradesco_radani.get('ok'):
+                                st.warning(
+                                    'Bradesco: a leitura não fechou com os totais impressos no extrato. '
+                                    f"Diferença em créditos: {formatar_moeda(abs(diagnostico_bradesco_radani.get('diferenca_creditos', 0)))} · "
+                                    f"Diferença em débitos: {formatar_moeda(abs(diagnostico_bradesco_radani.get('diferenca_debitos', 0)))}. "
+                                    'Os lançamentos reconhecidos serão exibidos, mas revise o extrato antes de concluir.'
+                                )
                             df_extrato_radani['DATA'] = pd.to_datetime(
                                 df_extrato_radani['DATA'], dayfirst=True, errors='coerce'
                             )
