@@ -6562,12 +6562,14 @@ if _empresa_loading:
     st.markdown(
         f"""
         <div class="rz-company-loading-overlay" role="status" aria-live="polite">
-            <div class="rz-company-loading-card">
-                <div class="rz-company-loading-mark"><span></span><span></span><span></span></div>
-                <div class="rz-company-loading-kicker">Abrindo empresa</div>
+            <div class="rz-company-loading-shell">
+                <div class="rz-company-loading-brand">R</div>
+                <div class="rz-company-loading-kicker">Acessando empresa</div>
                 <div class="rz-company-loading-name">{_codigo_loading} · {_nome_loading}</div>
-                <div class="rz-company-loading-copy">Preparando ferramentas e ambiente operacional…</div>
-                <div class="rz-company-loading-track"><i></i></div>
+                <div class="rz-company-loading-status">
+                    <span class="rz-company-loading-spinner" aria-hidden="true"></span>
+                    <span>Preparando ambiente</span>
+                </div>
             </div>
         </div>
         <style>
@@ -6577,79 +6579,82 @@ if _empresa_loading:
             z-index: 999999;
             display: grid;
             place-items: center;
-            padding: 1.5rem;
-            background: rgba(5, 12, 18, .965);
-            backdrop-filter: blur(5px);
+            padding: 1.25rem;
+            background: #091017;
+            overflow: hidden;
         }}
-        .rz-company-loading-card {{
-            width: min(92vw, 460px);
-            padding: 1.6rem 1.7rem 1.5rem;
-            border: 1px solid rgba(25,189,232,.26);
-            border-radius: 18px;
-            background: #0b1721;
-            box-shadow: 0 20px 55px rgba(0,0,0,.28);
+        .rz-company-loading-overlay::before {{
+            content: "";
+            position: absolute;
+            width: 440px;
+            height: 440px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(25,189,232,.08) 0%, rgba(25,189,232,0) 68%);
+            pointer-events: none;
         }}
-        .rz-company-loading-mark {{
-            display: flex;
-            gap: 5px;
-            margin-bottom: 1.2rem;
+        .rz-company-loading-shell {{
+            position: relative;
+            z-index: 1;
+            width: min(90vw, 390px);
+            text-align: center;
+            animation: rz-company-enter .18s ease-out both;
         }}
-        .rz-company-loading-mark span {{
-            width: 7px;
-            height: 7px;
-            border-radius: 999px;
-            background: #19bde8;
-            animation: rz-company-pulse .85s ease-in-out infinite alternate;
+        .rz-company-loading-brand {{
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 1rem;
+            display: grid;
+            place-items: center;
+            border: 1px solid rgba(25,189,232,.32);
+            border-radius: 12px;
+            background: rgba(17,31,41,.82);
+            color: #55d4f3;
+            font-size: 1rem;
+            font-weight: 800;
+            letter-spacing: -.03em;
+            box-shadow: 0 10px 30px rgba(0,0,0,.18);
         }}
-        .rz-company-loading-mark span:nth-child(2) {{ animation-delay: .12s; opacity: .72; }}
-        .rz-company-loading-mark span:nth-child(3) {{ animation-delay: .24s; opacity: .45; }}
         .rz-company-loading-kicker {{
-            color: #38c8ec;
-            font-size: .68rem;
+            color: #55d4f3;
+            font-size: .66rem;
             font-weight: 760;
-            letter-spacing: .13em;
+            letter-spacing: .14em;
             text-transform: uppercase;
-            margin-bottom: .42rem;
+            margin-bottom: .45rem;
         }}
         .rz-company-loading-name {{
-            color: #f4f8fb;
-            font-size: 1.15rem;
-            line-height: 1.3;
-            font-weight: 720;
-            letter-spacing: -.02em;
+            color: #f3f7fa;
+            font-size: 1.08rem;
+            line-height: 1.35;
+            font-weight: 700;
+            letter-spacing: -.018em;
         }}
-        .rz-company-loading-copy {{
-            margin-top: .45rem;
-            color: #8397a8;
-            font-size: .82rem;
+        .rz-company-loading-status {{
+            margin-top: .95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: .48rem;
+            color: #8296a6;
+            font-size: .76rem;
         }}
-        .rz-company-loading-track {{
-            position: relative;
-            height: 3px;
-            margin-top: 1.3rem;
-            overflow: hidden;
-            border-radius: 99px;
-            background: rgba(111,145,166,.15);
+        .rz-company-loading-spinner {{
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid rgba(130,150,166,.24);
+            border-top-color: #2fc6eb;
+            animation: rz-company-spin .62s linear infinite;
         }}
-        .rz-company-loading-track i {{
-            position: absolute;
-            inset: 0 auto 0 0;
-            width: 38%;
-            border-radius: inherit;
-            background: linear-gradient(90deg, transparent, #19bde8, #62d9f4, transparent);
-            animation: rz-company-loading 1s ease-in-out infinite;
+        @keyframes rz-company-spin {{
+            to {{ transform: rotate(360deg); }}
         }}
-        @keyframes rz-company-loading {{
-            from {{ transform: translateX(-110%); }}
-            to {{ transform: translateX(290%); }}
-        }}
-        @keyframes rz-company-pulse {{
-            from {{ transform: translateY(0); opacity: .35; }}
-            to {{ transform: translateY(-3px); opacity: 1; }}
+        @keyframes rz-company-enter {{
+            from {{ opacity: 0; transform: translateY(5px) scale(.99); }}
+            to {{ opacity: 1; transform: translateY(0) scale(1); }}
         }}
         @media (prefers-reduced-motion: reduce) {{
-            .rz-company-loading-mark span,
-            .rz-company-loading-track i {{ animation: none !important; }}
+            .rz-company-loading-shell,
+            .rz-company-loading-spinner {{ animation: none !important; }}
         }}
         </style>
         """,
@@ -6657,7 +6662,7 @@ if _empresa_loading:
     )
     # Mantém o diretório sob o overlay e só troca a empresa depois da transição.
     # Isso evita que a nova tela comece a renderizar por baixo do loading.
-    time.sleep(0.55)
+    time.sleep(0.30)
     _chave_destino_loading = _empresa_loading.get('chave_destino')
     if _chave_destino_loading == 'nova_geracao':
         st.session_state['org_estabelecimento_nova_geracao_card'] = (
