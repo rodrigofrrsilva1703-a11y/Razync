@@ -2502,6 +2502,22 @@ def gerar_excel_modelo_dominio(df):
     wb.save(saida)
     return saida.getvalue()
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def carregar_modelo_dominio_base():
+    """Lê o arquivo-base uma vez e reutiliza entre reruns do Streamlit."""
+    colunas = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    caminho = "Modelo dominio.xlsx"
+    if not os.path.exists(caminho):
+        return pd.DataFrame(columns=colunas)
+    try:
+        df = pd.read_excel(caminho)
+    except Exception:
+        return pd.DataFrame(columns=colunas)
+    if 'DESCRIÇÃO' not in df.columns:
+        return pd.DataFrame(columns=colunas)
+    return df
+
+
 def gerar_txt_dominio(df):
     linhas_txt = []
     for _, row in df.iterrows():
@@ -3251,7 +3267,7 @@ def salvar_classificacoes_online(registros, empresa='nova_geracao'):
     return len(registros)
 
 
-@st.cache_data(show_spinner=False, ttl=20)
+@st.cache_data(show_spinner=False, ttl=60, max_entries=12)
 def carregar_tarefas_competencia(competencia_iso):
     consulta = (
         'tarefas_empresas?competencia=eq.'
@@ -3284,11 +3300,31 @@ def salvar_status_tarefa_empresa(codigo_empresa, competencia, concluida):
 
 
 def salvar_status_tarefas_empresas_em_lote(codigos_empresas, competencia, concluida):
-    """Atualiza várias empresas usando a mesma regra segura da conclusão individual."""
-    codigos = [str(codigo) for codigo in codigos_empresas if str(codigo).strip()]
-    for codigo in dict.fromkeys(codigos):
-        salvar_status_tarefa_empresa(codigo, competencia, concluida)
-    return len(dict.fromkeys(codigos))
+    """Atualiza várias empresas em uma única chamada ao Supabase."""
+    codigos = list(dict.fromkeys(
+        str(codigo).strip() for codigo in codigos_empresas if str(codigo).strip()
+    ))
+    if not codigos:
+        return 0
+    agora = datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat()
+    registros = [
+        {
+            'codigo_empresa': codigo,
+            'competencia': competencia.isoformat(),
+            'concluida': bool(concluida),
+            'concluida_em': agora if concluida else None,
+            'atualizado_em': agora,
+        }
+        for codigo in codigos
+    ]
+    requisicao_classificacao_online(
+        'tarefas_empresas?on_conflict=codigo_empresa,competencia',
+        metodo='POST',
+        dados=registros,
+        prefer='resolution=merge-duplicates,return=minimal',
+    )
+    carregar_tarefas_competencia.clear()
+    return len(codigos)
 
 
 def registrar_conclusao_automatica_empresa(codigo_empresa, origem='Processamento concluído'):
@@ -3314,7 +3350,7 @@ def registrar_conclusao_automatica_empresa(codigo_empresa, origem='Processamento
     return True
 
 
-@st.cache_data(show_spinner=False, ttl=15)
+@st.cache_data(show_spinner=False, ttl=45, max_entries=4)
 def carregar_tarefas_central():
     registros = requisicao_classificacao_online(
         'tarefas_central?select=id,titulo,descricao,codigo_empresa,categoria,prioridade,status,prazo,concluida_em,criado_em,atualizado_em&order=prazo.asc.nullslast,criado_em.desc'
@@ -6373,6 +6409,51 @@ if st.session_state.pop('animar_transicao', False):
     )
 
 # ==============================================================================
+
+# ==============================================================================
+# PERFORMANCE VISUAL V1
+# ==============================================================================
+st.markdown("""
+<style>
+/* Menos trabalho de pintura/composição sem alterar a identidade visual. */
+.stApp {
+    background: linear-gradient(180deg, var(--rz-bg) 0%, var(--rz-bg-soft) 100%) !important;
+}
+.rz-page-header,
+.rz-dashboard-intro,
+.rz-overview-panel,
+.metric-card,
+[data-testid="stMetric"],
+[data-testid="stFileUploaderDropzone"] {
+    box-shadow: 0 8px 24px rgba(0,0,0,.11) !important;
+}
+.rz-page-header,
+.rz-dashboard-intro,
+.rz-overview-panel,
+[data-testid="stFileUploaderDropzone"] {
+    background: var(--rz-panel) !important;
+}
+.stButton > button,
+.stDownloadButton > button,
+[data-testid="stFormSubmitButton"] > button,
+[data-testid="stFileUploaderDropzone"] {
+    transition-duration: .10s !important;
+}
+.stButton > button:hover,
+.stDownloadButton > button:hover,
+[data-testid="stFormSubmitButton"] > button:hover {
+    transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+        animation: none !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # TELA 1: MENU PRINCIPAL (HOME)
 # ==============================================================================
 if st.session_state['pagina_ativa'] == 'home':
@@ -6752,8 +6833,7 @@ elif st.session_state['pagina_ativa'] == 'extratos':
     if arquivos:
         try:
             colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
-            df_modelo = pd.read_excel("Modelo dominio.xlsx") if os.path.exists("Modelo dominio.xlsx") else pd.DataFrame(columns=colunas_dominio)
-            if 'DESCRIÇÃO' not in df_modelo.columns: df_modelo = pd.DataFrame(columns=colunas_dominio)
+            df_modelo = carregar_modelo_dominio_base()
             
             dados_por_arquivo, todos_lancamentos_brutos = {}, []
             for arquivo in arquivos:
