@@ -9,3 +9,4 @@ Nova sincronização 2026-09-02 15:06 - leitor específico para extrato Santande
 Nova sincronização 2026-09-02 16:00 - empresa 968 Radani com análise inteligente Jaguar, Base Inteligente e Conferência.
 Nova sincronização 2026-09-02 17:05 - contas Itaú 508 e Bradesco 9, com comprovantes SISPAG como evidência prioritária.
 Nova sincronização 2026-09-02 17:29 - otimização de performance da 968 com processamento sob demanda, cache e ferramentas isoladas.
+Nova sincronização 2026-09-02 19:42 - layout da 968 padronizado com as demais empresas sem perder a otimização.
