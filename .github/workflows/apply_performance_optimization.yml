@@ -1,0 +1,48 @@
+name: Aplicar otimização de desempenho
+
+on:
+  push:
+    paths:
+      - 'scripts/optimize_streamlit_performance.py'
+      - '.github/workflows/apply_performance_optimization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar otimização
+        run: python scripts/optimize_streamlit_performance.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py
+      - name: Validar otimizações
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('app.py').read_text(encoding='utf-8')
+          checks = [
+              "def salvar_status_tarefas_empresas_em_lote",
+              "dados=registros",
+              "ttl=60, max_entries=12",
+              "ttl=45, max_entries=4",
+              "def carregar_modelo_dominio_base()",
+              "# PERFORMANCE VISUAL V1",
+          ]
+          missing = [item for item in checks if item not in text]
+          if missing:
+              raise SystemExit(f'Otimizações ausentes: {missing}')
+          PY
+      - name: Registrar alteração e limpar temporários
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git rm scripts/optimize_streamlit_performance.py .github/workflows/apply_performance_optimization.yml
+          git commit -m "Otimiza desempenho do Razync"
+          git push
