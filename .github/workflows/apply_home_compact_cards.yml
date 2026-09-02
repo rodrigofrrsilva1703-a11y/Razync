@@ -1,0 +1,32 @@
+name: Aplicar cards compactos da Home
+on:
+  push:
+    paths:
+      - 'scripts/compact_home_cards.py'
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar ajuste
+        run: python scripts/compact_home_cards.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py
+      - name: Validar cards compactos
+        run: |
+          grep -q 'Home compact cards v5' app.py
+          grep -q 'min-height: 84px' app.py
+          grep -q 'min-height: 66px' app.py
+      - name: Registrar alteração e limpar temporários
+        run: |
+          rm -f scripts/compact_home_cards.py .github/workflows/apply_home_compact_cards.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/compact_home_cards.py .github/workflows/apply_home_compact_cards.yml
+          git commit -m 'Deixa cards da Home mais compactos'
+          git push
