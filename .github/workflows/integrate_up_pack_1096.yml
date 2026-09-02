@@ -20,7 +20,7 @@ jobs:
       - name: Validar sintaxe e testes da UP PACK
         run: |
           python -m py_compile app.py razync/up_pack.py razync/companies.py razync/company_catalog.py
-          pytest -q tests/test_up_pack.py
+          PYTHONPATH=. pytest -q tests/test_up_pack.py
           grep -q "CONFIGURACOES_UP_PACK" app.py
           grep -q "empresa_organizador.*up_pack" app.py
           grep -q '"chave_sistema": "up_pack"' razync/company_catalog.py
