@@ -45,3 +45,5 @@ insert = '''        [data-testid="stSidebarCollapsedControl"] {
 s = s.replace(needle, insert + needle, 1)
 
 p.write_text(s, encoding='utf-8')
+
+# trigger
