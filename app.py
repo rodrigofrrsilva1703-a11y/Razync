@@ -80,6 +80,17 @@ st.markdown("""
             background: transparent !important;
         }
 
+        /* Main content vertical alignment v2 */
+        main[data-testid="stMain"] .block-container {
+            padding-top: 1.15rem !important;
+        }
+
+        @media (min-width: 1000px) {
+            main[data-testid="stMain"] .block-container {
+                padding-top: .85rem !important;
+            }
+        }
+
         :root {
             --hc-bg: #0b0f13;
             --hc-surface: #111820;
@@ -93,7 +104,7 @@ st.markdown("""
         }
 
         .stApp { background-color: var(--hc-bg); color: var(--hc-text); }
-        .block-container { padding-top: 3.25rem; padding-bottom: 3rem; max-width: 100%; }
+        .block-container { padding-top: 1.15rem; padding-bottom: 2.25rem; max-width: 100%; }
         h1, h2, h3, h4 { color: var(--hc-text) !important; letter-spacing: -0.02em; }
         hr { border-color: var(--hc-border) !important; }
 
