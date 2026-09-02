@@ -32,6 +32,18 @@ from razync.task_center import classificar_tarefa, ordenar_tarefas, resumir_tare
 from razync.lcarlos import processar_planilhas_lcarlos
 from razync.up_pack import identificar_banco_up_pack, processar_planilha_up_pack
 from razync.santander_statement import (parece_extrato_santander_empresarial, processar_extrato_santander_empresarial_texto)
+from razync.radani import analisar_desmembramentos, consolidar_jaguares
+
+# Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
+# serem confirmadas pelo usuário; o sistema não inventa conta bancária.
+CONFIGURACOES_RADANI = {
+    "radani": {
+        "empresa": "968 - RADANI ELETRONICA E AUTOMACAO LTDA",
+        "slug": "radani",
+        "arquivo": "RADANI",
+        "contas_bancarias": {"itau": "", "bradesco": ""},
+    }
+}
 
 # Configuração local da UP PACK para evitar falha de import em hot-reload do Streamlit Cloud.
 CONFIGURACOES_UP_PACK = {
@@ -8621,6 +8633,196 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 bancos_config=[
                     {'nome': 'Itaú', 'slug': 'itau'},
                     {'nome': 'Sicredi', 'slug': 'sicredi'}
+                ]
+            )
+
+    if st.session_state['empresa_organizador'] == 'radani':
+        config_radani = CONFIGURACOES_RADANI['radani']
+        empresa_radani = config_radani['empresa']
+        slug_radani = config_radani['slug']
+
+        aba_operacoes_radani, aba_base_radani = st.tabs([
+            'Organizar arquivos',
+            'Base Inteligente'
+        ])
+
+        with aba_base_radani:
+            st.info(
+                'A Base Inteligente da 968 é isolada das demais empresas. '
+                'As contas bancárias do Domínio ainda não foram informadas; '
+                'o aprendizado de contrapartidas funciona normalmente, mas a conta do banco '
+                'só será preenchida automaticamente depois da configuração.'
+            )
+            renderizar_base_inteligente_empresa(
+                slug_radani,
+                empresa_radani,
+                {'itau', 'bradesco'},
+                config_radani['contas_bancarias']
+            )
+
+        with aba_operacoes_radani:
+            st.caption(
+                'O extrato bancário define o período e os totais oficiais. As planilhas Jaguar '
+                'são analisadas somente dentro desse período para detalhar lançamentos consolidados.'
+            )
+            bancos_radani = st.multiselect(
+                'Bancos para organizar',
+                ['Itaú', 'Bradesco'],
+                default=['Itaú', 'Bradesco'],
+                key='radani_bancos_selecionados'
+            )
+
+            col_radani_itau, col_radani_bradesco = st.columns(2)
+            with col_radani_itau:
+                extrato_radani_itau = st.file_uploader(
+                    'Extrato — Itaú',
+                    type=['pdf', 'ofx', 'csv', 'xlsx', 'xls'],
+                    key='radani_extrato_itau',
+                    disabled='Itaú' not in bancos_radani
+                )
+            with col_radani_bradesco:
+                extrato_radani_bradesco = st.file_uploader(
+                    'Extrato — Bradesco',
+                    type=['pdf', 'ofx', 'csv', 'xlsx', 'xls'],
+                    key='radani_extrato_bradesco',
+                    disabled='Bradesco' not in bancos_radani
+                )
+
+            jaguares_radani = st.file_uploader(
+                'Planilhas auxiliares Jaguar',
+                type=['xlsx', 'xls'],
+                accept_multiple_files=True,
+                key='radani_jaguares',
+                help='Pode enviar arquivos Jaguar do ano e lançamentos diversos. O Razync usa somente o período dos extratos.'
+            )
+
+            try:
+                extratos_radani = {
+                    'Itaú': extrato_radani_itau,
+                    'Bradesco': extrato_radani_bradesco,
+                }
+                dados_radani = {}
+                revisoes_radani = []
+                detalhes_radani = []
+
+                for nome_banco_radani in bancos_radani:
+                    arquivo_extrato_radani = extratos_radani.get(nome_banco_radani)
+                    if arquivo_extrato_radani is None:
+                        continue
+
+                    nome_lower = arquivo_extrato_radani.name.lower()
+                    if not nome_lower.endswith('.pdf'):
+                        st.warning(
+                            f'Na primeira versão da análise inteligente da 968, use o extrato PDF do {nome_banco_radani}. '
+                            'Os demais formatos continuam disponíveis na Conferência com Extrato.'
+                        )
+                        continue
+
+                    caminho_tmp_radani = None
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_radani:
+                            tmp_radani.write(arquivo_extrato_radani.getvalue())
+                            caminho_tmp_radani = tmp_radani.name
+                        movs_radani = executar_com_loading(
+                            f'Lendo extrato do {nome_banco_radani}...',
+                            processar_arquivo_pdf,
+                            caminho_tmp_radani,
+                            arquivo_extrato_radani.name
+                        )
+                    finally:
+                        if caminho_tmp_radani and os.path.exists(caminho_tmp_radani):
+                            os.unlink(caminho_tmp_radani)
+
+                    df_extrato_radani = pd.DataFrame(movs_radani or [])
+                    if df_extrato_radani.empty:
+                        st.warning(f'Nenhum lançamento foi reconhecido no extrato do {nome_banco_radani}.')
+                        continue
+                    df_extrato_radani['DATA'] = pd.to_datetime(
+                        df_extrato_radani['DATA'], dayfirst=True, errors='coerce'
+                    )
+                    df_extrato_radani = df_extrato_radani.dropna(subset=['DATA']).copy()
+                    if df_extrato_radani.empty:
+                        continue
+
+                    inicio_radani = df_extrato_radani['DATA'].min()
+                    fim_radani = df_extrato_radani['DATA'].max()
+                    arquivos_jaguar_radani = [
+                        (arq.name, arq.getvalue()) for arq in (jaguares_radani or [])
+                    ]
+                    jaguar_periodo_radani = consolidar_jaguares(
+                        arquivos_jaguar_radani, inicio_radani, fim_radani
+                    )
+                    analise_radani = analisar_desmembramentos(
+                        df_extrato_radani, jaguar_periodo_radani, nome_banco_radani
+                    )
+                    dados_radani[nome_banco_radani] = {
+                        'principal': analise_radani.organizado,
+                        'retirados': pd.DataFrame(),
+                    }
+                    if not analise_radani.revisoes.empty:
+                        revisoes_radani.append(analise_radani.revisoes)
+                    if not analise_radani.detalhamentos.empty:
+                        detalhes_radani.append(analise_radani.detalhamentos)
+
+                if dados_radani:
+                    df_radani_total = pd.concat(
+                        [d['principal'] for d in dados_radani.values()],
+                        ignore_index=True
+                    )
+                    datas_radani = pd.to_datetime(df_radani_total['DATA'], errors='coerce').dropna()
+                    if not datas_radani.empty:
+                        inicio_total_radani = datas_radani.min()
+                        fim_total_radani = datas_radani.max()
+                        m1_radani, m2_radani, m3_radani, m4_radani = st.columns(4)
+                        m1_radani.metric('Lançamentos finais', len(df_radani_total))
+                        m2_radani.metric('Entradas', formatar_moeda(df_radani_total.loc[df_radani_total['VALOR'] > 0, 'VALOR'].sum()))
+                        m3_radani.metric('Saídas', formatar_moeda(abs(df_radani_total.loc[df_radani_total['VALOR'] < 0, 'VALOR'].sum())))
+                        m4_radani.metric('Período', f"{inicio_total_radani.strftime('%d/%m')} a {fim_total_radani.strftime('%d/%m')}")
+
+                    if detalhes_radani:
+                        df_detalhes_radani = pd.concat(detalhes_radani, ignore_index=True)
+                        st.success(
+                            f'{df_detalhes_radani["HISTÓRICO BANCO"].nunique()} lançamento(s) consolidado(s) '
+                            'foram desmembrados com fechamento exato.'
+                        )
+                        with st.expander('Ver desmembramentos identificados', expanded=False):
+                            st.dataframe(df_detalhes_radani, use_container_width=True, hide_index=True)
+
+                    if revisoes_radani:
+                        df_revisoes_radani = pd.concat(revisoes_radani, ignore_index=True)
+                        st.warning(
+                            f'{len(df_revisoes_radani)} lançamento(s) ficaram para revisão. '
+                            'O Razync não altera automaticamente correspondências ambíguas.'
+                        )
+                        st.dataframe(df_revisoes_radani, use_container_width=True, hide_index=True)
+
+                    modelo_bytes_radani = None
+                    for caminho_modelo_radani in ['Modelo dominio.xlsx', 'Modelo Dominio.xlsx', 'modelo_dominio.xlsx']:
+                        if os.path.exists(caminho_modelo_radani):
+                            with open(caminho_modelo_radani, 'rb') as arq_modelo_radani:
+                                modelo_bytes_radani = arq_modelo_radani.read()
+                            break
+                    arquivo_final_radani = gerar_excel_nova_geracao(
+                        dados_radani, modelo_bytes_radani
+                    )
+                    st.download_button(
+                        'Baixar planilha no Modelo Domínio',
+                        data=arquivo_final_radani,
+                        file_name='RADANI_968_Modelo_Dominio.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True,
+                        key='radani_download_modelo'
+                    )
+
+            except Exception as erro_radani:
+                st.error(f'Não foi possível processar os arquivos da empresa 968: {erro_radani}')
+
+            st.markdown(f'#### Conferência — {empresa_radani}')
+            renderizar_conferencia_autokraft(
+                slug_radani,
+                bancos_config=[
+                    {'nome': 'Itaú', 'slug': 'itau'},
+                    {'nome': 'Bradesco', 'slug': 'bradesco'},
                 ]
             )
 
