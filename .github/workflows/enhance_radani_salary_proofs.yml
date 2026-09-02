@@ -1,0 +1,34 @@
+name: Aprimorar comprovantes SISPAG da Radani
+on:
+  push:
+    paths:
+      - 'scripts/enhance_radani_salary_proofs.py'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar melhoria
+        run: python scripts/enhance_radani_salary_proofs.py
+      - name: Instalar dependências mínimas
+        run: pip install pandas openpyxl pypdf pytest >/dev/null
+      - name: Validar
+        run: |
+          python -m py_compile app.py razync/radani.py
+          PYTHONPATH=. pytest -q tests/test_radani.py
+          grep -q '"itau": "508", "bradesco": "9"' app.py
+          grep -q 'radani_comprovantes_sispag' app.py
+          grep -q 'def ler_comprovantes_sispag_pdf' razync/radani.py
+      - name: Registrar e limpar
+        run: |
+          rm -f scripts/enhance_radani_salary_proofs.py .github/workflows/enhance_radani_salary_proofs.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py razync/radani.py tests/test_radani.py scripts/enhance_radani_salary_proofs.py .github/workflows/enhance_radani_salary_proofs.yml
+          git commit -m 'Usa comprovantes SISPAG e configura contas da Radani'
+          git push
