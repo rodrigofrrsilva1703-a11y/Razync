@@ -26,3 +26,4 @@ if marker not in s:
     s = s.replace(needle, css + needle, 1)
 
 p.write_text(s, encoding='utf-8')
+# trigger
