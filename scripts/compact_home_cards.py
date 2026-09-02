@@ -2,83 +2,20 @@ from pathlib import Path
 
 p = Path('app.py')
 s = p.read_text(encoding='utf-8')
-marker = '/* Home compact dashboard v4 */'
+
+old = '''                <style>\n                /* Organizer directory vertical fix v3 */\n                main[data-testid="stMain"] .block-container {\n                    padding-top: 0 !important;\n                    margin-top: -5.25rem !important;\n                }\n                @media (max-width: 900px) {\n                    main[data-testid="stMain"] .block-container {\n                        margin-top: -2.25rem !important;\n                    }\n                }\n                </style>\n'''
+s = s.replace(old, '')
+
+marker = '/* Global top spacing v4 */'
 if marker not in s:
-    raise SystemExit('Home compact dashboard v4 não encontrado')
+    needle = '        /* Main content vertical alignment v2 */\n'
+    if needle not in s:
+        raise SystemExit('Bloco de alinhamento global não encontrado')
+    css = '''        /* Global top spacing v4 */\n        main[data-testid="stMain"] {\n            padding-top: 0 !important;\n        }\n        main[data-testid="stMain"] .block-container,\n        .stMainBlockContainer {\n            padding-top: .30rem !important;\n            padding-bottom: 1.2rem !important;\n            margin-top: 0 !important;\n        }\n        section[data-testid="stSidebar"] > div,\n        section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {\n            padding-top: .45rem !important;\n        }\n        [class*="st-key-btn_voltar_home_org"],\n        [class*="st-key-btn_voltar_empresas_org"] {\n            margin-top: 0 !important;\n        }\n        .rz-dashboard-intro,\n        .rz-company-hero,\n        .rz-page-header,\n        .rz-directory-eyebrow {\n            margin-top: 0 !important;\n        }\n        h1:first-of-type, h2:first-of-type {\n            margin-top: 0 !important;\n            padding-top: 0 !important;\n        }\n        @media (max-width: 900px) {\n            main[data-testid="stMain"] .block-container,\n            .stMainBlockContainer {\n                padding-top: .55rem !important;\n            }\n        }\n\n'''
+    s = s.replace(needle, css + needle, 1)
 
-css = r'''
+s = s.replace('padding-top: 1.15rem !important;', 'padding-top: .30rem !important;', 1)
+s = s.replace('padding-top: .85rem !important;', 'padding-top: .30rem !important;', 1)
+s = s.replace('.block-container { padding-top: 1.15rem;', '.block-container { padding-top: .30rem;', 1)
 
-/* Home compact cards v5 */
-.rz-home-metrics {
-    gap: .48rem !important;
-    margin: .55rem 0 .7rem !important;
-}
-.rz-home-metric {
-    min-height: 84px !important;
-    padding: .68rem .78rem !important;
-    border-radius: 11px !important;
-}
-.rz-home-metric-label {
-    font-size: .59rem !important;
-    margin-bottom: .2rem !important;
-}
-.rz-home-metric-value {
-    font-size: 1.38rem !important;
-    line-height: 1 !important;
-}
-.rz-home-metric-sub {
-    margin-top: .22rem !important;
-    font-size: .63rem !important;
-}
-.rz-home-progress-track {
-    height: 4px !important;
-    margin-top: .38rem !important;
-}
-.rz-home-main-grid {
-    gap: .8rem !important;
-}
-.rz-home-actions .stButton > button {
-    min-height: 66px !important;
-    padding: .7rem .85rem !important;
-    border-radius: 11px !important;
-}
-.rz-home-actions .stButton > button p {
-    font-size: .74rem !important;
-    line-height: 1.25 !important;
-}
-.rz-home-actions .stButton > button strong {
-    font-size: .87rem !important;
-}
-.rz-home-overview {
-    padding: .82rem .9rem !important;
-    border-radius: 12px !important;
-}
-.rz-home-overview-title {
-    font-size: 1rem !important;
-    margin-bottom: .18rem !important;
-}
-.rz-home-overview-copy {
-    font-size: .69rem !important;
-    margin-bottom: .5rem !important;
-}
-.rz-home-overview-row {
-    padding: .42rem 0 !important;
-    gap: .45rem !important;
-}
-.rz-home-overview-row strong {
-    font-size: .7rem !important;
-}
-.rz-home-overview-row span {
-    font-size: .62rem !important;
-}
-@media (max-width: 900px) {
-    .rz-home-metric { min-height: 78px !important; }
-    .rz-home-actions .stButton > button { min-height: 62px !important; }
-}
-'''
-
-needle = "\n# TELA 1: MENU PRINCIPAL (HOME)\n"
-if needle not in s:
-    raise SystemExit('ponto de inserção não encontrado')
-s = s.replace(needle, "\nst.markdown('''<style>" + css + "</style>''', unsafe_allow_html=True)\n" + needle, 1)
 p.write_text(s, encoding='utf-8')
