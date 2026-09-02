@@ -35,3 +35,13 @@ CONFIGURACOES_ACCEDE = {
         "contas_bancarias": {"itau": "508", "sicredi": "505"},
     },
 }
+
+
+CONFIGURACOES_UP_PACK = {
+    "up_pack": {
+        "empresa": "1096 - UP PACK BRAZIL EIRELI EPP",
+        "slug": "up_pack",
+        "arquivo": "UP_PACK_Brazil",
+        "contas_bancarias": {"santander": "513", "sicredi": "510"},
+    }
+}

@@ -22,7 +22,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pypdf import PdfReader
 
-from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
+from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE, CONFIGURACOES_UP_PACK
 from razync.company_catalog import EMPRESAS, EMPRESAS_POR_REGIME, EMPRESAS_POR_CHAVE
 from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
@@ -30,6 +30,7 @@ from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fech
 from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia_operacional
 from razync.task_center import classificar_tarefa, ordenar_tarefas, resumir_tarefas
 from razync.lcarlos import processar_planilhas_lcarlos
+from razync.up_pack import identificar_banco_up_pack, processar_planilha_up_pack
 
 # Configuração da página Web
 st.set_page_config(
@@ -8597,6 +8598,127 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 slug_accede,
                 bancos_config=[
                     {'nome': 'Itaú', 'slug': 'itau'},
+                    {'nome': 'Sicredi', 'slug': 'sicredi'}
+                ]
+            )
+
+    if st.session_state['empresa_organizador'] == 'up_pack':
+        config_up_pack = CONFIGURACOES_UP_PACK['up_pack']
+        empresa_up_pack = config_up_pack['empresa']
+        slug_up_pack = config_up_pack['slug']
+
+        aba_operacoes_up, aba_base_up = st.tabs([
+            'Organizar arquivos',
+            'Base Inteligente'
+        ])
+
+        with aba_base_up:
+            renderizar_base_inteligente_empresa(
+                slug_up_pack,
+                empresa_up_pack,
+                {'santander', 'sicredi'},
+                config_up_pack['contas_bancarias']
+            )
+
+        with aba_operacoes_up:
+            st.caption(
+                'Envie as planilhas SIG da UP PACK. O Razync identifica Santander e Sicredi '
+                'pelo nome do arquivo e desmembra automaticamente os grupos de pagamento.'
+            )
+            arquivos_up_pack = st.file_uploader(
+                'Planilhas SIG — Santander e/ou Sicredi',
+                type=['xlsx', 'xls'],
+                accept_multiple_files=True,
+                key='up_pack_sig_bancos'
+            )
+
+            dados_up_pack = {}
+            avisos_up_pack = []
+            try:
+                for arquivo_up in arquivos_up_pack or []:
+                    banco_up = identificar_banco_up_pack(
+                        arquivo_up.getvalue(), arquivo_up.name
+                    )
+                    if banco_up is None:
+                        avisos_up_pack.append(
+                            f'Não foi possível identificar o banco de {arquivo_up.name}. '
+                            'Mantenha Santander ou Sicredi no nome do arquivo.'
+                        )
+                        continue
+                    nome_banco_up = 'Santander' if banco_up == 'santander' else 'Sicredi'
+                    dados_up_pack[nome_banco_up] = {
+                        'principal': executar_com_loading(
+                            f'Organizando a planilha SIG do {nome_banco_up}...',
+                            processar_planilha_up_pack,
+                            arquivo_up.getvalue(),
+                            banco_up
+                        ),
+                        'retirados': pd.DataFrame()
+                    }
+
+                for aviso_up in avisos_up_pack:
+                    st.warning(aviso_up)
+
+                if dados_up_pack:
+                    df_up_pack = pd.concat(
+                        [dados['principal'] for dados in dados_up_pack.values()],
+                        ignore_index=True
+                    ).sort_values(['DATA', 'DESCRIÇÃO'], kind='stable').reset_index(drop=True)
+
+                    if df_up_pack.empty:
+                        st.warning('Nenhum lançamento bancário foi encontrado nas planilhas enviadas.')
+                    else:
+                        datas_up_pack = pd.to_datetime(
+                            df_up_pack['DATA'], errors='coerce'
+                        ).dropna().dt.date
+                        data_min_up = min(datas_up_pack)
+                        data_max_up = max(datas_up_pack)
+
+                        met_up1, met_up2, met_up3 = st.columns(3)
+                        met_up1.metric('Lançamentos', len(df_up_pack))
+                        met_up2.metric(
+                            'Entradas',
+                            formatar_moeda(df_up_pack.loc[df_up_pack['VALOR'] > 0, 'VALOR'].sum())
+                        )
+                        met_up3.metric(
+                            'Saídas',
+                            formatar_moeda(abs(df_up_pack.loc[df_up_pack['VALOR'] < 0, 'VALOR'].sum()))
+                        )
+                        st.caption(
+                            f'Período identificado: {data_min_up.strftime("%d/%m/%Y")} a '
+                            f'{data_max_up.strftime("%d/%m/%Y")} · '
+                            'Santander conta 513 · Sicredi conta 510.'
+                        )
+
+                        modelo_bytes_up = None
+                        for caminho_modelo in ['Modelo dominio.xlsx', 'Modelo dominio(6).xlsx']:
+                            if os.path.exists(caminho_modelo):
+                                with open(caminho_modelo, 'rb') as modelo_arquivo:
+                                    modelo_bytes_up = modelo_arquivo.read()
+                                break
+                        arquivo_final_up = gerar_excel_nova_geracao(
+                            dados_up_pack, modelo_bytes_up
+                        )
+                        st.download_button(
+                            'Baixar planilha no Modelo Domínio',
+                            data=arquivo_final_up,
+                            file_name=(
+                                f"{config_up_pack['arquivo']}_"
+                                f"{data_min_up.strftime('%d%m%Y')}_a_"
+                                f"{data_max_up.strftime('%d%m%Y')}.xlsx"
+                            ),
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            use_container_width=True,
+                            key='up_pack_download_modelo'
+                        )
+            except Exception as erro_up_pack:
+                st.error(f'Não foi possível processar as planilhas da UP PACK: {erro_up_pack}')
+
+            st.markdown(f'#### Conferência — {empresa_up_pack}')
+            renderizar_conferencia_autokraft(
+                slug_up_pack,
+                bancos_config=[
+                    {'nome': 'Santander', 'slug': 'santander'},
                     {'nome': 'Sicredi', 'slug': 'sicredi'}
                 ]
             )
