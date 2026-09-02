@@ -36,3 +36,4 @@ jobs:
           git add -A
           git commit -m 'Otimiza performance da empresa 968 Radani'
           git push
+# trigger
