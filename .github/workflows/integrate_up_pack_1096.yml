@@ -1,0 +1,34 @@
+name: Integrar empresa 1096 UP PACK
+on:
+  push:
+    paths:
+      - 'scripts/integrate_up_pack_1096.py'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar integração
+        run: python scripts/integrate_up_pack_1096.py
+      - name: Instalar dependências mínimas
+        run: pip install pandas openpyxl
+      - name: Validar sintaxe e testes da UP PACK
+        run: |
+          python -m py_compile app.py razync/up_pack.py razync/companies.py razync/company_catalog.py
+          pytest -q tests/test_up_pack.py
+          grep -q "CONFIGURACOES_UP_PACK" app.py
+          grep -q "empresa_organizador.*up_pack" app.py
+          grep -q '"chave_sistema": "up_pack"' razync/company_catalog.py
+      - name: Registrar e limpar
+        run: |
+          rm -f scripts/integrate_up_pack_1096.py .github/workflows/integrate_up_pack_1096.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py razync/companies.py razync/company_catalog.py scripts/integrate_up_pack_1096.py .github/workflows/integrate_up_pack_1096.yml
+          git commit -m 'Integra ferramentas da empresa 1096 UP PACK'
+          git push
