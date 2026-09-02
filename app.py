@@ -7533,6 +7533,23 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 mudar_pagina('home')
                 st.rerun()
             st.markdown(
+                """
+                <style>
+                /* Organizer directory vertical fix v3 */
+                main[data-testid="stMain"] .block-container {
+                    padding-top: 0 !important;
+                    margin-top: -5.25rem !important;
+                }
+                @media (max-width: 900px) {
+                    main[data-testid="stMain"] .block-container {
+                        margin-top: -2.25rem !important;
+                    }
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.markdown(
                 '<div class="rz-directory-eyebrow">Empresas</div>',
                 unsafe_allow_html=True,
             )
