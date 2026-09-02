@@ -1,0 +1,33 @@
+name: Remover apoio Jaguar da Radani
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/remove_radani_jaguar.py'
+      - '.github/workflows/remove_radani_jaguar.yml'
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar alteração
+        run: python scripts/remove_radani_jaguar.py
+      - name: Instalar dependências mínimas
+        run: pip install pandas pypdf openpyxl pytest
+      - name: Validar
+        run: |
+          python -m py_compile app.py razync/radani.py
+          PYTHONPATH=. pytest -q tests/test_radani.py
+      - name: Registrar e limpar
+        run: |
+          rm scripts/remove_radani_jaguar.py .github/workflows/remove_radani_jaguar.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Remove planilhas de apoio da empresa 968' || exit 0
+          git push
