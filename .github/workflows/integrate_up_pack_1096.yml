@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'scripts/integrate_up_pack_1096.py'
+      - '.github/workflows/integrate_up_pack_1096.yml'
 permissions:
   contents: write
 jobs:
