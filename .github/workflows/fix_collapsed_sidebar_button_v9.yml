@@ -1,0 +1,35 @@
+name: Corrigir botão após recolher sidebar
+
+on:
+  push:
+    paths:
+      - 'scripts/fix_collapsed_sidebar_button_v9.py'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar correção
+        run: python scripts/fix_collapsed_sidebar_button_v9.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py
+      - name: Validar CSS
+        run: |
+          grep -q 'Razync sidebar-only chrome v9' app.py
+          grep -q '2147483000' app.py
+      - name: Registrar e limpar
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm scripts/fix_collapsed_sidebar_button_v9.py
+          rm .github/workflows/fix_collapsed_sidebar_button_v9.yml
+          git add app.py scripts/fix_collapsed_sidebar_button_v9.py .github/workflows/fix_collapsed_sidebar_button_v9.yml
+          git commit -m 'Mantém botão lateral visível após recolher'
+          git push
