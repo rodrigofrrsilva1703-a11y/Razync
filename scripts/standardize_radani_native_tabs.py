@@ -1,4 +1,5 @@
 from pathlib import Path
+# Trigger: usar exatamente as mesmas abas nativas das demais empresas.
 
 path = Path('app.py')
 text = path.read_text(encoding='utf-8')
@@ -19,7 +20,6 @@ if old_conf not in text:
     raise SystemExit('Bloco especial de conferência da Radani não encontrado')
 text = text.replace(old_conf, new_conf, 1)
 
-# Guardas para impedir regressão visual.
 if "radani_modo_ferramenta" in text:
     raise SystemExit('Navegação customizada ainda presente')
 if "aba_operacoes_radani, aba_base_radani = st.tabs" not in text:
