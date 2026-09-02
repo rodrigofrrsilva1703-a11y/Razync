@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Reexecução: aplica o ajuste efetivamente no app.py.
 p = Path('app.py')
 s = p.read_text(encoding='utf-8')
 old = '.block-container { padding-top: 3.25rem; padding-bottom: 3rem; max-width: 100%; }'
