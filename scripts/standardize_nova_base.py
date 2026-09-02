@@ -13,3 +13,5 @@ if end_idx == -1:
 new = '''        with aba_base_inteligente:\n            renderizar_base_inteligente_empresa(\n                empresa_base_nova,\n                nome_base_nova,\n                set(contas_dominio_estabelecimento.keys()),\n                contas_dominio_estabelecimento,\n            )\n'''
 s = s[:idx] + new + s[end_idx:]
 p.write_text(s, encoding='utf-8')
+
+# trigger apply workflow
