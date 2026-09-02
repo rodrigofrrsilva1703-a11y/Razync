@@ -82,3 +82,4 @@ new = '''        /* Botão lateral Razync v8 — compacto, discreto e integrado 
 '''
 s = s[:start] + new + s[end:]
 p.write_text(s, encoding='utf-8')
+# trigger
