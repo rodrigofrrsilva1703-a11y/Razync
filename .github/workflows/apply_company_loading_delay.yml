@@ -1,0 +1,39 @@
+name: Aplicar ajuste de loading de empresa
+on:
+  push:
+    paths:
+      - 'scripts/refine_company_loading_delay.py'
+      - '.github/workflows/apply_company_loading_delay.yml'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar ajuste
+        run: python scripts/refine_company_loading_delay.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py
+      - name: Validar loading em duas etapas
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('app.py').read_text(encoding='utf-8')
+          assert "time.sleep(0.55)" in text
+          assert "st.session_state.get('_rz_empresa_loading')" in text
+          assert "'chave_destino': chave_destino" in text
+          assert "st.session_state['empresa_organizador'] = _chave_destino_loading" in text
+          print('Loading em duas etapas validado')
+          PY
+      - name: Registrar alteração e limpar temporários
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f scripts/refine_company_loading_delay.py .github/workflows/apply_company_loading_delay.yml
+          git add app.py scripts/refine_company_loading_delay.py .github/workflows/apply_company_loading_delay.yml
+          git commit -m "Suaviza troca de tela ao abrir empresa"
+          git push
