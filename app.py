@@ -31,6 +31,7 @@ from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia
 from razync.task_center import classificar_tarefa, ordenar_tarefas, resumir_tarefas
 from razync.lcarlos import processar_planilhas_lcarlos
 from razync.up_pack import identificar_banco_up_pack, processar_planilha_up_pack
+from razync.santander_statement import (parece_extrato_santander_empresarial, processar_extrato_santander_empresarial_texto)
 
 # Configuração local da UP PACK para evitar falha de import em hot-reload do Streamlit Cloud.
 CONFIGURACOES_UP_PACK = {
@@ -2419,6 +2420,17 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
             
         nome_para_identificacao = filename_original or os.path.basename(caminho_pdf)
         banco_identificado = identificar_banco_inteligente(texto_completo, nome_para_identificacao)
+
+        # Santander Empresarial: formato Data / Histórico / Valor.
+        # É processado antes do parser universal porque o próprio PDF informa
+        # o sinal com "- R$" nas saídas e sem hífen nas entradas.
+        if parece_extrato_santander_empresarial(texto_completo):
+            lancamentos_santander = processar_extrato_santander_empresarial_texto(
+                texto_completo,
+                banco='BANCO SANTANDER',
+            )
+            if lancamentos_santander:
+                return lancamentos_santander
 
         # O extrato detalhado Dayconnect usa DD/MM nas linhas e informa o ano
         # somente no cabeçalho do período. Esse formato é tratado antes do
