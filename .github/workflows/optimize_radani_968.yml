@@ -1,0 +1,38 @@
+name: Otimizar empresa 968 Radani
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/optimize_radani_968.py'
+      - '.github/workflows/optimize_radani_968.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar otimização
+        run: python scripts/optimize_radani_968.py
+      - name: Instalar dependências mínimas
+        run: pip install -q streamlit pandas pypdf openpyxl pytest
+      - name: Validar
+        run: |
+          python -m py_compile app.py razync/radani.py
+          pytest -q tests/test_radani.py
+      - name: Registrar e limpar
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f scripts/optimize_radani_968.py .github/workflows/optimize_radani_968.yml
+          git add -A
+          git commit -m 'Otimiza performance da empresa 968 Radani'
+          git push
