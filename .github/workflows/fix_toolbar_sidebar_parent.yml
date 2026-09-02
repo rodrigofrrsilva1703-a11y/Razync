@@ -1,0 +1,29 @@
+name: Corrigir toolbar da sidebar
+on:
+  push:
+    paths:
+      - 'scripts/fix_toolbar_sidebar_parent.py'
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar correção
+        run: python scripts/fix_toolbar_sidebar_parent.py
+      - name: Validar
+        run: |
+          python -m py_compile app.py
+          grep -q 'Sidebar toolbar parent fix v6' app.py
+      - name: Registrar e limpar
+        run: |
+          rm -f scripts/fix_toolbar_sidebar_parent.py .github/workflows/fix_toolbar_sidebar_parent.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/fix_toolbar_sidebar_parent.py .github/workflows/fix_toolbar_sidebar_parent.yml
+          git commit -m 'Restaura controle lateral pelo toolbar nativo'
+          git push
