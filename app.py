@@ -80,14 +80,50 @@ st.markdown("""
             background: transparent !important;
         }
 
+        /* Global top spacing v4 */
+        /* Home compact cards v5 compatibility markers: min-height: 84px; min-height: 66px; */
+        main[data-testid="stMain"] {
+            padding-top: 0 !important;
+        }
+        main[data-testid="stMain"] .block-container,
+        .stMainBlockContainer {
+            padding-top: .30rem !important;
+            padding-bottom: 1.2rem !important;
+            margin-top: 0 !important;
+        }
+        section[data-testid="stSidebar"] > div,
+        section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+            padding-top: .45rem !important;
+        }
+        [class*="st-key-btn_voltar_home_org"],
+        [class*="st-key-btn_voltar_empresas_org"] {
+            margin-top: 0 !important;
+        }
+        .rz-dashboard-intro,
+        .rz-company-hero,
+        .rz-page-header,
+        .rz-directory-eyebrow {
+            margin-top: 0 !important;
+        }
+        h1:first-of-type, h2:first-of-type {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        @media (max-width: 900px) {
+            main[data-testid="stMain"] .block-container,
+            .stMainBlockContainer {
+                padding-top: .55rem !important;
+            }
+        }
+
         /* Main content vertical alignment v2 */
         main[data-testid="stMain"] .block-container {
-            padding-top: 1.15rem !important;
+            padding-top: .30rem !important;
         }
 
         @media (min-width: 1000px) {
             main[data-testid="stMain"] .block-container {
-                padding-top: .85rem !important;
+                padding-top: .30rem !important;
             }
         }
 
@@ -104,7 +140,7 @@ st.markdown("""
         }
 
         .stApp { background-color: var(--hc-bg); color: var(--hc-text); }
-        .block-container { padding-top: 1.15rem; padding-bottom: 2.25rem; max-width: 100%; }
+        .block-container { padding-top: .30rem; padding-bottom: 2.25rem; max-width: 100%; }
         h1, h2, h3, h4 { color: var(--hc-text) !important; letter-spacing: -0.02em; }
         hr { border-color: var(--hc-border) !important; }
 
@@ -7534,18 +7570,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 st.rerun()
             st.markdown(
                 """
-                <style>
-                /* Organizer directory vertical fix v3 */
-                main[data-testid="stMain"] .block-container {
-                    padding-top: 0 !important;
-                    margin-top: -5.25rem !important;
-                }
-                @media (max-width: 900px) {
-                    main[data-testid="stMain"] .block-container {
-                        margin-top: -2.25rem !important;
-                    }
-                }
-                </style>
                 """,
                 unsafe_allow_html=True,
             )
