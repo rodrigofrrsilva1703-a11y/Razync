@@ -6456,7 +6456,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Transição curta ao abrir uma empresa: mascara o rerun do Streamlit sem atrasar a navegação normal.
-_empresa_loading = st.session_state.pop('_rz_empresa_loading', None)
+_empresa_loading = st.session_state.get('_rz_empresa_loading')
 if _empresa_loading:
     _codigo_loading = _empresa_loading.get('codigo', '')
     _nome_loading = _empresa_loading.get('nome', 'Empresa')
@@ -6556,8 +6556,17 @@ if _empresa_loading:
         """,
         unsafe_allow_html=True,
     )
-    # Janela mínima apenas para a transição chegar ao navegador antes do rerun final.
-    time.sleep(0.16)
+    # Mantém o diretório sob o overlay e só troca a empresa depois da transição.
+    # Isso evita que a nova tela comece a renderizar por baixo do loading.
+    time.sleep(0.55)
+    _chave_destino_loading = _empresa_loading.get('chave_destino')
+    if _chave_destino_loading == 'nova_geracao':
+        st.session_state['org_estabelecimento_nova_geracao_card'] = (
+            _empresa_loading.get('estabelecimento', 'matriz')
+        )
+    if _chave_destino_loading:
+        st.session_state['empresa_organizador'] = _chave_destino_loading
+    st.session_state.pop('_rz_empresa_loading', None)
     st.rerun()
 
 # TELA 1: MENU PRINCIPAL (HOME)
@@ -7423,15 +7432,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             chave_destino = empresa_catalogo.get(
                 'chave_sistema', empresa_catalogo['chave']
             )
-            if chave_destino == 'nova_geracao':
-                st.session_state['org_estabelecimento_nova_geracao_card'] = (
-                    empresa_catalogo.get('estabelecimento', 'matriz')
-                )
             st.session_state['_rz_empresa_loading'] = {
                 'codigo': str(empresa_catalogo.get('codigo', '')),
                 'nome': str(empresa_catalogo.get('nome', 'Empresa')),
+                'chave_destino': chave_destino,
+                'estabelecimento': empresa_catalogo.get('estabelecimento', 'matriz'),
             }
-            st.session_state['empresa_organizador'] = chave_destino
             st.rerun()
 
         empresas_catalogo_completo = sorted(
