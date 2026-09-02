@@ -39,8 +39,8 @@ new = '''        header[data-testid="stHeader"] {
 if old not in s:
     raise SystemExit('Bloco customizado atual do header não encontrado')
 s = s.replace(old, new, 1)
-# Mantém o conteúdo visualmente alto mesmo com o header nativo restaurado.
 marker = '/* Global top spacing v4 */'
 if marker in s and '/* Native sidebar header restore v5 */' not in s:
     s = s.replace(marker, marker + '''\n        /* Native sidebar header restore v5 */\n        main[data-testid="stMain"] .block-container,\n        .stMainBlockContainer {\n            transform: translateY(-2.7rem);\n            padding-bottom: 0 !important;\n        }\n        @media (max-width: 900px) {\n            main[data-testid="stMain"] .block-container,\n            .stMainBlockContainer { transform: translateY(-1.8rem); }\n        }\n''', 1)
 p.write_text(s, encoding='utf-8')
+# trigger
