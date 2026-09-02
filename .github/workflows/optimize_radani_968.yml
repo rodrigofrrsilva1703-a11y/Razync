@@ -27,7 +27,7 @@ jobs:
       - name: Validar
         run: |
           python -m py_compile app.py razync/radani.py
-          pytest -q tests/test_radani.py
+          PYTHONPATH=. pytest -q tests/test_radani.py
       - name: Registrar e limpar
         run: |
           git config user.name 'github-actions[bot]'
@@ -36,4 +36,4 @@ jobs:
           git add -A
           git commit -m 'Otimiza performance da empresa 968 Radani'
           git push
-# trigger
+# trigger 2
