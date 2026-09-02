@@ -32,7 +32,7 @@ from razync.task_center import classificar_tarefa, ordenar_tarefas, resumir_tare
 from razync.lcarlos import processar_planilhas_lcarlos
 from razync.up_pack import identificar_banco_up_pack, processar_planilha_up_pack
 from razync.santander_statement import (parece_extrato_santander_empresarial, processar_extrato_santander_empresarial_texto)
-from razync.radani import analisar_desmembramentos, consolidar_jaguares, consolidar_comprovantes_sispag
+from razync.radani import analisar_desmembramentos, consolidar_comprovantes_sispag
 
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
@@ -69,15 +69,6 @@ def _radani_cache_extrato_pdf(conteudo: bytes, nome_arquivo: str):
     finally:
         if caminho and os.path.exists(caminho):
             os.unlink(caminho)
-
-
-@st.cache_data(show_spinner=False, ttl=1800, max_entries=8)
-def _radani_cache_jaguares(arquivos_tuple, inicio_iso: str, fim_iso: str):
-    return consolidar_jaguares(
-        list(arquivos_tuple),
-        pd.Timestamp(inicio_iso),
-        pd.Timestamp(fim_iso),
-    )
 
 
 @st.cache_data(show_spinner=False, ttl=1800, max_entries=8)
@@ -8730,8 +8721,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         else:
             st.caption(
-                'O extrato define o período e os totais oficiais. Jaguar e comprovantes '
-                'são analisados somente quando você clicar em Processar 968.'
+                'O extrato define o período e os totais oficiais. Somente os comprovantes de salários do Itaú '
+                'são usados como apoio para desmembrar SISPAG.'
             )
             bancos_radani = st.multiselect(
                 'Bancos para organizar',
@@ -8758,23 +8749,16 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
                 st.caption('Conta Domínio: 9')
 
-            col_jaguar_radani, col_comp_radani = st.columns(2)
-            with col_jaguar_radani:
-                jaguares_radani = st.file_uploader(
-                    'Planilhas auxiliares Jaguar',
-                    type=['xlsx', 'xls'],
-                    accept_multiple_files=True,
-                    key='radani_jaguares',
-                    help='Pode enviar Jaguar anual e lançamentos diversos. Só o período do extrato será utilizado.'
+            comprovantes_sispag_radani = st.file_uploader(
+                'Comprovantes de salários / SISPAG — somente Itaú',
+                type=['pdf'],
+                accept_multiple_files=True,
+                key='radani_comprovantes_sispag',
+                help=(
+                    'Opcional. A Radani paga salários somente pelo Itaú. Os comprovantes são usados '
+                    'apenas para desmembrar SISPAG quando o total fecha exatamente com o extrato.'
                 )
-            with col_comp_radani:
-                comprovantes_sispag_radani = st.file_uploader(
-                    'Comprovantes de salários / SISPAG',
-                    type=['pdf'],
-                    accept_multiple_files=True,
-                    key='radani_comprovantes_sispag',
-                    help='Opcional. Quando o total fecha, os comprovantes têm prioridade sobre a Jaguar.'
-                )
+            )
 
             extratos_radani = {
                 'Itaú': extrato_radani_itau,
@@ -8792,9 +8776,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             assinatura_radani.update('|'.join(sorted(bancos_radani)).encode('utf-8'))
             for nome_banco, arq in arquivos_ativos_radani:
                 assinatura_radani.update(nome_banco.encode('utf-8'))
-                assinatura_radani.update(arq.name.encode('utf-8', errors='ignore'))
-                assinatura_radani.update(arq.getvalue())
-            for arq in (jaguares_radani or []):
                 assinatura_radani.update(arq.name.encode('utf-8', errors='ignore'))
                 assinatura_radani.update(arq.getvalue())
             for arq in (comprovantes_sispag_radani or []):
@@ -8819,9 +8800,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     dados_radani = {}
                     revisoes_radani = []
                     detalhes_radani = []
-                    arquivos_jaguar_tuple = tuple(
-                        (arq.name, arq.getvalue()) for arq in (jaguares_radani or [])
-                    )
                     arquivos_comprovantes_tuple = tuple(
                         (arq.name, arq.getvalue()) for arq in (comprovantes_sispag_radani or [])
                     )
@@ -8850,13 +8828,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             inicio_iso = inicio_radani.isoformat()
                             fim_iso = fim_radani.isoformat()
 
-                            jaguar_periodo_radani = (
-                                _radani_cache_jaguares(
-                                    arquivos_jaguar_tuple, inicio_iso, fim_iso
-                                )
-                                if arquivos_jaguar_tuple
-                                else pd.DataFrame()
-                            )
                             comprovantes_periodo_radani = (
                                 _radani_cache_comprovantes(
                                     arquivos_comprovantes_tuple, inicio_iso, fim_iso
@@ -8867,7 +8838,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
                             analise_radani = analisar_desmembramentos(
                                 df_extrato_radani,
-                                jaguar_periodo_radani,
                                 nome_banco_radani,
                                 comprovantes_periodo_radani,
                             )

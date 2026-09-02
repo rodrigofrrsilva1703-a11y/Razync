@@ -1,8 +1,7 @@
 """Processamento inteligente da empresa 968 - Radani.
 
-O extrato bancário é a fonte oficial do período e dos totais. As planilhas Jaguar
-são usadas apenas para detalhar lançamentos consolidados quando a composição é
-matematicamente consistente dentro do período processado.
+O extrato bancário é a fonte oficial do período e dos totais. Somente os comprovantes
+de pagamento de salários do Itaú podem detalhar SISPAG, sempre com fechamento exato.
 """
 from __future__ import annotations
 
@@ -261,38 +260,33 @@ class AnaliseRadani:
     detalhamentos: pd.DataFrame
 
 
-def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco: str, comprovantes: pd.DataFrame | None = None) -> AnaliseRadani:
-    """Desmembra somente correspondências fortes; demais candidatas ficam para revisão."""
+def analisar_desmembramentos(extrato: pd.DataFrame, banco: str, comprovantes: pd.DataFrame | None = None) -> AnaliseRadani:
+    """Usa comprovantes somente para SISPAG do Itaú; demais movimentos ficam como no extrato."""
     if extrato is None or extrato.empty:
         vazio = pd.DataFrame()
         return AnaliseRadani(vazio, vazio, vazio)
+
     df = extrato.copy()
     df["DATA"] = pd.to_datetime(df["DATA"], dayfirst=True, errors="coerce")
     df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce")
     df["HISTÓRICO"] = df.get("HISTÓRICO", "").fillna("").astype(str)
     df = df.dropna(subset=["DATA", "VALOR"]).reset_index(drop=True)
-    if jaguar is None:
-        jaguar = pd.DataFrame()
     if comprovantes is None:
         comprovantes = pd.DataFrame()
 
-    usados_jaguar = set()
+    banco_itau = "ITAU" in _norm(banco)
     usados_comprovantes = set()
     saida = []
     revisoes = []
     detalhes = []
 
-    for idx, mov in df.iterrows():
+    for _, mov in df.iterrows():
         hist = str(mov["HISTÓRICO"])
         valor = float(mov["VALOR"])
-        forte, moderado = _eh_generico(hist)
         data = pd.Timestamp(mov["DATA"]).normalize()
-
-        # Para SISPAG, comprovantes bancários são a evidência mais forte.
-        # Se beneficiários do mesmo dia fecharem exatamente o total do extrato,
-        # substitui o consolidado antes de consultar a Jaguar.
         eh_sispag = "SISPAG" in _norm(hist) or "SALAR" in _norm(hist) or "FOLHA" in _norm(hist)
-        if eh_sispag and not comprovantes.empty:
+
+        if banco_itau and eh_sispag and not comprovantes.empty:
             comp_disp = comprovantes.loc[~comprovantes.index.isin(usados_comprovantes)].copy()
             comp_dia = comp_disp[comp_disp["DATA"].dt.normalize() == data].copy()
             if valor < 0:
@@ -303,7 +297,8 @@ def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco:
             if grupo_comp is not None and len(grupo_comp) >= 2:
                 for cidx, det in grupo_comp.iterrows():
                     novo = mov.to_dict()
-                    novo["DATA"] = pd.Timestamp(det["DATA"])
+                    # A data bancária é a referência oficial do Modelo Domínio.
+                    novo["DATA"] = pd.Timestamp(mov["DATA"])
                     novo["VALOR"] = float(det["VALOR"])
                     novo["HISTÓRICO"] = str(det["HISTÓRICO"])
                     novo["DESCRIÇÃO"] = mov.get("DESCRIÇÃO", banco)
@@ -318,67 +313,15 @@ def analisar_desmembramentos(extrato: pd.DataFrame, jaguar: pd.DataFrame, banco:
                     })
                 continue
 
-        if not (forte or moderado) or jaguar.empty:
-            saida.append(mov.to_dict())
-            continue
-
-        disponiveis = jaguar.loc[~jaguar.index.isin(usados_jaguar)].copy()
-        # Primeiro tenta o mesmo dia. Para SISPAG/RH dá peso extra a históricos típicos.
-        mesmo_dia = disponiveis[disponiveis["DATA"].dt.normalize() == data].copy()
-        if valor < 0:
-            mesmo_dia = mesmo_dia[mesmo_dia["VALOR"] < 0]
-        elif valor > 0:
-            mesmo_dia = mesmo_dia[mesmo_dia["VALOR"] > 0]
-        if forte and ("SISPAG" in _norm(hist) or "SALAR" in _norm(hist) or "FOLHA" in _norm(hist)):
-            rh = mesmo_dia[mesmo_dia["HISTÓRICO"].map(lambda h: any(k in _norm(h) for k in PALAVRAS_RH))]
-            grupo = _subset_exato(rh if len(rh) >= 2 else mesmo_dia, valor, hist)
-        else:
-            grupo = _subset_exato(mesmo_dia, valor, hist)
-
-        if grupo is not None and len(grupo) >= 2:
-            # Mesmo dia + fechamento exato = alta confiança. Substitui o consolidado.
-            for jidx, det in grupo.iterrows():
-                novo = mov.to_dict()
-                novo["DATA"] = pd.Timestamp(det["DATA"])
-                novo["VALOR"] = float(det["VALOR"])
-                novo["HISTÓRICO"] = str(det["HISTÓRICO"])
-                novo["DESCRIÇÃO"] = mov.get("DESCRIÇÃO", banco)
-                saida.append(novo)
-                usados_jaguar.add(jidx)
-                detalhes.append({
-                    "BANCO": banco, "DATA BANCO": data, "HISTÓRICO BANCO": hist,
-                    "VALOR BANCO": valor, "DATA DETALHE": det["DATA"],
-                    "HISTÓRICO DETALHE": det["HISTÓRICO"], "VALOR DETALHE": det["VALOR"],
-                    "STATUS": "Identificado - desmembrado",
-                    "FONTE": "Planilha Jaguar",
-                })
-            continue
-
-        # Procura ±2 dias apenas para sugerir revisão, nunca para substituir automaticamente.
-        janela = disponiveis[(disponiveis["DATA"].dt.normalize() >= data - pd.Timedelta(days=2)) &
-                             (disponiveis["DATA"].dt.normalize() <= data + pd.Timedelta(days=2))].copy()
-        if valor < 0:
-            janela = janela[janela["VALOR"] < 0]
-        elif valor > 0:
-            janela = janela[janela["VALOR"] > 0]
-        provavel = _subset_exato(janela, valor, hist)
-        if provavel is not None and len(provavel) >= 2:
-            revisoes.append({
-                "BANCO": banco,
-                "DATA": data,
-                "HISTÓRICO": hist,
-                "VALOR": valor,
-                "TOTAL ENCONTRADO": float(provavel["VALOR"].sum()),
-                "ITENS": len(provavel),
-                "DETALHES": " | ".join(f"{r['HISTÓRICO']} ({r['VALOR']:.2f})" for _, r in provavel.iterrows()),
-                "STATUS": "Provável - revisar",
-            })
-        elif forte or moderado:
             revisoes.append({
                 "BANCO": banco, "DATA": data, "HISTÓRICO": hist, "VALOR": valor,
-                "TOTAL ENCONTRADO": None, "ITENS": 0, "DETALHES": "",
-                "STATUS": "Não identificado",
+                "TOTAL ENCONTRADO": None, "ITENS": int(len(comp_dia)),
+                "DETALHES": "",
+                "STATUS": "SISPAG sem fechamento exato nos comprovantes",
             })
+
+        # Bradesco nunca usa comprovantes de salário; qualquer outro lançamento
+        # permanece exatamente como veio do extrato.
         saida.append(mov.to_dict())
 
     organizado = pd.DataFrame(saida)
