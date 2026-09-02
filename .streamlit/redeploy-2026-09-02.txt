@@ -5,3 +5,4 @@ Nova sincronização 2026-09-02 14:46 - ferramentas da empresa 1096 UP PACK.
 Nova sincronização 2026-09-02 14:55 - reinício limpo após ImportError de cache do módulo companies.
 Nova sincronização 2026-09-02 14:52 - configuração UP PACK removida do import de companies e carregada localmente no app.
 Nova sincronização 2026-09-02 14:56 - uploads da empresa 1096 separados por Santander e Sicredi.
+Nova sincronização 2026-09-02 15:06 - leitor específico para extrato Santander Empresarial Data/Historico/Valor.
