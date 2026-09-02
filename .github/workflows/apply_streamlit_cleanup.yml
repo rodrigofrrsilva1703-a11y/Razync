@@ -1,0 +1,23 @@
+name: Aplicar limpeza do Streamlit
+on:
+  push:
+    paths:
+      - scripts/hide_streamlit_chrome.py
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/hide_streamlit_chrome.py
+      - run: python -m py_compile app.py
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app.py
+          git commit -m 'Limpa ferramentas visuais do Streamlit'
+          git push
