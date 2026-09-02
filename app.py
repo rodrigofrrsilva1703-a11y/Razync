@@ -22,7 +22,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pypdf import PdfReader
 
-from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE, CONFIGURACOES_UP_PACK
+from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
 from razync.company_catalog import EMPRESAS, EMPRESAS_POR_REGIME, EMPRESAS_POR_CHAVE
 from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
@@ -31,6 +31,16 @@ from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia
 from razync.task_center import classificar_tarefa, ordenar_tarefas, resumir_tarefas
 from razync.lcarlos import processar_planilhas_lcarlos
 from razync.up_pack import identificar_banco_up_pack, processar_planilha_up_pack
+
+# Configuração local da UP PACK para evitar falha de import em hot-reload do Streamlit Cloud.
+CONFIGURACOES_UP_PACK = {
+    "up_pack": {
+        "empresa": "1096 - UP PACK BRAZIL EIRELI EPP",
+        "slug": "up_pack",
+        "arquivo": "UP_PACK_Brazil",
+        "contas_bancarias": {"santander": "513", "sicredi": "510"},
+    }
+}
 
 # Configuração da página Web
 st.set_page_config(
