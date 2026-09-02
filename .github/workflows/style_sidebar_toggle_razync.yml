@@ -1,0 +1,30 @@
+name: Estilizar botão lateral Razync
+on:
+  push:
+    paths:
+      - 'scripts/style_sidebar_toggle_razync.py'
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar ajuste
+        run: python scripts/style_sidebar_toggle_razync.py
+      - name: Validar
+        run: |
+          python -m py_compile app.py
+          grep -q 'Razync sidebar-only chrome v7' app.py
+          grep -q 'Botão lateral Razync v7' app.py
+      - name: Registrar e limpar
+        run: |
+          rm -f scripts/style_sidebar_toggle_razync.py .github/workflows/style_sidebar_toggle_razync.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/style_sidebar_toggle_razync.py .github/workflows/style_sidebar_toggle_razync.yml
+          git commit -m 'Cria botão lateral próprio do Razync'
+          git push
