@@ -64,16 +64,23 @@ st.markdown("""
         }
 
         header[data-testid="stHeader"] {
-            min-height: 0 !important;
-            height: 0 !important;
+            min-height: 2.4rem !important;
+            height: 2.4rem !important;
             background: transparent !important;
             box-shadow: none !important;
+            pointer-events: none !important;
         }
 
         header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"],
+        header[data-testid="stHeader"] [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapsedControl"],
         [data-testid="stSidebarCollapseButton"] {
             display: flex !important;
             visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            position: relative !important;
+            z-index: 1000001 !important;
         }
 
         .stApp > header {
