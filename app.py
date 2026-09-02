@@ -53,6 +53,33 @@ _pesquisa_empresa_instantanea = components.declare_component(
 # ==============================================================================
 st.markdown("""
     <style>
+        /* Streamlit chrome cleanup v1 */
+        #MainMenu,
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        footer {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
+        header[data-testid="stHeader"] {
+            min-height: 0 !important;
+            height: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"],
+        [data-testid="stSidebarCollapseButton"] {
+            display: flex !important;
+            visibility: visible !important;
+        }
+
+        .stApp > header {
+            background: transparent !important;
+        }
+
         :root {
             --hc-bg: #0b0f13;
             --hc-surface: #111820;
