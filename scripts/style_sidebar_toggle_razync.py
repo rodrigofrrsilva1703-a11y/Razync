@@ -101,3 +101,4 @@ if old_controls not in s:
 s = s.replace(old_controls, new_controls, 1)
 
 p.write_text(s, encoding='utf-8')
+# trigger
