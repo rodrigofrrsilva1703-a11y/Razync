@@ -62,10 +62,20 @@ st.markdown("""
             visibility: hidden !important;
         }
 
-        /* Razync sidebar-only chrome v7 */
+        /* Razync sidebar-only chrome v9 */
         [data-testid="stToolbar"] {
-            display: none !important;
+            display: flex !important;
             visibility: hidden !important;
+            opacity: 1 !important;
+            pointer-events: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stToolbar"] [data-testid="stSidebarCollapsedControl"],
+        [data-testid="stToolbar"] [data-testid="stSidebarCollapsedControl"] * {
+            visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
         }
 
         header[data-testid="stHeader"] {
@@ -74,6 +84,13 @@ st.markdown("""
         }
 
         /* Botão lateral Razync v8 — compacto, discreto e integrado */
+        [data-testid="stSidebarCollapsedControl"] {
+            visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            display: flex !important;
+            z-index: 2147483000 !important;
+        }
         [data-testid="stSidebarCollapsedControl"],
         [data-testid="stSidebarCollapseButton"] {
             display: flex !important;
