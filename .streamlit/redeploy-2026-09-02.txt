@@ -2,3 +2,4 @@ Redeploy solicitado em 2026-09-02 para sincronizar o Streamlit Cloud com o estad
 Nova sincronização 2026-09-02 10:36 - correção do botão lateral recolhido.
 Nova sincronização 2026-09-02 14:28 - loading refinado na troca de empresas.
 Nova sincronização 2026-09-02 14:46 - ferramentas da empresa 1096 UP PACK.
+Nova sincronização 2026-09-02 14:55 - reinício limpo após ImportError de cache do módulo companies.
