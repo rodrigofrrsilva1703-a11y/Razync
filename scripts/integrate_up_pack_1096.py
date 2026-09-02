@@ -37,4 +37,4 @@ if "empresa_organizador'] == 'up_pack'" not in s:
     s = s.replace(marker, bloco + marker, 1)
 
 p.write_text(s, encoding='utf-8')
-# trigger
+# trigger 2
