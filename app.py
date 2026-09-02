@@ -55,12 +55,25 @@ st.markdown("""
     <style>
         /* Streamlit chrome cleanup v1 */
         #MainMenu,
-        [data-testid="stToolbar"],
         [data-testid="stDecoration"],
         [data-testid="stStatusWidget"],
         footer {
             display: none !important;
             visibility: hidden !important;
+        }
+
+        /* Sidebar toolbar parent fix v6 */
+        [data-testid="stToolbar"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            z-index: 1000000 !important;
+        }
+        [data-testid="stToolbar"] > div {
+            pointer-events: auto !important;
         }
 
         header[data-testid="stHeader"] {
