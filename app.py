@@ -3259,14 +3259,16 @@ def renderizar_base_inteligente_eletro_forte():
     st.markdown('#### Classificar por planilha')
     abas = st.tabs(['Despesa', 'Fornecedor', 'Recebido'])
     configuracoes = [
-        ('Despesa', '', set()),
+        ('Despesa', 'debito', {'0'}),
         ('Fornecedor', 'debito', {'166', '0'}),
         ('Recebido', 'credito', {'166', '0', '14', '16'}),
     ]
 
     for aba, (origem, coluna_regra, valores_regra) in zip(abas, configuracoes):
         with aba:
-            if origem == 'Fornecedor':
+            if origem == 'Despesa':
+                st.caption('Somente linhas com DÉBITO 0 serão classificadas.')
+            elif origem == 'Fornecedor':
                 st.caption('Somente linhas com DÉBITO 166 ou 0 serão classificadas.')
             elif origem == 'Recebido':
                 st.caption('Somente linhas com CRÉDITO 166, 0, 14 ou 16 serão classificadas.')
