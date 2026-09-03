@@ -8751,17 +8751,18 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
             pode_processar_radani = bool(arquivos_ativos_radani)
             if not pode_processar_radani:
-                st.info('Envie pelo menos um extrato PDF para liberar o processamento.')
+                st.info('Envie pelo menos um extrato PDF. O processamento começa automaticamente após o upload.')
 
-            processar_radani = st.button(
-                'Processar 968',
-                type='primary',
-                use_container_width=True,
-                disabled=not pode_processar_radani,
-                key='radani_processar_arquivos',
+            resultado_anterior_radani = st.session_state.get('radani_resultado_processado')
+            precisa_processar_radani = bool(
+                pode_processar_radani
+                and (
+                    not resultado_anterior_radani
+                    or resultado_anterior_radani.get('assinatura') != assinatura_radani
+                )
             )
 
-            if processar_radani:
+            if precisa_processar_radani:
                 try:
                     dados_radani = {}
                     revisoes_radani = []
@@ -8989,11 +8990,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     use_container_width=True,
                     key='radani_download_modelo'
                 )
-            elif resultado_radani:
-                st.caption(
-                    'Os arquivos selecionados mudaram. Clique em Processar 968 para gerar um novo resultado.'
-                )
-
             st.markdown(f'#### Conferência — {empresa_radani}')
             renderizar_conferencia_autokraft(
                 slug_radani,
