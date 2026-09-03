@@ -1,4 +1,5 @@
 from pathlib import Path
+# Trigger do workflow: corrigir primeiros movimentos de novas datas no Bradesco.
 
 path = Path('razync/bradesco_radani.py')
 text = path.read_text(encoding='utf-8')
