@@ -17,3 +17,4 @@ Nova sincronização 2026-09-03 00:28 - empresa 968 processa automaticamente ap�
 Nova sincronização 2026-09-03 00:36 - pré-visualizações da empresa 968 reorganizadas em abas separadas para Itaú e Bradesco.
 Nova sincronização 2026-09-03 00:44 - padrão único de pré-visualização por banco aplicado a Radani, UP PACK, ACCEDE, Autokraft e Nova Geração Matriz/Filial.
 Nova sincronização 2026-09-03 09:13 - ferramentas da empresa 242 Eletro Forte com Despesa, Fornecedor e Recebido separados por banco e conta.
+Nova sincronização 2026-09-03 09:35 - empresa 242 preserva aba Principal original e gera abas usando o Modelo Domínio real com DESCRIÇÃO, DATA, VALOR, DÉBITO, CRÉDITO e HISTÓRICO.
