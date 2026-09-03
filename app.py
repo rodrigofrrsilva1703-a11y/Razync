@@ -8637,80 +8637,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             )
 
         with aba_operacoes_gz:
-            st.markdown('#### Conferência com Extrato')
-            st.caption(
-                'Confere cada total BOLETOS RECEBIDOS contra os boletos liquidados ainda '
-                'não utilizados e também valida o total financeiro do arquivo final.'
+            st.markdown(f'#### Conferência — {empresa_gz}')
+            renderizar_conferencia_autokraft(
+                'gz1211',
+                bancos_config=[{'nome': 'Itaú', 'slug': 'itau'}],
             )
-            resultado_salvo_gz = st.session_state.get('_gz1211_resultado')
-            chave_atual_gz = None
-            if extrato_gz is not None and boletos_gz is not None:
-                chave_atual_gz = hashlib.sha256(
-                    extrato_gz.getvalue() + b'|' + boletos_gz.getvalue()
-                ).hexdigest()
-            if not resultado_salvo_gz or resultado_salvo_gz.get('chave') != chave_atual_gz:
-                st.info('Envie e processe os dois PDFs em Organizar arquivos para visualizar a conferência.')
-            else:
-                diag_conf_gz = resultado_salvo_gz['diag'].copy()
-                nao_usados_conf_gz = resultado_salvo_gz['nao_usados'].copy()
-                resumo_conf_gz = resultado_salvo_gz['resumo']
-                total_ext_gz = float(resumo_conf_gz.get('total_extrato', 0.0))
-                total_mod_gz = float(resumo_conf_gz.get('total_modelo', 0.0))
-                dif_total_gz = round(total_mod_gz - total_ext_gz, 2)
-
-                c1_gz, c2_gz, c3_gz = st.columns(3)
-                c1_gz.metric('Total líquido extrato', formatar_moeda(total_ext_gz))
-                c2_gz.metric('Total líquido Modelo', formatar_moeda(total_mod_gz))
-                c3_gz.metric('Diferença Modelo × Extrato', formatar_moeda(dif_total_gz))
-                if abs(dif_total_gz) <= 0.02:
-                    st.success('O Modelo Domínio preserva exatamente a movimentação reconhecida do extrato.')
-                else:
-                    st.error('O Modelo Domínio não está preservando a movimentação reconhecida do extrato.')
-
-                saldo_inicial_gz = resumo_conf_gz.get('saldo_inicial')
-                saldo_calc_gz = resumo_conf_gz.get('saldo_final_calculado')
-                saldo_final_gz = resumo_conf_gz.get('saldo_final_informado')
-                dif_saldo_gz = resumo_conf_gz.get('diferenca_saldo_extrato')
-                if saldo_inicial_gz is not None and saldo_final_gz is not None:
-                    st.markdown('##### Fechamento de saldo do extrato Itaú')
-                    sc1_gz, sc2_gz, sc3_gz, sc4_gz = st.columns(4)
-                    sc1_gz.metric('Saldo inicial', formatar_moeda(saldo_inicial_gz))
-                    sc2_gz.metric('Movimentação', formatar_moeda(total_ext_gz))
-                    sc3_gz.metric('Saldo calculado', formatar_moeda(saldo_calc_gz))
-                    sc4_gz.metric('Saldo final Itaú', formatar_moeda(saldo_final_gz))
-                    if dif_saldo_gz is not None and abs(float(dif_saldo_gz)) > 0.02:
-                        st.warning(
-                            'O próprio extrato possui diferença de fechamento de '
-                            f'{formatar_moeda(abs(float(dif_saldo_gz)))} entre os lançamentos '
-                            'listados e o saldo final informado. Nenhum ajuste contábil foi criado automaticamente.'
-                        )
-                    else:
-                        st.success('Os lançamentos do extrato fecham com o saldo final informado pelo Itaú.')
-
-                if not diag_conf_gz.empty:
-                    previa_diag_gz = diag_conf_gz.copy()
-                    previa_diag_gz['DATA_EXTRATO'] = pd.to_datetime(
-                        previa_diag_gz['DATA_EXTRATO']
-                    ).dt.strftime('%d/%m/%Y')
-                    st.markdown('##### Conferência dos BOLETOS RECEBIDOS')
-                    st.dataframe(
-                        previa_diag_gz, use_container_width=True, hide_index=True,
-                        column_config={
-                            'TOTAL_EXTRATO': st.column_config.NumberColumn(format='R$ %.2f'),
-                            'TOTAL_BOLETOS': st.column_config.NumberColumn(format='R$ %.2f'),
-                            'DIFERENÇA': st.column_config.NumberColumn(format='R$ %.2f'),
-                        },
-                    )
-                if not nao_usados_conf_gz.empty:
-                    st.markdown('##### Boletos liquidados sem vínculo')
-                    previa_nao_usados_gz = nao_usados_conf_gz.copy()
-                    previa_nao_usados_gz['DATA'] = pd.to_datetime(
-                        previa_nao_usados_gz['DATA']
-                    ).dt.strftime('%d/%m/%Y')
-                    st.dataframe(
-                        previa_nao_usados_gz, use_container_width=True, hide_index=True,
-                        column_config={'VALOR': st.column_config.NumberColumn(format='R$ %.2f')},
-                    )
 
     if st.session_state['empresa_organizador'] == 'eletro_forte':
         empresa_ef = '242 - ELETRO FORTE COMERCIAL ELETRICA LTDA'
