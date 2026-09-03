@@ -20,3 +20,4 @@ Nova sincronização 2026-09-03 09:13 - ferramentas da empresa 242 Eletro Forte 
 Nova sincronização 2026-09-03 09:35 - empresa 242 preserva aba Principal original e gera abas usando o Modelo Domínio real com DESCRIÇÃO, DATA, VALOR, DÉBITO, CRÉDITO e HISTÓRICO.
 Nova sincronização 2026-09-03 09:47 - empresa 242 com Base Inteligente e Conferência com Extrato separada entre BB 8, Itaú 508/105318 e Itaú 509/181537.
 Nova sincronização 2026-09-03 09:52 - empresa 242 com Despesa e Fornecedor negativos e histórico Pago:, Recebido positivo com histórico Recebido:.
+Nova sincronização 2026-09-03 10:03 - Base Inteligente da empresa 242 separada por Despesa, Fornecedor e Recebido; Fornecedor classifica somente DÉBITO 166/0 e Recebido somente CRÉDITO 166/0/14/16, com BB 8, Itaú 508 e Itaú 509 isolados.
