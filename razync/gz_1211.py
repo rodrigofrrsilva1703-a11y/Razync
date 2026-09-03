@@ -143,13 +143,17 @@ def ler_extrato_itau_gz(conteudo: bytes) -> pd.DataFrame:
         data = pd.to_datetime(bloco["data"], dayfirst=True, errors="coerce")
         if pd.isna(data):
             continue
+        historico_sem_prefixo = re.sub(
+            r"^(?:Pago|Recebido):\s*", "", historico, flags=re.I
+        ).strip()
+        prefixo = "Recebido: " if valor > 0 else "Pago: "
         registros.append({
             "DESCRIÇÃO": "BANCO ITAÚ",
             "DATA": data,
             "VALOR": round(valor, 2),
             "DÉBITO": CONTA_ITAU_GZ if valor > 0 else "",
             "CRÉDITO": CONTA_ITAU_GZ if valor < 0 else "",
-            "HISTÓRICO": historico,
+            "HISTÓRICO": prefixo + historico_sem_prefixo,
         })
     if not registros:
         raise ValueError("Nenhum lançamento foi reconhecido no extrato Itaú da GZ.")
