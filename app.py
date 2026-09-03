@@ -8661,11 +8661,31 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 c1_gz, c2_gz, c3_gz = st.columns(3)
                 c1_gz.metric('Total líquido extrato', formatar_moeda(total_ext_gz))
                 c2_gz.metric('Total líquido Modelo', formatar_moeda(total_mod_gz))
-                c3_gz.metric('Diferença', formatar_moeda(dif_total_gz))
+                c3_gz.metric('Diferença Modelo × Extrato', formatar_moeda(dif_total_gz))
                 if abs(dif_total_gz) <= 0.02:
-                    st.success('O total financeiro do Modelo Domínio está preservado em relação ao extrato.')
+                    st.success('O Modelo Domínio preserva exatamente a movimentação reconhecida do extrato.')
                 else:
-                    st.error('O total financeiro do Modelo Domínio não está fechando com o extrato.')
+                    st.error('O Modelo Domínio não está preservando a movimentação reconhecida do extrato.')
+
+                saldo_inicial_gz = resumo_conf_gz.get('saldo_inicial')
+                saldo_calc_gz = resumo_conf_gz.get('saldo_final_calculado')
+                saldo_final_gz = resumo_conf_gz.get('saldo_final_informado')
+                dif_saldo_gz = resumo_conf_gz.get('diferenca_saldo_extrato')
+                if saldo_inicial_gz is not None and saldo_final_gz is not None:
+                    st.markdown('##### Fechamento de saldo do extrato Itaú')
+                    sc1_gz, sc2_gz, sc3_gz, sc4_gz = st.columns(4)
+                    sc1_gz.metric('Saldo inicial', formatar_moeda(saldo_inicial_gz))
+                    sc2_gz.metric('Movimentação', formatar_moeda(total_ext_gz))
+                    sc3_gz.metric('Saldo calculado', formatar_moeda(saldo_calc_gz))
+                    sc4_gz.metric('Saldo final Itaú', formatar_moeda(saldo_final_gz))
+                    if dif_saldo_gz is not None and abs(float(dif_saldo_gz)) > 0.02:
+                        st.warning(
+                            'O próprio extrato possui diferença de fechamento de '
+                            f'{formatar_moeda(abs(float(dif_saldo_gz)))} entre os lançamentos '
+                            'listados e o saldo final informado. Nenhum ajuste contábil foi criado automaticamente.'
+                        )
+                    else:
+                        st.success('Os lançamentos do extrato fecham com o saldo final informado pelo Itaú.')
 
                 if not diag_conf_gz.empty:
                     previa_diag_gz = diag_conf_gz.copy()

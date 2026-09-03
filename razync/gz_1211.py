@@ -78,6 +78,32 @@ def _limpar_historico_extrato(texto: str) -> str:
     return _normalizar_espacos(texto).strip(" -")
 
 
+def ler_saldos_extrato_itau_gz(conteudo: bytes) -> dict:
+    """Lê saldo inicial e saldo final impressos no extrato Itaú da GZ."""
+    texto = _texto_pdf(conteudo)
+    saldo_inicial = None
+    saldo_final = None
+
+    m_inicial = re.search(
+        r"\b\d{2}/\d{2}/\d{4}\s+SALDO ANTERIOR\s+([\d.]+,\d{2})",
+        texto, re.I
+    )
+    if m_inicial:
+        saldo_inicial = _moeda_br(m_inicial.group(1))
+
+    finais = re.findall(
+        r"\b\d{2}/\d{2}/\d{4}\s+SALDO (?:EM CONTA CORRENTE|TOTAL DISPONÍVEL DIA)\s+([\d.]+,\d{2})",
+        texto, re.I
+    )
+    if finais:
+        saldo_final = _moeda_br(finais[-1])
+
+    return {
+        "saldo_inicial": round(float(saldo_inicial), 2) if saldo_inicial is not None else None,
+        "saldo_final_informado": round(float(saldo_final), 2) if saldo_final is not None else None,
+    }
+
+
 def ler_extrato_itau_gz(conteudo: bytes) -> pd.DataFrame:
     """Extrai movimentos do extrato Itaú e ignora linhas de saldo."""
     texto = _texto_pdf(conteudo)
@@ -178,6 +204,7 @@ def _subset_exato(indices: list[int], boletos: List[BoletoGZ], alvo: float) -> l
 def processar_gz(extrato_bytes: bytes, boletos_bytes: bytes):
     """Substitui agregados de boletos por liquidações individuais e gera diagnóstico."""
     extrato = ler_extrato_itau_gz(extrato_bytes)
+    saldos_extrato = ler_saldos_extrato_itau_gz(extrato_bytes)
     boletos = ler_boletos_liquidados_gz(boletos_bytes)
     data_ini = extrato["DATA"].min().normalize()
     data_fim = extrato["DATA"].max().normalize()
@@ -252,7 +279,24 @@ def processar_gz(extrato_bytes: bytes, boletos_bytes: bytes):
         "boletos_nao_usados": len(nao_usados),
         "total_extrato": round(float(extrato["VALOR"].sum()), 2),
         "total_modelo": round(float(df_saida["VALOR"].sum()), 2),
+        "saldo_inicial": saldos_extrato.get("saldo_inicial"),
+        "saldo_final_informado": saldos_extrato.get("saldo_final_informado"),
     }
+    if resumo["saldo_inicial"] is not None:
+        resumo["saldo_final_calculado"] = round(
+            float(resumo["saldo_inicial"]) + float(resumo["total_extrato"]), 2
+        )
+    else:
+        resumo["saldo_final_calculado"] = None
+    if (
+        resumo["saldo_final_calculado"] is not None
+        and resumo["saldo_final_informado"] is not None
+    ):
+        resumo["diferenca_saldo_extrato"] = round(
+            float(resumo["saldo_final_informado"]) - float(resumo["saldo_final_calculado"]), 2
+        )
+    else:
+        resumo["diferenca_saldo_extrato"] = None
     return df_saida, df_diag, df_nao_usados, resumo
 
 
