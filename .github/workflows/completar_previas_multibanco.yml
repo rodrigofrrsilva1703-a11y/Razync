@@ -1,0 +1,39 @@
+name: Completar prévias multi-banco
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/completar_previas_multibanco.py'
+      - '.github/workflows/completar_previas_multibanco.yml'
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar complemento
+        run: python scripts/completar_previas_multibanco.py
+      - name: Validar sintaxe e chamadas
+        run: |
+          python -m py_compile app.py
+          python - <<'PY'
+          from pathlib import Path
+          t = Path('app.py').read_text(encoding='utf-8')
+          assert 'dados_filtrados_autokraft' in t
+          assert 'dados_exportacao_por_banco' in t
+          assert "ordem=['Itaú', 'Daycoval']" in t
+          assert "ordem=[config['nome'] for config in configs_selecionadas]" in t
+          PY
+      - name: Commitar e limpar temporários
+        run: |
+          rm -f scripts/completar_previas_multibanco.py .github/workflows/completar_previas_multibanco.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py scripts/completar_previas_multibanco.py .github/workflows/completar_previas_multibanco.yml
+          git commit -m 'Completa padrão de prévias em Autokraft e Nova Geração' || exit 0
+          git push
