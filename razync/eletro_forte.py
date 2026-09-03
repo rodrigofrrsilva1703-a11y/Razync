@@ -147,13 +147,6 @@ def _com_descricao(df: pd.DataFrame, coluna_banco: str) -> pd.DataFrame:
     return saida[COLUNAS_MODELO]
 
 
-def processar_despesas(conteudo: bytes, ano_referencia: int) -> pd.DataFrame:
-    """Despesa: 001 vira BB/8 e 002 vira Itaú/508 na coluna CRÉDITO."""
-    df = _padronizar(conteudo, ano_referencia)
-    df["CRÉDITO"] = df["CRÉDITO"].replace({"1": "8", "2": "508"})
-    return _com_descricao(df, "CRÉDITO")
-
-
 def _separar_por_conta(df: pd.DataFrame, coluna_conta: str) -> Dict[str, pd.DataFrame]:
     resultado: Dict[str, pd.DataFrame] = {}
     ordem = ["8", "508", "509", "0"]
@@ -163,6 +156,13 @@ def _separar_por_conta(df: pd.DataFrame, coluna_conta: str) -> Dict[str, pd.Data
         if not parte.empty:
             resultado[conta] = _com_descricao(parte.reset_index(drop=True), coluna_conta)
     return resultado
+
+
+def processar_despesas(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
+    """Despesa: converte 001→8 e 002→508 e separa por banco usando a coluna CRÉDITO."""
+    df = _padronizar(conteudo, ano_referencia)
+    df["CRÉDITO"] = df["CRÉDITO"].replace({"1": "8", "2": "508"})
+    return _separar_por_conta(df, "CRÉDITO")
 
 
 def processar_fornecedores(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
@@ -275,7 +275,7 @@ def gerar_modelo_dominio_eletro_forte(
     conteudo_original: bytes,
     nome_original: str,
     modelo_bytes: bytes,
-    despesas: pd.DataFrame | None,
+    despesas: Dict[str, pd.DataFrame] | None,
     fornecedores: Dict[str, pd.DataFrame] | None,
     recebidos: Dict[str, pd.DataFrame] | None,
 ) -> bytes:
@@ -293,8 +293,8 @@ def gerar_modelo_dominio_eletro_forte(
     _preencher_aba_principal(ws_principal, principal)
 
     conjuntos = []
-    if despesas is not None and not despesas.empty:
-        conjuntos.append(("Modelo Dominio", despesas))
+    for conta, df in (despesas or {}).items():
+        conjuntos.append((_nome_aba("Despesa", conta), df))
     for conta, df in (fornecedores or {}).items():
         conjuntos.append((_nome_aba("Fornecedor", conta), df))
     for conta, df in (recebidos or {}).items():
