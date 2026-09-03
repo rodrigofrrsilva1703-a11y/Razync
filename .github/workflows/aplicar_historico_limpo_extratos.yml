@@ -1,0 +1,30 @@
+name: Historicos limpos extratos
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/aplicar_historico_limpo_extratos.py'
+      - '.github/workflows/aplicar_historico_limpo_extratos.yml'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/aplicar_historico_limpo_extratos.py
+      - run: python -m py_compile razync/history_cleaning.py razync/gz_1211.py razync/santander_statement.py razync/bradesco_radani.py razync/radani.py
+      - run: pip install -q pandas pypdf openpyxl pytest
+      - run: pytest -q tests/test_santander_statement.py tests/test_radani.py
+      - name: Commitar
+        run: |
+          rm scripts/aplicar_historico_limpo_extratos.py
+          rm .github/workflows/aplicar_historico_limpo_extratos.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync tests scripts/aplicar_historico_limpo_extratos.py .github/workflows/aplicar_historico_limpo_extratos.yml
+          git commit -m 'Padroniza historicos limpos nos extratos bancarios'
+          git push
