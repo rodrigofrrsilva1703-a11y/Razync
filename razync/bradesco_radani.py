@@ -90,6 +90,7 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
     documento = fitz.open(stream=conteudo, filetype="pdf")
     lancamentos = []
     totais_impressos = []
+    datas_detectadas = set()
     data_atual = None
     saldo_atual = None
     ano_ref = None
@@ -163,7 +164,6 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
                 if tipo:
                     partes.append({"y": y, tipo: valor, "prioridade": prioridade})
 
-        # OCR numérico focado sempre vence a leitura textual quando ambos existem.
         adicionar_tokens(numeros, 2)
         adicionar_tokens(geral, 1)
 
@@ -179,6 +179,7 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
             data_linha = _data_da_linha(texto_esquerda, ano_ref)
             if data_linha is not None:
                 data_atual = data_linha
+                datas_detectadas.add(data_linha.normalize())
 
             historico = " ".join(
                 faixa[
@@ -194,7 +195,6 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
             credito = item.get("credito")
             debito = item.get("debito")
 
-            # Linhas Total têm crédito e débito simultâneos. Servem apenas para validar.
             if credito is not None and debito is not None:
                 totais_impressos.append({
                     "pagina": numero_pagina,
@@ -222,20 +222,21 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
                 valor_impresso = -abs(float(debito))
 
             valor = None
-            mesma_data = bool(
-                lancamentos
-                and pd.Timestamp(lancamentos[-1]["DATA"]).normalize() == data_atual.normalize()
-            )
 
-            # O valor da coluna Crédito/Débito é a fonte principal. O saldo só recupera
-            # valor ausente quando estamos na mesma data, evitando saltos do Invest Fácil.
+            # O saldo da conta corrente é contínuo entre os dias. Por isso, quando o
+            # OCR perde a coluna Crédito/Débito no primeiro movimento de uma nova data,
+            # a diferença entre saldos também recupera esse lançamento.
             if valor_impresso is not None:
                 valor = round(valor_impresso, 2)
                 if saldo is not None:
+                    if saldo_atual is not None:
+                        variacao = round(float(saldo) - saldo_atual, 2)
+                        if abs(abs(variacao) - abs(valor)) > max(0.02, abs(valor) * 0.01):
+                            valor = variacao
                     saldo_atual = float(saldo)
                 elif saldo_atual is not None:
                     saldo_atual = round(saldo_atual + valor, 2)
-            elif saldo is not None and saldo_atual is not None and mesma_data:
+            elif saldo is not None and saldo_atual is not None:
                 valor = round(float(saldo) - saldo_atual, 2)
                 saldo_atual = float(saldo)
             elif saldo is not None:
@@ -256,7 +257,6 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
                 "HISTÓRICO": historico,
             })
 
-    # Evita duplicidade causada por uma mesma linha reconhecida pelos dois OCRs.
     unicos = []
     vistos = set()
     for item in lancamentos:
@@ -276,6 +276,8 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
     esperado_debitos = round(sum(x["debito"] for x in totais_impressos), 2)
     diferenca_creditos = round(total_creditos - esperado_creditos, 2)
     diferenca_debitos = round(total_debitos - esperado_debitos, 2)
+    datas_com_lancamento = {pd.Timestamp(x["DATA"]).normalize() for x in unicos}
+    datas_sem_lancamento = sorted(datas_detectadas - datas_com_lancamento)
 
     diagnostico = {
         "lancamentos": len(unicos),
@@ -286,10 +288,14 @@ def processar_extrato_bradesco_radani(conteudo: bytes):
         "diferenca_creditos": diferenca_creditos,
         "diferenca_debitos": diferenca_debitos,
         "totais_encontrados": len(totais_impressos),
+        "datas_detectadas": [d.strftime("%d/%m/%Y") for d in sorted(datas_detectadas)],
+        "datas_com_lancamento": [d.strftime("%d/%m/%Y") for d in sorted(datas_com_lancamento)],
+        "datas_sem_lancamento": [d.strftime("%d/%m/%Y") for d in datas_sem_lancamento],
         "ok": (
             bool(totais_impressos)
             and abs(diferenca_creditos) <= 0.02
             and abs(diferenca_debitos) <= 0.02
+            and not datas_sem_lancamento
         ),
     }
     return unicos, diagnostico
