@@ -1,0 +1,34 @@
+name: Integrar empresa 242
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/add_eletro_forte_242.py'
+      - '.github/workflows/add_eletro_forte_242.yml'
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar integração
+        run: python scripts/add_eletro_forte_242.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/eletro_forte.py
+      - name: Validar integração
+        run: |
+          grep -q "empresa_organizador'] == 'eletro_forte'" app.py
+          grep -q 'processar_fornecedores' app.py
+          grep -q 'processar_recebidos' app.py
+      - name: Commitar e limpar temporários
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git rm -f scripts/add_eletro_forte_242.py .github/workflows/add_eletro_forte_242.yml
+          git commit -m 'Integra ferramentas da empresa 242 no Razync'
+          git push
