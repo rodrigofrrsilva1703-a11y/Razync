@@ -13,3 +13,4 @@ Nova sincronização 2026-09-02 19:42 - layout da 968 padronizado com as demais 
 Nova sincronização 2026-09-02 20:42 - 968 usando abas nativas idênticas às demais empresas e apoio somente por comprovantes SISPAG do Itaú.
 Nova sincronização 2026-09-02 21:05 - pré-visualização de Itaú e Bradesco com cards de entradas, saídas, saldo e lançamentos.
 Nova sincronização 2026-09-03 00:18 - correção de períodos ausentes do Bradesco na empresa 968 usando continuidade de saldo entre datas e diagnóstico de cobertura diária.
+Nova sincronização 2026-09-03 00:28 - empresa 968 processa automaticamente após upload ou alteração dos arquivos, sem botão Processar 968.
