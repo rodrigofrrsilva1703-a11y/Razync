@@ -38,6 +38,9 @@ from razync.eletro_forte import (
     CONTAS_ELETRO_FORTE, gerar_modelo_dominio_eletro_forte, inferir_ano_recebidos,
     processar_despesas, processar_fornecedores, processar_recebidos,
 )
+from razync.eletro_forte_francesinhas import (
+    gerar_excel_francesinhas, processar_zip_francesinhas,
+)
 from razync.gz_1211 import (
     CONTA_ITAU_GZ, gerar_modelo_dominio_gz, processar_gz,
 )
@@ -8716,12 +8719,128 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if st.session_state['empresa_organizador'] == 'eletro_forte':
         empresa_ef = '242 - ELETRO FORTE COMERCIAL ELETRICA LTDA'
-        aba_operacoes_ef, aba_base_ef = st.tabs([
-            'Organizar arquivos', 'Base Inteligente'
+        aba_operacoes_ef, aba_francesinhas_ef, aba_base_ef = st.tabs([
+            'Organizar arquivos', 'Francesinhas', 'Base Inteligente'
         ])
 
         with aba_base_ef:
             renderizar_base_inteligente_eletro_forte()
+
+        with aba_francesinhas_ef:
+            st.markdown('#### Francesinhas Itaú → Modelo Domínio')
+            st.caption(
+                'Envie um único ZIP com todos os relatórios. O Razync identifica as '
+                'contas 10531-8 (508) e 18153-7 (509), utiliza a data “Emitido em” e '
+                'importa somente as liquidações com Hist. L.'
+            )
+            zip_francesinhas_ef = st.file_uploader(
+                'Arquivo ZIP com todas as francesinhas',
+                type=['zip'],
+                key='ef242_francesinhas_zip',
+                help='O ZIP pode reunir os PDFs das duas contas Itaú e de todas as datas.'
+            )
+            if zip_francesinhas_ef is not None:
+                try:
+                    df_francesinhas_ef, avisos_francesinhas_ef = executar_com_loading(
+                        'Lendo e organizando as francesinhas...',
+                        processar_zip_francesinhas,
+                        zip_francesinhas_ef.getvalue(),
+                    )
+                    conta_508_ef = df_francesinhas_ef.loc[
+                        df_francesinhas_ef['DÉBITO'].astype(str) == '508'
+                    ]
+                    conta_509_ef = df_francesinhas_ef.loc[
+                        df_francesinhas_ef['DÉBITO'].astype(str) == '509'
+                    ]
+                    fm1, fm2, fm3 = st.columns(3)
+                    fm1.metric('Liquidações encontradas', len(df_francesinhas_ef))
+                    fm2.metric(
+                        'Itaú 508',
+                        formatar_moeda(float(conta_508_ef['VALOR'].sum())),
+                        help=f'{len(conta_508_ef)} lançamento(s)',
+                    )
+                    fm3.metric(
+                        'Itaú 509',
+                        formatar_moeda(float(conta_509_ef['VALOR'].sum())),
+                        help=f'{len(conta_509_ef)} lançamento(s)',
+                    )
+
+                    datas_francesinhas_ef = pd.to_datetime(
+                        df_francesinhas_ef['DATA'], errors='coerce'
+                    ).dropna()
+                    inicio_francesinhas_ef = datas_francesinhas_ef.min()
+                    fim_francesinhas_ef = datas_francesinhas_ef.max()
+                    st.caption(
+                        f'Período por “Emitido em”: '
+                        f'{inicio_francesinhas_ef.strftime("%d/%m/%Y")} a '
+                        f'{fim_francesinhas_ef.strftime("%d/%m/%Y")}.'
+                    )
+
+                    abas_previa_francesinhas = st.tabs([
+                        f'Itaú 508 · {len(conta_508_ef)}',
+                        f'Itaú 509 · {len(conta_509_ef)}',
+                    ])
+                    for aba_previa, conta_previa in zip(
+                        abas_previa_francesinhas, [conta_508_ef, conta_509_ef]
+                    ):
+                        with aba_previa:
+                            if conta_previa.empty:
+                                st.info('Nenhuma liquidação L encontrada nesta conta.')
+                            else:
+                                previa_francesinhas = conta_previa[
+                                    ['DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO', 'ARQUIVO']
+                                ].copy()
+                                previa_francesinhas['DATA'] = pd.to_datetime(
+                                    previa_francesinhas['DATA']
+                                ).dt.strftime('%d/%m/%Y')
+                                st.dataframe(
+                                    previa_francesinhas,
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    height=330,
+                                    column_config={
+                                        'VALOR': st.column_config.NumberColumn(
+                                            'Valor creditado', format='R$ %.2f'
+                                        ),
+                                    },
+                                )
+
+                    for aviso_francesinhas in avisos_francesinhas_ef:
+                        st.warning(aviso_francesinhas)
+
+                    modelo_francesinhas_ef = None
+                    for caminho_modelo_francesinhas in [
+                        'Modelo dominio.xlsx', 'Modelo dominio(6).xlsx',
+                        'Modelo Dominio.xlsx', 'modelo_dominio.xlsx'
+                    ]:
+                        if os.path.exists(caminho_modelo_francesinhas):
+                            with open(caminho_modelo_francesinhas, 'rb') as arquivo_modelo:
+                                modelo_francesinhas_ef = arquivo_modelo.read()
+                            break
+                    if not modelo_francesinhas_ef:
+                        raise FileNotFoundError('Modelo Domínio não encontrado no sistema.')
+
+                    arquivo_francesinhas_ef = gerar_excel_francesinhas(
+                        modelo_francesinhas_ef, df_francesinhas_ef
+                    )
+                    st.download_button(
+                        'Baixar francesinhas no Modelo Domínio',
+                        data=arquivo_francesinhas_ef,
+                        file_name=(
+                            'ELETRO_FORTE_242_FRANCESINHAS_'
+                            f'{inicio_francesinhas_ef.strftime("%d%m%Y")}_a_'
+                            f'{fim_francesinhas_ef.strftime("%d%m%Y")}.xlsx'
+                        ),
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True,
+                        key='ef242_download_francesinhas',
+                    )
+                except Exception as erro_francesinhas_ef:
+                    st.error(
+                        'Não foi possível processar as francesinhas da empresa 242: '
+                        f'{erro_francesinhas_ef}'
+                    )
+
 
         with aba_operacoes_ef:
             st.markdown('#### Relatórios bancários → Modelo Domínio')
