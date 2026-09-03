@@ -137,6 +137,23 @@ def _padronizar(conteudo: bytes, ano_referencia: int) -> pd.DataFrame:
     return saida.dropna(subset=["DATA"]).reset_index(drop=True)
 
 
+def _aplicar_regra_movimento(df: pd.DataFrame, tipo: str) -> pd.DataFrame:
+    """Aplica sinal e prefixo de histórico conforme a origem do relatório."""
+    saida = df.copy()
+    historico = saida["HISTÓRICO"].fillna("").astype(str).str.strip()
+    if tipo in {"despesa", "fornecedor"}:
+        saida["VALOR"] = -pd.to_numeric(saida["VALOR"], errors="coerce").fillna(0.0).abs()
+        saida["HISTÓRICO"] = historico.map(
+            lambda texto: texto if texto.lower().startswith("pago: ") else f"Pago: {texto}"
+        )
+    elif tipo == "recebido":
+        saida["VALOR"] = pd.to_numeric(saida["VALOR"], errors="coerce").fillna(0.0).abs()
+        saida["HISTÓRICO"] = historico.map(
+            lambda texto: texto if texto.lower().startswith("recebido: ") else f"Recebido: {texto}"
+        )
+    return saida
+
+
 def _com_descricao(df: pd.DataFrame, coluna_banco: str) -> pd.DataFrame:
     saida = df.copy()
     saida.insert(
@@ -159,20 +176,23 @@ def _separar_por_conta(df: pd.DataFrame, coluna_conta: str) -> Dict[str, pd.Data
 
 
 def processar_despesas(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
-    """Despesa: converte 001→8 e 002→508 e separa por banco usando a coluna CRÉDITO."""
+    """Despesa: converte 001→8 e 002→508, força valor negativo e prefixa Pago:."""
     df = _padronizar(conteudo, ano_referencia)
     df["CRÉDITO"] = df["CRÉDITO"].replace({"1": "8", "2": "508"})
+    df = _aplicar_regra_movimento(df, "despesa")
     return _separar_por_conta(df, "CRÉDITO")
 
 
 def processar_fornecedores(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
-    """Fornecedor: separa pela conta presente na coluna CRÉDITO, incluindo zero."""
-    return _separar_por_conta(_padronizar(conteudo, ano_referencia), "CRÉDITO")
+    """Fornecedor: separa por CRÉDITO, força valor negativo e prefixa Pago:."""
+    df = _aplicar_regra_movimento(_padronizar(conteudo, ano_referencia), "fornecedor")
+    return _separar_por_conta(df, "CRÉDITO")
 
 
 def processar_recebidos(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
-    """Recebido: separa pela conta presente na coluna DÉBITO, incluindo zero."""
-    return _separar_por_conta(_padronizar(conteudo, ano_referencia), "DÉBITO")
+    """Recebido: separa por DÉBITO, mantém valor positivo e prefixa Recebido:."""
+    df = _aplicar_regra_movimento(_padronizar(conteudo, ano_referencia), "recebido")
+    return _separar_por_conta(df, "DÉBITO")
 
 
 def inferir_ano_recebidos(conteudo: bytes) -> int | None:
