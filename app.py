@@ -8601,6 +8601,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         if df_resumo_autokraft.empty:
                             st.warning("Não há lançamentos para os bancos e período escolhidos.")
                         else:
+                            renderizar_previa_bancos_padrao(
+                                dados_filtrados_autokraft,
+                                ordem=['Itaú', 'Daycoval'],
+                            )
                             arquivo_final_autokraft = gerar_excel_nova_geracao(
                                 dados_filtrados_autokraft
                             )
@@ -9479,6 +9483,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             with open(caminho_modelo, 'rb') as arquivo_modelo:
                                 modelo_org_bytes = arquivo_modelo.read()
                             break
+                    renderizar_previa_bancos_padrao(
+                        dados_exportacao_por_banco,
+                        ordem=[config['nome'] for config in configs_selecionadas],
+                    )
                     arquivo_final = executar_com_loading(
                         "Gerando a planilha final...",
                         gerar_excel_nova_geracao,
