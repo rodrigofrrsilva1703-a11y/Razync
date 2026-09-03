@@ -3260,11 +3260,12 @@ def renderizar_base_inteligente_eletro_forte():
 
     st.markdown('---')
     st.markdown('#### Classificar por planilha')
-    abas = st.tabs(['Despesa', 'Fornecedor', 'Recebido'])
+    abas = st.tabs(['Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'])
     configuracoes = [
         ('Despesa', 'debito', {'0'}),
         ('Fornecedor', 'debito', {'166', '0'}),
         ('Recebido', 'credito', {'166', '0', '14', '16'}),
+        ('Francesinhas', 'credito', {''}),
     ]
 
     for aba, (origem, coluna_regra, valores_regra) in zip(abas, configuracoes):
@@ -3275,6 +3276,11 @@ def renderizar_base_inteligente_eletro_forte():
                 st.caption('Somente as abas bancárias serão classificadas; linhas com DÉBITO 166 ou 0. A aba Principal é preservada.')
             elif origem == 'Recebido':
                 st.caption('Somente as abas bancárias serão classificadas; linhas com CRÉDITO 166, 0, 14 ou 16. A aba Principal é preservada.')
+            elif origem == 'Francesinhas':
+                st.caption(
+                    'Classifica a planilha gerada pela ferramenta Francesinhas, '
+                    'preenchendo o CRÉDITO e mantendo Itaú 508 e Itaú 509 separados.'
+                )
             else:
                 st.caption('Classificação exclusiva da planilha de Despesa; nenhuma regra adicional foi definida para substituir contas já preenchidas.')
 
@@ -8828,79 +8834,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         f'{inicio_francesinhas_ef.strftime("%d%m%Y")}_a_'
                         f'{fim_francesinhas_ef.strftime("%d%m%Y")}.xlsx'
                     )
-                    classificar_francesinhas_ef = st.toggle(
-                        'Classificar com a Base Inteligente',
-                        value=True,
-                        key='ef242_classificar_francesinhas',
-                        help=(
-                            'Usa somente o aprendizado da empresa 242 e mantém '
-                            'Itaú 508 e Itaú 509 separados.'
-                        ),
+                    st.download_button(
+                        'Baixar francesinhas no Modelo Domínio',
+                        data=arquivo_francesinhas_ef,
+                        file_name=nome_francesinhas_ef,
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True,
+                        key='ef242_download_francesinhas',
                     )
-                    url_base_ef = chave_base_ef = senha_admin_ef = ''
-                    base_francesinhas_ef = []
-
-                    if classificar_francesinhas_ef:
-                        url_base_ef, chave_base_ef, senha_admin_ef = (
-                            obter_config_classificacao_online()
-                        )
-                        if not url_base_ef or not chave_base_ef:
-                            st.warning(
-                                'A Base Inteligente não está conectada. '
-                                'O arquivo continua disponível sem classificação.'
-                            )
-                        else:
-                            base_francesinhas_ef = carregar_classificacoes_online(
-                                'eletro_forte'
-                            )
-                            base_francesinhas_ef = [
-                                item for item in base_francesinhas_ef
-                                if item.get('banco') in {'itau_508', 'itau_509'}
-                            ]
-                            if not base_francesinhas_ef:
-                                st.warning(
-                                    'A Base Inteligente da empresa 242 ainda não '
-                                    'possui padrões para Itaú 508 e 509.'
-                                )
-                            else:
-                                arquivo_classificado_ef, resumo_classificacao_ef = (
-                                    executar_com_loading(
-                                        'Classificando as francesinhas...',
-                                        classificar_planilha_final,
-                                        arquivo_francesinhas_ef,
-                                        nome_francesinhas_ef,
-                                        base_francesinhas_ef,
-                                        {'itau_508': '508', 'itau_509': '509'},
-                                        'eletro_forte',
-                                        'credito',
-                                        {''},
-                                    )
-                                )
-                                cm1, cm2, cm3 = st.columns(3)
-                                cm1.metric('Classificados automaticamente', int(resumo_classificacao_ef.get('automaticos', 0)))
-                                cm2.metric('Para revisar', int(resumo_classificacao_ef.get('padroes_novos', 0)))
-                                cm3.metric('Contas preservadas', int(resumo_classificacao_ef.get('preservados_regra', 0)))
-                                renderizar_revisao_inteligente(
-                                    arquivo_classificado_ef,
-                                    arquivo_francesinhas_ef,
-                                    nome_francesinhas_ef,
-                                    'eletro_forte',
-                                    {'itau_508': '508', 'itau_509': '509'},
-                                    senha_admin_ef,
-                                    'base_revisao_242_francesinhas',
-                                )
-
-                    if not classificar_francesinhas_ef or not (
-                        url_base_ef and chave_base_ef and base_francesinhas_ef
-                    ):
-                        st.download_button(
-                            'Baixar francesinhas no Modelo Domínio',
-                            data=arquivo_francesinhas_ef,
-                            file_name=nome_francesinhas_ef,
-                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            use_container_width=True,
-                            key='ef242_download_francesinhas',
-                        )
                 except Exception as erro_francesinhas_ef:
                     st.error(
                         'Não foi possível processar as francesinhas da empresa 242: '
