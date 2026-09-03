@@ -68,7 +68,9 @@ def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.Dat
             "VALOR": valor_creditado,
             "DÉBITO": conta_dominio,
             "CRÉDITO": "",
-            "HISTÓRICO": " ".join(encontrado.group("pagador").split()),
+            "HISTÓRICO": (
+                "Recebido: " + " ".join(encontrado.group("pagador").split())
+            ),
             "ARQUIVO": nome_arquivo,
             "CONTA_ITAU": conta_itau,
         })
