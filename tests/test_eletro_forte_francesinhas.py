@@ -39,7 +39,9 @@ def test_zip_filtra_l_usa_emitido_em_e_valor_creditado(monkeypatch):
     assert avisos == []
     assert list(dados["DÉBITO"]) == ["508", "509"]
     assert list(dados["VALOR"]) == [5663.40, 403.60]
-    assert list(dados["HISTÓRICO"]) == ["SIKA SA", "SCA SERVICOS LTDA"]
+    assert list(dados["HISTÓRICO"]) == [
+        "Recebido: SIKA SA", "Recebido: SCA SERVICOS LTDA"
+    ]
     assert list(pd.to_datetime(dados["DATA"]).dt.strftime("%d/%m/%Y")) == [
         "04/08/2026", "06/08/2026"
     ]
