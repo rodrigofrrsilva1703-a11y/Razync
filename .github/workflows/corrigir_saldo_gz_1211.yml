@@ -1,0 +1,43 @@
+name: Corrigir saldo GZ 1211
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/corrigir_saldo_gz_1211.py'
+      - '.github/workflows/corrigir_saldo_gz_1211.yml'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar correção
+        run: python scripts/corrigir_saldo_gz_1211.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/gz_1211.py
+      - name: Validar diagnóstico de saldo
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('razync/gz_1211.py').read_text(encoding='utf-8')
+          assert 'ler_saldos_extrato_itau_gz' in t
+          assert 'saldo_final_calculado' in t
+          assert 'diferenca_saldo_extrato' in t
+          a=Path('app.py').read_text(encoding='utf-8')
+          assert 'Fechamento de saldo do extrato Itaú' in a
+          assert 'Nenhum ajuste contábil foi criado automaticamente.' in a
+          print('OK')
+          PY
+      - name: Commitar e limpar temporários
+        run: |
+          rm scripts/corrigir_saldo_gz_1211.py
+          rm .github/workflows/corrigir_saldo_gz_1211.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py razync/gz_1211.py scripts/corrigir_saldo_gz_1211.py .github/workflows/corrigir_saldo_gz_1211.yml
+          git commit -m 'Corrige conferência de saldo da empresa 1211 GZ'
+          git push
