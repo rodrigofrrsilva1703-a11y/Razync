@@ -1,0 +1,40 @@
+name: Adicionar ferramentas 242 v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/adicionar_ferramentas_242_v3.py'
+      - '.github/workflows/adicionar_ferramentas_242_v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar alteração
+        run: python scripts/adicionar_ferramentas_242_v3.py
+      - name: Validar sintaxe
+        run: python -m py_compile app.py razync/eletro_forte.py
+      - name: Validar pontos críticos
+        run: |
+          grep -q "Conferência com Extrato" app.py
+          grep -q "ef242_extrato_conferencia_" app.py
+          grep -q "Despesa ·" app.py
+      - name: Commitar alteração e limpar temporários
+        run: |
+          rm scripts/adicionar_ferramentas_242_v3.py
+          rm .github/workflows/adicionar_ferramentas_242_v3.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py scripts/adicionar_ferramentas_242_v3.py .github/workflows/adicionar_ferramentas_242_v3.yml
+          git commit -m "Adiciona Base e Conferência específicas da empresa 242"
+          git push origin main
