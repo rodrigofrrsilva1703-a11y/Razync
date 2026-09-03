@@ -209,3 +209,4 @@ bloco = r'''
 
 s = s.replace(needle, '\n' + bloco + needle, 1)
 p.write_text(s, encoding='utf-8')
+# gatilho v2
