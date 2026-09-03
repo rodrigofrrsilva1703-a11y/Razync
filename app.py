@@ -8392,9 +8392,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     st.markdown('#### Pré-visualização dos lançamentos')
                     tabs_nomes_ef = []
                     tabs_dfs_ef = []
-                    if despesas_ef is not None and not despesas_ef.empty:
-                        tabs_nomes_ef.append('Despesas')
-                        tabs_dfs_ef.append(despesas_ef)
+                    for conta, df_ef in (despesas_ef or {}).items():
+                        tabs_nomes_ef.append('Despesa · ' + CONTAS_ELETRO_FORTE.get(conta, conta))
+                        tabs_dfs_ef.append(df_ef)
                     for conta, df_ef in fornecedores_ef.items():
                         tabs_nomes_ef.append('Fornecedor · ' + CONTAS_ELETRO_FORTE.get(conta, conta))
                         tabs_dfs_ef.append(df_ef)
@@ -8435,7 +8435,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     if not modelo_bytes_ef:
                         raise FileNotFoundError('Modelo Domínio não encontrado no sistema.')
 
-                    if despesas_ef is not None and not despesas_ef.empty:
+                    if despesas_ef:
                         arquivo_despesa_ef = gerar_modelo_dominio_eletro_forte(
                             arq_despesa_ef.getvalue(), arq_despesa_ef.name,
                             modelo_bytes_ef, despesas_ef, {}, {}
