@@ -28,7 +28,7 @@ EMPRESAS = [
     {"codigo": 912, "nome": "VITAL SAFETY CONSULTORIA E TREINAMENTO LTDA - ME", "regime": "SIMPLES NACIONAL"},
     {"codigo": 964, "nome": "WILLIANS VENANCIO ALMEIDA - ME", "regime": "SIMPLES NACIONAL"},
     {"codigo": 968, "nome": "RADANI ELETRONICA E AUTOMACAO LTDA", "regime": "SIMPLES NACIONAL", "chave_sistema": "radani"},
-    {"codigo": 969, "nome": "ENGEKRAFT AUTOMAÇÃO LTDA - EPP", "regime": "LUCRO PRESUMIDO"},
+    {"codigo": 969, "nome": "ENGEKRAFT AUTOMAÇÃO LTDA - EPP", "regime": "LUCRO PRESUMIDO", "chave_sistema": "engekraft_969"},
     {"codigo": 993, "nome": "SPIRA CONSTRUTORA E INCORPORAÇÃO EIRELI", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1000, "nome": "ACCEDE AUTOMACAO INDUSTRIAL EIRELI", "regime": "LUCRO PRESUMIDO", "chave_sistema": "accede_automacao"},
     {"codigo": 1001, "nome": "ACCEDE EQUIPAMENTOS INDUSTRIAIS LTDA - EPP", "regime": "LUCRO PRESUMIDO", "chave_sistema": "accede_equipamentos"},

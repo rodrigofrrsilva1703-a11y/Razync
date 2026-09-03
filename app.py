@@ -41,6 +41,9 @@ from razync.eletro_forte import (
 from razync.gz_1211 import (
     CONTA_ITAU_GZ, gerar_modelo_dominio_gz, processar_gz,
 )
+from razync.engekraft_969 import (
+    CONTA_ITAU_969, gerar_modelo_dominio_engekraft_969, processar_extrato_engekraft_969,
+)
 
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
@@ -8538,6 +8541,64 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "Empresa cadastrada no Razync. As ferramentas específicas desta empresa "
             "ainda não foram configuradas."
         )
+
+    if st.session_state['empresa_organizador'] == 'engekraft_969':
+        empresa_969 = '969 - ENGEKRAFT AUTOMAÇÃO LTDA - EPP'
+        aba_operacoes_969, aba_base_969 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente'
+        ])
+
+        with aba_operacoes_969:
+            st.markdown('#### Extrato Itaú → Modelo Domínio')
+            st.caption(
+                'Itaú = conta 508. Valores negativos recebem Pago: e valores positivos '
+                'recebem Recebido: no histórico. O processamento é automático.'
+            )
+            extrato_969 = st.file_uploader(
+                'Extrato Itaú', type=['pdf'], key='engekraft969_extrato'
+            )
+            if extrato_969 is not None:
+                try:
+                    df_969 = executar_com_loading(
+                        'Lendo extrato Itaú e montando o Modelo Domínio...',
+                        processar_extrato_engekraft_969, extrato_969.getvalue()
+                    )
+                    renderizar_previa_bancos_padrao(
+                        {'Itaú · Conta 508': df_969},
+                        titulo='Pré-visualização do Modelo Domínio',
+                    )
+                    modelo_bytes_969 = None
+                    for caminho_modelo_969 in [
+                        'Modelo dominio.xlsx', 'Modelo dominio(6).xlsx',
+                        'Modelo Dominio.xlsx', 'modelo_dominio.xlsx'
+                    ]:
+                        if os.path.exists(caminho_modelo_969):
+                            with open(caminho_modelo_969, 'rb') as modelo_969:
+                                modelo_bytes_969 = modelo_969.read()
+                            break
+                    if not modelo_bytes_969:
+                        raise FileNotFoundError('Modelo Domínio não encontrado no sistema.')
+                    excel_969 = gerar_modelo_dominio_engekraft_969(df_969, modelo_bytes_969)
+                    datas_969 = pd.to_datetime(df_969['DATA'], errors='coerce').dropna()
+                    periodo_969 = datas_969.min().strftime('%m_%Y') if not datas_969.empty else 'periodo'
+                    st.download_button(
+                        'Baixar Engekraft · Modelo Domínio', data=excel_969,
+                        file_name=f'ENGEKRAFT_969_ITAU_{periodo_969}.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True, key='engekraft969_download_modelo'
+                    )
+                except Exception as erro_969:
+                    st.error(f'Não foi possível processar a empresa 969 - Engekraft: {erro_969}')
+
+            st.markdown(f'#### Conferência — {empresa_969}')
+            renderizar_conferencia_autokraft(
+                'engekraft969', bancos_config=[{'nome': 'Itaú', 'slug': 'itau'}]
+            )
+
+        with aba_base_969:
+            renderizar_base_inteligente_empresa(
+                'engekraft_969', empresa_969, {'itau'}, {'itau': CONTA_ITAU_969}
+            )
 
     if st.session_state['empresa_organizador'] == 'gz_1211':
         empresa_gz = '1211 - GZ IMPORTADORA E EXPORTADORA LTDA EPP'
