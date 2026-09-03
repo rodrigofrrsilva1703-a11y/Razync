@@ -41,7 +41,7 @@ EMPRESAS = [
     {"codigo": 1114, "nome": "VAREJAO DOS PRIMOS COM MAT ELET TINTAS E FERRAGENS LTDA (Filial 0003)", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1198, "nome": "TWV ADMINISTRADORA HOTELEIRA LTDA", "regime": "SIMPLES NACIONAL"},
     {"codigo": 1208, "nome": "KAIROS DESMONTE INDUSTRIAIS EIRELI - ME", "regime": "LUCRO PRESUMIDO"},
-    {"codigo": 1211, "nome": "GZ IMPORTADORA E EXPORTADORA LTDA EPP (ANTIGA BODY-UP)", "regime": "LUCRO PRESUMIDO"},
+    {"codigo": 1211, "nome": "GZ IMPORTADORA E EXPORTADORA LTDA EPP (ANTIGA BODY-UP)", "regime": "LUCRO PRESUMIDO", "chave_sistema": "gz_1211"},
     {"codigo": 1248, "nome": "RGR IMPORTADORA E EXPORTADORA LTDA - EPP", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1320, "nome": "T. W. GUAIMBÊ – EXCLUSIVE SUÍTES HOTEL LTDA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1396, "nome": "NOVA GERAÇÃO COMERCIAL ELETRICA LTDA (FILIAL)", "regime": "LUCRO PRESUMIDO", "chave_sistema": "nova_geracao", "estabelecimento": "filial"},
