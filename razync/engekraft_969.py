@@ -38,9 +38,6 @@ def _limpar_historico(texto: str) -> str:
     texto = _espacos(texto)
     texto = re.sub(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b", " ", texto)
     texto = re.sub(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", " ", texto)
-    # Remove descrições operacionais do Itaú quando existe contraparte identificada.
-    # O Modelo Domínio fica mais limpo: "Pago: MONPLAC" em vez de
-    # "Pago: BOLETO PAGO MONPLAC MONPLAC".
     prefixos_operacao = [
         r"BOLETO\s+PAGO(?:\s+[A-Z0-9./&-]+){0,3}\s+",
         r"PIX\s+ENVIADO\s+",
@@ -56,7 +53,6 @@ def _limpar_historico(texto: str) -> str:
             texto = novo
             break
     texto = _espacos(texto).strip(" -")
-    # Alguns extratos repetem uma abreviação e depois a razão social completa.
     palavras = texto.split()
     if len(palavras) >= 2:
         metade = len(palavras) // 2
@@ -99,21 +95,26 @@ def processar_extrato_engekraft_969(conteudo: bytes) -> pd.DataFrame:
         valor = _moeda(achado.group(1))
         if abs(valor) < 0.005:
             continue
-        historico = _limpar_historico(corpo[:achado.start()])
+        historico_original = corpo[:achado.start()]
+        historico = _limpar_historico(historico_original)
         if not historico:
             continue
-        historico = re.sub(r"^(?:Pago|Recebido):\s*", "", historico, flags=re.I).strip()
-        prefixo = "Recebido: " if valor > 0 else "Pago: "
         data = pd.to_datetime(bloco["data"], dayfirst=True, errors="coerce")
         if pd.isna(data):
             continue
+        if re.search(r"\bRENDIMENTOS?\b", historico_original, flags=re.I):
+            historico_final = "RENDIMENTOS"
+        else:
+            historico = re.sub(r"^(?:Pago|Recebido):\s*", "", historico, flags=re.I).strip()
+            prefixo = "Recebido: " if valor > 0 else "Pago: "
+            historico_final = prefixo + historico
         registros.append({
             "DESCRIÇÃO": "BANCO ITAÚ",
             "DATA": data,
             "VALOR": round(valor, 2),
             "DÉBITO": CONTA_ITAU_969 if valor > 0 else "",
             "CRÉDITO": CONTA_ITAU_969 if valor < 0 else "",
-            "HISTÓRICO": prefixo + historico,
+            "HISTÓRICO": historico_final,
         })
     if not registros:
         raise ValueError("Nenhum lançamento foi reconhecido no extrato Itaú da Engekraft.")
