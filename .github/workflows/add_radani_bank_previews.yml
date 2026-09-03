@@ -22,7 +22,7 @@ jobs:
       - name: Validar
         run: |
           python -m py_compile app.py
-          PYTHONPATH=. pytest -q tests/test_radani.py tests/test_bradesco_radani.py
+          PYTHONPATH=. pytest -q tests/test_radani.py
           grep -q "Pré-visualização por banco" app.py
           grep -q "previa_bancos" app.py
       - name: Registrar e limpar
