@@ -38,7 +38,31 @@ def _limpar_historico(texto: str) -> str:
     texto = _espacos(texto)
     texto = re.sub(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b", " ", texto)
     texto = re.sub(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", " ", texto)
-    return _espacos(texto).strip(" -")
+    # Remove descrições operacionais do Itaú quando existe contraparte identificada.
+    # O Modelo Domínio fica mais limpo: "Pago: MONPLAC" em vez de
+    # "Pago: BOLETO PAGO MONPLAC MONPLAC".
+    prefixos_operacao = [
+        r"BOLETO\s+PAGO(?:\s+[A-Z0-9./&-]+){0,3}\s+",
+        r"PIX\s+ENVIADO\s+",
+        r"PIX\s+RECEBIDO(?:\s+[A-Z0-9/.-]+)?\s+",
+        r"PAGAMENTOS?\s+TRANSF\s+CC\s+ITAU\s+",
+        r"PAGAMENTOS?\s+TRIB\s+MUNICIPAL\s+",
+        r"PAGAMENTOS?\s+TRIB\s+COD\s+BARRAS\s+",
+        r"RECEBIMENTOS?\s+",
+    ]
+    for padrao in prefixos_operacao:
+        novo = re.sub(r"^" + padrao, "", texto, flags=re.I)
+        if novo != texto:
+            texto = novo
+            break
+    texto = _espacos(texto).strip(" -")
+    # Alguns extratos repetem uma abreviação e depois a razão social completa.
+    palavras = texto.split()
+    if len(palavras) >= 2:
+        metade = len(palavras) // 2
+        if len(palavras) % 2 == 0 and palavras[:metade] == palavras[metade:]:
+            texto = " ".join(palavras[metade:])
+    return texto
 
 
 def processar_extrato_engekraft_969(conteudo: bytes) -> pd.DataFrame:
