@@ -8354,14 +8354,17 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 arq_despesa_ef = st.file_uploader(
                     'Planilha Despesa', type=['xls', 'xlsx'], key='ef242_despesa'
                 )
+                download_despesa_ef = st.empty()
             with col_ef2:
                 arq_fornecedor_ef = st.file_uploader(
                     'Planilha Fornecedor', type=['xls', 'xlsx'], key='ef242_fornecedor'
                 )
+                download_fornecedor_ef = st.empty()
             with col_ef3:
                 arq_recebido_ef = st.file_uploader(
                     'Planilha Recebido', type=['xls', 'xlsx'], key='ef242_recebido'
                 )
+                download_recebido_ef = st.empty()
 
             ano_inferido_ef = (
                 inferir_ano_recebidos(arq_recebido_ef.getvalue())
@@ -8416,15 +8419,46 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             if 'Revisar · Conta 0' in nome_ef:
                                 st.warning('Conta 0 separada para revisão manual, conforme a regra da empresa.')
 
-                    arquivo_ef = gerar_modelo_dominio_eletro_forte(
-                        despesas_ef, fornecedores_ef, recebidos_ef
-                    )
-                    st.download_button(
-                        'Baixar Modelo Domínio — Eletro Forte', data=arquivo_ef,
-                        file_name=f'ELETRO_FORTE_242_{int(ano_ef)}.xlsx',
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        use_container_width=True, key='ef242_download',
-                    )
+                    # Cada relatório da 242 gera seu próprio Modelo Domínio.
+                    # A ordem original das linhas é preservada e as colunas permanecem
+                    # exatamente em DATA, DÉBITO, CRÉDITO, VALOR e HISTÓRICO.
+                    mime_excel_ef = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    if despesas_ef is not None and not despesas_ef.empty:
+                        arquivo_despesa_ef = gerar_modelo_dominio_eletro_forte(
+                            despesas_ef, {}, {}
+                        )
+                        download_despesa_ef.download_button(
+                            'Baixar Despesa · Modelo Domínio',
+                            data=arquivo_despesa_ef,
+                            file_name=f'ELETRO_FORTE_242_DESPESA_{int(ano_ef)}.xlsx',
+                            mime=mime_excel_ef,
+                            use_container_width=True,
+                            key='ef242_download_despesa',
+                        )
+                    if fornecedores_ef:
+                        arquivo_fornecedor_ef = gerar_modelo_dominio_eletro_forte(
+                            None, fornecedores_ef, {}
+                        )
+                        download_fornecedor_ef.download_button(
+                            'Baixar Fornecedor · Modelo Domínio',
+                            data=arquivo_fornecedor_ef,
+                            file_name=f'ELETRO_FORTE_242_FORNECEDOR_{int(ano_ef)}.xlsx',
+                            mime=mime_excel_ef,
+                            use_container_width=True,
+                            key='ef242_download_fornecedor',
+                        )
+                    if recebidos_ef:
+                        arquivo_recebido_ef = gerar_modelo_dominio_eletro_forte(
+                            None, {}, recebidos_ef
+                        )
+                        download_recebido_ef.download_button(
+                            'Baixar Recebido · Modelo Domínio',
+                            data=arquivo_recebido_ef,
+                            file_name=f'ELETRO_FORTE_242_RECEBIDO_{int(ano_ef)}.xlsx',
+                            mime=mime_excel_ef,
+                            use_container_width=True,
+                            key='ef242_download_recebido',
+                        )
                 except Exception as erro_ef:
                     st.error(f'Não foi possível processar os relatórios da empresa 242: {erro_ef}')
 
