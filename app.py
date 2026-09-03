@@ -3267,11 +3267,11 @@ def renderizar_base_inteligente_eletro_forte():
     for aba, (origem, coluna_regra, valores_regra) in zip(abas, configuracoes):
         with aba:
             if origem == 'Despesa':
-                st.caption('Somente linhas com DÉBITO 0 serão classificadas.')
+                st.caption('Somente as abas bancárias serão classificadas; na Despesa, apenas linhas com DÉBITO 0. A aba Principal é preservada.')
             elif origem == 'Fornecedor':
-                st.caption('Somente linhas com DÉBITO 166 ou 0 serão classificadas.')
+                st.caption('Somente as abas bancárias serão classificadas; linhas com DÉBITO 166 ou 0. A aba Principal é preservada.')
             elif origem == 'Recebido':
-                st.caption('Somente linhas com CRÉDITO 166, 0, 14 ou 16 serão classificadas.')
+                st.caption('Somente as abas bancárias serão classificadas; linhas com CRÉDITO 166, 0, 14 ou 16. A aba Principal é preservada.')
             else:
                 st.caption('Classificação exclusiva da planilha de Despesa; nenhuma regra adicional foi definida para substituir contas já preenchidas.')
 
@@ -3824,6 +3824,10 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
     registros = []
     banco_arquivo = identificar_chave_banco_empresa(filename)
     for nome_aba in xls.sheet_names:
+        # Na empresa 242, a aba Principal é apenas a cópia preservada do relatório
+        # original. A Base Inteligente aprende somente com as abas bancárias geradas.
+        if empresa == 'eletro_forte' and normalizar_texto(nome_aba).strip() == 'principal':
+            continue
         bruto = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
         indice_cabecalho = None
         for indice in range(min(30, len(bruto))):
@@ -4075,6 +4079,10 @@ def classificar_planilha_final(
     cache_similaridade = {}
 
     for ws in wb.worksheets:
+        # Na 242, nunca classificar a aba Principal. Ela deve permanecer exatamente
+        # como foi recebida; somente as abas BB/Itau do Modelo Domínio são alteradas.
+        if empresa_classificacao == 'eletro_forte' and normalizar_texto(ws.title).strip() == 'principal':
+            continue
         if 'retir' in normalizar_texto(ws.title):
             continue
         linha_cabecalho = None
