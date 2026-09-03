@@ -103,7 +103,7 @@ def processar_extrato_engekraft_969(conteudo: bytes) -> pd.DataFrame:
         if pd.isna(data):
             continue
         if re.search(r"\bRENDIMENTOS?\b", historico_original, flags=re.I):
-            historico_final = "RENDIMENTOS"
+            historico_final = "Recebido: RENDIMENTOS"
         else:
             historico = re.sub(r"^(?:Pago|Recebido):\s*", "", historico, flags=re.I).strip()
             prefixo = "Recebido: " if valor > 0 else "Pago: "
