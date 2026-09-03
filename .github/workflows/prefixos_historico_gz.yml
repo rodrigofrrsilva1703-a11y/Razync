@@ -1,0 +1,38 @@
+name: Prefixos historico GZ 1211
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/prefixos_historico_gz.py'
+      - '.github/workflows/prefixos_historico_gz.yml'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/prefixos_historico_gz.py
+      - name: Validar sintaxe e regra
+        run: |
+          python -m py_compile razync/gz_1211.py
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('razync/gz_1211.py').read_text(encoding='utf-8')
+          assert 'prefixo = "Recebido: " if valor > 0 else "Pago: "' in t
+          assert 'r"^(?:Pago|Recebido):\\s*"' in t
+          assert '"HISTÓRICO": f"Recebido: {boleto.pagador}"' in t
+          print('OK')
+          PY
+      - name: Commitar
+        run: |
+          rm scripts/prefixos_historico_gz.py
+          rm .github/workflows/prefixos_historico_gz.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/gz_1211.py scripts/prefixos_historico_gz.py .github/workflows/prefixos_historico_gz.yml
+          git commit -m 'Adiciona Pago e Recebido nos historicos da GZ 1211'
+          git push
