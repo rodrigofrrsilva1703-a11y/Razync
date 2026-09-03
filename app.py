@@ -8541,8 +8541,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if st.session_state['empresa_organizador'] == 'gz_1211':
         empresa_gz = '1211 - GZ IMPORTADORA E EXPORTADORA LTDA EPP'
-        aba_operacoes_gz, aba_base_gz, aba_conferencia_gz = st.tabs([
-            'Organizar arquivos', 'Base Inteligente', 'Conferência com Extrato'
+        aba_operacoes_gz, aba_base_gz = st.tabs([
+            'Organizar arquivos', 'Base Inteligente'
         ])
 
         with aba_operacoes_gz:
@@ -8636,7 +8636,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 'gz_1211', empresa_gz, {'itau'}, {'itau': CONTA_ITAU_GZ}
             )
 
-        with aba_conferencia_gz:
+        with aba_operacoes_gz:
             st.markdown('#### Conferência com Extrato')
             st.caption(
                 'Confere cada total BOLETOS RECEBIDOS contra os boletos liquidados ainda '
@@ -8694,7 +8694,9 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if st.session_state['empresa_organizador'] == 'eletro_forte':
         empresa_ef = '242 - ELETRO FORTE COMERCIAL ELETRICA LTDA'
-        aba_operacoes_ef, aba_base_ef, aba_conferencia_ef = st.tabs(['Organizar arquivos', 'Base Inteligente', 'Conferência com Extrato'])
+        aba_operacoes_ef, aba_base_ef = st.tabs([
+            'Organizar arquivos', 'Base Inteligente'
+        ])
 
         with aba_base_ef:
             renderizar_base_inteligente_eletro_forte()
@@ -8835,7 +8837,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     st.error(f'Não foi possível processar os relatórios da empresa 242: {erro_ef}')
 
 
-        with aba_conferencia_ef:
+        with aba_operacoes_ef:
             st.markdown('#### Conferência com Extrato')
             st.caption(
                 'Conferência independente por conta. Despesa e Fornecedor entram como saídas; '
