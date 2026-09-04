@@ -9,7 +9,9 @@ from __future__ import annotations
 import html
 import io
 import re
+import unicodedata
 from copy import copy
+from difflib import SequenceMatcher
 from typing import Dict
 
 import pandas as pd
@@ -193,6 +195,94 @@ def processar_recebidos(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.Da
     """Recebido: separa por DÉBITO, mantém valor positivo e prefixa Recebido:."""
     df = _aplicar_regra_movimento(_padronizar(conteudo, ano_referencia), "recebido")
     return _separar_por_conta(df, "DÉBITO")
+
+
+def _nome_para_correspondencia(valor: str) -> str:
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = texto.encode("ascii", "ignore").decode().upper()
+    texto = re.sub(r"^RECEBIDO:\s*", "", texto)
+    texto = re.sub(r"^\d+\s*-\s*", "", texto)
+    return re.sub(r"[^A-Z0-9]", "", texto)
+
+
+def corrigir_datas_com_francesinhas(
+    recebidos: Dict[str, pd.DataFrame] | None,
+    francesinhas: pd.DataFrame,
+    limite_dias: int = 7,
+) -> tuple[Dict[str, pd.DataFrame], dict, pd.DataFrame]:
+    """Corrige somente a data de recebimentos conciliados com liquidações L."""
+    corrigidos = {
+        str(conta): df.copy().reset_index(drop=True)
+        for conta, df in (recebidos or {}).items()
+    }
+    resumo = {"corrigidos": 0, "nao_encontrados": 0, "ambiguos": 0}
+    pendencias = []
+    usados = set()
+
+    for _, francesinha in francesinhas.sort_values("DATA", kind="stable").iterrows():
+        conta = str(francesinha.get("DÉBITO", "")).strip()
+        grupo = corrigidos.get(conta)
+        data_correta = pd.to_datetime(francesinha.get("DATA"), errors="coerce")
+        valor_correto = round(float(francesinha.get("VALOR", 0) or 0), 2)
+        nome_francesinha = _nome_para_correspondencia(
+            francesinha.get("HISTÓRICO", "")
+        )
+        candidatos = []
+
+        if grupo is not None and not grupo.empty and not pd.isna(data_correta):
+            for indice, linha in grupo.iterrows():
+                identificador = (conta, int(indice))
+                if identificador in usados:
+                    continue
+                valor_linha = round(float(linha.get("VALOR", 0) or 0), 2)
+                if valor_linha != valor_correto:
+                    continue
+                data_linha = pd.to_datetime(linha.get("DATA"), errors="coerce")
+                if pd.isna(data_linha):
+                    continue
+                diferenca_dias = (data_correta.normalize() - data_linha.normalize()).days
+                if not 0 <= diferenca_dias <= limite_dias:
+                    continue
+                similaridade = SequenceMatcher(
+                    None,
+                    nome_francesinha,
+                    _nome_para_correspondencia(linha.get("HISTÓRICO", "")),
+                ).ratio()
+                candidatos.append(
+                    (similaridade, -diferenca_dias, int(indice), data_linha)
+                )
+
+        candidatos.sort(reverse=True)
+        motivo = ""
+        if not candidatos or candidatos[0][0] < 0.35:
+            resumo["nao_encontrados"] += 1
+            motivo = "Correspondência não encontrada"
+        else:
+            melhor = candidatos[0]
+            empate = (
+                len(candidatos) > 1
+                and candidatos[1][0] == melhor[0]
+                and candidatos[1][1] == melhor[1]
+            )
+            if empate:
+                resumo["ambiguos"] += 1
+                motivo = "Mais de uma correspondência possível"
+            else:
+                indice = melhor[2]
+                grupo.at[indice, "DATA"] = data_correta
+                usados.add((conta, indice))
+                resumo["corrigidos"] += 1
+
+        if motivo:
+            pendencias.append({
+                "CONTA": conta,
+                "DATA FRANCESINHA": data_correta,
+                "VALOR": valor_correto,
+                "PAGADOR": francesinha.get("HISTÓRICO", ""),
+                "MOTIVO": motivo,
+            })
+
+    return corrigidos, resumo, pd.DataFrame(pendencias)
 
 
 def inferir_ano_recebidos(conteudo: bytes) -> int | None:
