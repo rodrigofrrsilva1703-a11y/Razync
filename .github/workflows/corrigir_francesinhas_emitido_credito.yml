@@ -1,0 +1,42 @@
+name: Francesinhas 242 Emitido e Credito
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/corrigir_francesinhas_emitido_credito.py'
+      - '.github/workflows/corrigir_francesinhas_emitido_credito.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar correção
+        run: python scripts/corrigir_francesinhas_emitido_credito.py
+      - name: Validar sintaxe
+        run: python -m py_compile razync/eletro_forte.py razync/eletro_forte_francesinhas.py
+      - name: Validar regras
+        run: |
+          grep -q '"DATA": data_emissao' razync/eletro_forte_francesinhas.py
+          grep -q '"VALOR": valor_creditado' razync/eletro_forte_francesinhas.py
+          grep -q 'abs(valor_linha - valor_correto) > 0.01' razync/eletro_forte.py
+          grep -q 'grupo.at\[indice, "VALOR"\] = valor_correto' razync/eletro_forte.py
+      - name: Commitar e limpar temporários
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/eletro_forte.py razync/eletro_forte_francesinhas.py
+          git commit -m 'Usa Emitido em e Credito/Debito nas francesinhas 242'
+          git rm scripts/corrigir_francesinhas_emitido_credito.py .github/workflows/corrigir_francesinhas_emitido_credito.yml
+          git commit -m 'Remove ajuste temporario das francesinhas 242'
+          git push origin main
