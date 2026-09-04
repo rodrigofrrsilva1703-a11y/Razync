@@ -1,0 +1,43 @@
+name: Corrigir francesinhas 242
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/corrigir_francesinhas_valor_data_242.py'
+      - '.github/workflows/corrigir_francesinhas_valor_data_242.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar correção
+        run: python scripts/corrigir_francesinhas_valor_data_242.py
+      - name: Validar sintaxe
+        run: python -m py_compile razync/eletro_forte_francesinhas.py razync/eletro_forte.py
+      - name: Validar regra
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('razync/eletro_forte_francesinhas.py').read_text(encoding='utf-8')
+          assert '"VALOR": valor_titulo' in s
+          assert '"DATA": data_liquidacao' in s
+          assert 'data_liquidacao' in s
+          print('Regra de valor nominal e data de liquidação validada.')
+          PY
+      - name: Commitar alteração
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/eletro_forte_francesinhas.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Corrige valor e data das francesinhas da empresa 242'
+            git push
+          fi
