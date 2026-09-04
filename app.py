@@ -3308,17 +3308,28 @@ def renderizar_base_inteligente_eletro_forte():
 
     st.markdown('---')
     st.markdown('#### Classificar por planilha')
-    abas = st.tabs(['Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'])
+    abas = st.tabs([
+        'Consolidada', 'Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'
+    ])
     configuracoes = [
-        ('Despesa', 'debito', {'0'}),
-        ('Fornecedor', 'debito', {'166', '0'}),
-        ('Recebido', 'credito', {'166', '0', '14', '16'}),
-        ('Francesinhas', 'credito', {''}),
+        ('Consolidada', '', set(), True),
+        ('Despesa', 'debito', {'0'}, False),
+        ('Fornecedor', 'debito', {'166', '0'}, False),
+        ('Recebido', 'credito', {'166', '0', '14', '16'}, False),
+        ('Francesinhas', 'credito', {''}, False),
     ]
 
-    for aba, (origem, coluna_regra, valores_regra) in zip(abas, configuracoes):
+    for aba, (
+        origem, coluna_regra, valores_regra, modo_consolidado
+    ) in zip(abas, configuracoes):
         with aba:
-            if origem == 'Despesa':
+            if origem == 'Consolidada':
+                st.caption(
+                    'Classifica de uma vez as abas Banco do Brasil 8, Itaú 508 e '
+                    'Itaú 509. Pagamentos usam a regra de DÉBITO; recebimentos usam '
+                    'a regra de CRÉDITO. Contas já classificadas são preservadas.'
+                )
+            elif origem == 'Despesa':
                 st.caption('Somente as abas bancárias serão classificadas; na Despesa, apenas linhas com DÉBITO 0. A aba Principal é preservada.')
             elif origem == 'Fornecedor':
                 st.caption('Somente as abas bancárias serão classificadas; linhas com DÉBITO 166 ou 0. A aba Principal é preservada.')
@@ -3354,6 +3365,7 @@ def renderizar_base_inteligente_eletro_forte():
                     'eletro_forte',
                     coluna_regra,
                     valores_regra,
+                    modo_consolidado,
                 )
                 m1, m2, m3 = st.columns(3)
                 m1.metric('Classificados automaticamente', int(resumo.get('automaticos', 0)))
@@ -4028,7 +4040,8 @@ def aplicar_classificacoes_automaticas(df, banco, base_classificacoes):
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=16)
 def classificar_planilha_final(
     file_bytes, filename, base_classificacoes, contas_bancarias=None,
-    empresa_classificacao='', coluna_substituir='', valores_substituiveis=None
+    empresa_classificacao='', coluna_substituir='', valores_substituiveis=None,
+    modo_consolidado_eletro_forte=False,
 ):
     """Preenche Débito/Crédito somente na planilha final já conciliada."""
     from openpyxl import load_workbook
@@ -4178,6 +4191,20 @@ def classificar_planilha_final(
             valores_regra = {
                 texto_celula_seguro(v) for v in (valores_substituiveis or [])
             }
+            if modo_consolidado_eletro_forte:
+                valor_consolidado = (
+                    limpar_valor_monetario(ws.cell(numero_linha, col_valor).value)
+                    if col_valor is not None else 0.0
+                )
+                if valor_consolidado < 0:
+                    coluna_regra = 'debito'
+                    valores_regra = {'0', '166'}
+                elif valor_consolidado > 0:
+                    coluna_regra = 'credito'
+                    valores_regra = {'', '0', '14', '16', '166'}
+                else:
+                    resumo['preservados_regra'] += 1
+                    continue
             if coluna_regra in {'debito', 'credito'}:
                 atual_regra = debito_atual if coluna_regra == 'debito' else credito_atual
                 if atual_regra not in valores_regra:
