@@ -35,7 +35,8 @@ from razync.santander_statement import (parece_extrato_santander_empresarial, pr
 from razync.radani import analisar_desmembramentos, consolidar_comprovantes_sispag
 from razync.bradesco_radani import processar_extrato_bradesco_radani
 from razync.eletro_forte import (
-    CONTAS_ELETRO_FORTE, gerar_modelo_dominio_eletro_forte, inferir_ano_recebidos,
+    CONTAS_ELETRO_FORTE, gerar_consolidado_bancos_eletro_forte,
+    gerar_modelo_dominio_eletro_forte, inferir_ano_recebidos,
     processar_despesas, processar_fornecedores, processar_recebidos,
 )
 from razync.eletro_forte_francesinhas import (
@@ -8980,6 +8981,26 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             mime=mime_excel_ef,
                             use_container_width=True,
                             key='ef242_download_recebido',
+                        )
+                    if despesas_ef and fornecedores_ef and recebidos_ef:
+                        arquivo_consolidado_ef = gerar_consolidado_bancos_eletro_forte(
+                            modelo_bytes_ef,
+                            despesas_ef,
+                            fornecedores_ef,
+                            recebidos_ef,
+                        )
+                        st.markdown('#### Planilha consolidada')
+                        st.caption(
+                            'Reúne Despesa, Fornecedor e Recebido em um único Excel, '
+                            'com uma aba separada para cada banco.'
+                        )
+                        st.download_button(
+                            'Baixar consolidado · Banco por banco',
+                            data=arquivo_consolidado_ef,
+                            file_name=f'ELETRO_FORTE_242_CONSOLIDADO_{int(ano_ef)}.xlsx',
+                            mime=mime_excel_ef,
+                            use_container_width=True,
+                            key='ef242_download_consolidado',
                         )
                 except Exception as erro_ef:
                     st.error(f'Não foi possível processar os relatórios da empresa 242: {erro_ef}')
