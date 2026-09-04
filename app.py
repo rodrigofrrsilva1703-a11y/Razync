@@ -5820,23 +5820,31 @@ def renderizar_conferencia_autokraft(
                 resumo2.metric("Dias divergentes", dias_divergentes)
 
                 exibicao = diario.copy()
+                exibicao['DIFERENÇA ENTRADAS'] = (
+                    pd.to_numeric(exibicao['ENTRADAS PLANILHA'], errors='coerce').fillna(0.0)
+                    - pd.to_numeric(exibicao['ENTRADAS EXTRATO'], errors='coerce').fillna(0.0)
+                ).round(2)
+                exibicao['DIFERENÇA SAÍDAS'] = (
+                    pd.to_numeric(exibicao['SAÍDAS PLANILHA'], errors='coerce').fillna(0.0)
+                    - pd.to_numeric(exibicao['SAÍDAS EXTRATO'], errors='coerce').fillna(0.0)
+                ).round(2)
                 exibicao['DATA'] = exibicao['DATA'].dt.strftime('%d/%m/%Y')
                 exibicao = exibicao[[
                     'DATA',
-                    'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO',
-                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO',
+                    'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO', 'DIFERENÇA ENTRADAS',
+                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO', 'DIFERENÇA SAÍDAS',
                     'STATUS'
                 ]]
                 exibicao.columns = [
                     'Data',
-                    'Entrada Planilha', 'Entrada Extrato',
-                    'Saída Planilha', 'Saída Extrato',
+                    'Entrada Planilha', 'Entrada Extrato', 'Diferença Entradas',
+                    'Saída Planilha', 'Saída Extrato', 'Diferença Saídas',
                     'Status'
                 ]
                 exibicao = formatar_dataframe_moeda_br(
                     exibicao,
-                    ['Entrada Planilha', 'Entrada Extrato',
-                     'Saída Planilha', 'Saída Extrato']
+                    ['Entrada Planilha', 'Entrada Extrato', 'Diferença Entradas',
+                     'Saída Planilha', 'Saída Extrato', 'Diferença Saídas']
                 )
                 st.dataframe(exibicao, use_container_width=True, height=390, hide_index=True)
 
