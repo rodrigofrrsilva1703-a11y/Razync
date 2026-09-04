@@ -8873,16 +8873,29 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
                 download_recebido_ef = st.empty()
 
-            ano_inferido_ef = (
-                inferir_ano_recebidos(arq_recebido_ef.getvalue())
-                if arq_recebido_ef is not None else None
+            hoje_ef = datetime.now().date()
+            inicio_padrao_ef = hoje_ef.replace(day=1)
+            fim_padrao_ef = hoje_ef.replace(
+                day=calendar.monthrange(hoje_ef.year, hoje_ef.month)[1]
             )
-            ano_ef = st.number_input(
-                'Ano de referência', min_value=2020, max_value=2100,
-                value=int(ano_inferido_ef or datetime.now().year), step=1,
-                key='ef242_ano',
-                help='Despesa e Fornecedor trazem apenas dia/mês; o ano é aplicado a esses relatórios.'
+            periodo_ef = st.date_input(
+                'Período dos lançamentos',
+                value=(inicio_padrao_ef, fim_padrao_ef),
+                format='DD/MM/YYYY',
+                key='ef242_periodo',
+                help=(
+                    'O intervalo selecionado será aplicado às três planilhas, '
+                    'aos downloads, ao consolidado e à conferência.'
+                ),
             )
+            periodo_completo_ef = (
+                isinstance(periodo_ef, (tuple, list)) and len(periodo_ef) == 2
+            )
+            if periodo_completo_ef:
+                data_inicial_ef, data_final_ef = periodo_ef
+            else:
+                data_inicial_ef = data_final_ef = periodo_ef
+            ano_ef = int(data_inicial_ef.year)
 
             despesas_ef, fornecedores_ef, recebidos_ef = {}, {}, {}
             if any([arq_despesa_ef, arq_fornecedor_ef, arq_recebido_ef]):
@@ -8896,6 +8909,35 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     recebidos_ef = processar_recebidos(
                         arq_recebido_ef.getvalue(), int(ano_ef)
                     ) if arq_recebido_ef is not None else {}
+
+                    if data_final_ef < data_inicial_ef:
+                        raise ValueError('A Data Final não pode ser anterior à Data Inicial.')
+                    if data_final_ef.year != data_inicial_ef.year:
+                        raise ValueError(
+                            'Selecione um período dentro do mesmo ano para estes relatórios.'
+                        )
+
+                    def filtrar_periodo_ef(grupos_ef):
+                        filtrados_ef = {}
+                        for conta_ef, df_grupo_ef in (grupos_ef or {}).items():
+                            datas_grupo_ef = pd.to_datetime(
+                                df_grupo_ef['DATA'], dayfirst=True, errors='coerce'
+                            )
+                            mascara_ef = datas_grupo_ef.dt.date.between(
+                                data_inicial_ef, data_final_ef, inclusive='both'
+                            )
+                            parte_ef = df_grupo_ef.loc[mascara_ef].copy()
+                            if not parte_ef.empty:
+                                filtrados_ef[conta_ef] = parte_ef.reset_index(drop=True)
+                        return filtrados_ef
+
+                    despesas_ef = filtrar_periodo_ef(despesas_ef)
+                    fornecedores_ef = filtrar_periodo_ef(fornecedores_ef)
+                    recebidos_ef = filtrar_periodo_ef(recebidos_ef)
+                    if not any([despesas_ef, fornecedores_ef, recebidos_ef]):
+                        raise ValueError(
+                            'Nenhum lançamento foi encontrado no período selecionado.'
+                        )
 
                     st.markdown('#### Pré-visualização dos lançamentos')
                     tabs_nomes_ef = []
@@ -8951,7 +8993,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         download_despesa_ef.download_button(
                             'Baixar Despesa · Modelo Domínio',
                             data=arquivo_despesa_ef,
-                            file_name=f'ELETRO_FORTE_242_DESPESA_{int(ano_ef)}.xlsx',
+                            file_name=(
+                                'ELETRO_FORTE_242_DESPESA_'
+                                f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
+                                f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
+                            ),
                             mime=mime_excel_ef,
                             use_container_width=True,
                             key='ef242_download_despesa',
@@ -8964,7 +9010,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         download_fornecedor_ef.download_button(
                             'Baixar Fornecedor · Modelo Domínio',
                             data=arquivo_fornecedor_ef,
-                            file_name=f'ELETRO_FORTE_242_FORNECEDOR_{int(ano_ef)}.xlsx',
+                            file_name=(
+                                'ELETRO_FORTE_242_FORNECEDOR_'
+                                f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
+                                f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
+                            ),
                             mime=mime_excel_ef,
                             use_container_width=True,
                             key='ef242_download_fornecedor',
@@ -8977,7 +9027,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         download_recebido_ef.download_button(
                             'Baixar Recebido · Modelo Domínio',
                             data=arquivo_recebido_ef,
-                            file_name=f'ELETRO_FORTE_242_RECEBIDO_{int(ano_ef)}.xlsx',
+                            file_name=(
+                                'ELETRO_FORTE_242_RECEBIDO_'
+                                f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
+                                f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
+                            ),
                             mime=mime_excel_ef,
                             use_container_width=True,
                             key='ef242_download_recebido',
@@ -8997,7 +9051,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         st.download_button(
                             'Baixar consolidado · Banco por banco',
                             data=arquivo_consolidado_ef,
-                            file_name=f'ELETRO_FORTE_242_CONSOLIDADO_{int(ano_ef)}.xlsx',
+                            file_name=(
+                                'ELETRO_FORTE_242_CONSOLIDADO_'
+                                f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
+                                f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
+                            ),
                             mime=mime_excel_ef,
                             use_container_width=True,
                             key='ef242_download_consolidado',
