@@ -8878,27 +8878,38 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             fim_padrao_ef = hoje_ef.replace(
                 day=calendar.monthrange(hoje_ef.year, hoje_ef.month)[1]
             )
-            periodo_ef = st.date_input(
-                'Período dos lançamentos',
-                value=(inicio_padrao_ef, fim_padrao_ef),
-                format='DD/MM/YYYY',
-                key='ef242_periodo',
-                help=(
-                    'O intervalo selecionado será aplicado às três planilhas, '
-                    'aos downloads, ao consolidado e à conferência.'
-                ),
+            st.markdown('##### Período dos lançamentos')
+            col_periodo_inicial_ef, col_periodo_final_ef = st.columns(2)
+            data_inicial_texto_ef = col_periodo_inicial_ef.text_input(
+                'Data Inicial',
+                value=inicio_padrao_ef.strftime('%d/%m/%Y'),
+                placeholder='DD/MM/AAAA',
+                key='ef242_data_inicial',
             )
-            periodo_completo_ef = (
-                isinstance(periodo_ef, (tuple, list)) and len(periodo_ef) == 2
+            data_final_texto_ef = col_periodo_final_ef.text_input(
+                'Data Final',
+                value=fim_padrao_ef.strftime('%d/%m/%Y'),
+                placeholder='DD/MM/AAAA',
+                key='ef242_data_final',
             )
-            if periodo_completo_ef:
-                data_inicial_ef, data_final_ef = periodo_ef
-            else:
-                data_inicial_ef = data_final_ef = periodo_ef
+            periodo_valido_ef = True
+            try:
+                data_inicial_ef = datetime.strptime(
+                    data_inicial_texto_ef.strip(), '%d/%m/%Y'
+                ).date()
+                data_final_ef = datetime.strptime(
+                    data_final_texto_ef.strip(), '%d/%m/%Y'
+                ).date()
+            except (TypeError, ValueError):
+                periodo_valido_ef = False
+                data_inicial_ef = data_final_ef = hoje_ef
+                st.warning('Digite as duas datas no formato DD/MM/AAAA.')
             ano_ef = int(data_inicial_ef.year)
 
             despesas_ef, fornecedores_ef, recebidos_ef = {}, {}, {}
-            if any([arq_despesa_ef, arq_fornecedor_ef, arq_recebido_ef]):
+            if periodo_valido_ef and any([
+                arq_despesa_ef, arq_fornecedor_ef, arq_recebido_ef
+            ]):
                 try:
                     despesas_ef = processar_despesas(
                         arq_despesa_ef.getvalue(), int(ano_ef)
