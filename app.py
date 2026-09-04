@@ -50,6 +50,35 @@ from razync.engekraft_969 import (
     CONTA_ITAU_969, gerar_modelo_dominio_engekraft_969, processar_extrato_engekraft_969,
 )
 
+
+# Cache dos processamentos pesados da empresa 242. O Streamlit executa o script
+# novamente a cada interação; como os argumentos abaixo são o conteúdo imutável
+# dos arquivos, o mesmo anexo pode reutilizar o resultado sem reler Excel/PDF/ZIP.
+_ef242_processar_despesas = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(processar_despesas)
+_ef242_processar_fornecedores = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(processar_fornecedores)
+_ef242_processar_recebidos = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(processar_recebidos)
+_ef242_processar_francesinhas = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(processar_zip_francesinhas)
+_ef242_corrigir_datas = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(corrigir_datas_com_francesinhas)
+_ef242_gerar_francesinhas = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(gerar_excel_francesinhas)
+_ef242_gerar_modelo = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=12
+)(gerar_modelo_dominio_eletro_forte)
+_ef242_gerar_consolidado = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(gerar_consolidado_bancos_eletro_forte)
+
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
 CONFIGURACOES_RADANI = {
@@ -3979,6 +4008,7 @@ def aplicar_classificacoes_automaticas(df, banco, base_classificacoes):
             resultado.at[indice, '_CLASSIFICAÇÃO'] = 'Revisar padrão novo'
     return resultado
 
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=16)
 def classificar_planilha_final(
     file_bytes, filename, base_classificacoes, contas_bancarias=None,
     empresa_classificacao='', coluna_substituir='', valores_substituiveis=None
@@ -5019,6 +5049,7 @@ def nome_banco_por_chave(chave):
         'santander': 'Santander', 'banco_brasil': 'Banco do Brasil'
     }.get(chave, chave)
 
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=16)
 def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None):
     """Lê a planilha final e retorna somente o banco escolhido para conferência."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -5381,6 +5412,7 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
         reader._razync_ocr_error = erro_ocr
     return lancamentos
 
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename):
     """Lê a conferência pelo mesmo motor central usado em todo o Razync."""
     termos_saldo = [
@@ -5410,6 +5442,7 @@ def processar_extrato_conferencia_empresa(file_bytes, filename):
             raise ValueError(erro_leitura)
     return filtrados
 
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados=None):
     """Compara movimentos por dia e faz pareamento individual por data e centavos."""
     colunas_base = ['DESCRIÇÃO', 'DATA', 'VALOR', 'HISTÓRICO']
@@ -8787,7 +8820,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 try:
                     df_francesinhas_ef, avisos_francesinhas_ef = executar_com_loading(
                         'Lendo e organizando as francesinhas...',
-                        processar_zip_francesinhas,
+                        _ef242_processar_francesinhas,
                         zip_francesinhas_ef.getvalue(),
                     )
                     conta_508_ef = df_francesinhas_ef.loc[
@@ -8864,7 +8897,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     if not modelo_francesinhas_ef:
                         raise FileNotFoundError('Modelo Domínio não encontrado no sistema.')
 
-                    arquivo_francesinhas_ef = gerar_excel_francesinhas(
+                    arquivo_francesinhas_ef = _ef242_gerar_francesinhas(
                         modelo_francesinhas_ef, df_francesinhas_ef
                     )
                     nome_francesinhas_ef = (
@@ -8957,13 +8990,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 arq_despesa_ef, arq_fornecedor_ef, arq_recebido_ef
             ]):
                 try:
-                    despesas_ef = processar_despesas(
+                    despesas_ef = _ef242_processar_despesas(
                         arq_despesa_ef.getvalue(), int(ano_ef)
                     ) if arq_despesa_ef is not None else {}
-                    fornecedores_ef = processar_fornecedores(
+                    fornecedores_ef = _ef242_processar_fornecedores(
                         arq_fornecedor_ef.getvalue(), int(ano_ef)
                     ) if arq_fornecedor_ef is not None else {}
-                    recebidos_ef = processar_recebidos(
+                    recebidos_ef = _ef242_processar_recebidos(
                         arq_recebido_ef.getvalue(), int(ano_ef)
                     ) if arq_recebido_ef is not None else {}
 
@@ -8972,12 +9005,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     avisos_zip_correcao_ef = []
                     if zip_correcao_francesinhas_ef is not None:
                         francesinhas_correcao_ef, avisos_zip_correcao_ef = (
-                            processar_zip_francesinhas(
+                            _ef242_processar_francesinhas(
                                 zip_correcao_francesinhas_ef.getvalue()
                             )
                         )
                         recebidos_ef, resumo_correcao_ef, pendencias_correcao_ef = (
-                            corrigir_datas_com_francesinhas(
+                            _ef242_corrigir_datas(
                                 recebidos_ef, francesinhas_correcao_ef
                             )
                         )
@@ -9082,7 +9115,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         raise FileNotFoundError('Modelo Domínio não encontrado no sistema.')
 
                     if despesas_ef:
-                        arquivo_despesa_ef = gerar_modelo_dominio_eletro_forte(
+                        arquivo_despesa_ef = _ef242_gerar_modelo(
                             arq_despesa_ef.getvalue(), arq_despesa_ef.name,
                             modelo_bytes_ef, despesas_ef, {}, {}
                         )
@@ -9099,7 +9132,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             key='ef242_download_despesa',
                         )
                     if fornecedores_ef:
-                        arquivo_fornecedor_ef = gerar_modelo_dominio_eletro_forte(
+                        arquivo_fornecedor_ef = _ef242_gerar_modelo(
                             arq_fornecedor_ef.getvalue(), arq_fornecedor_ef.name,
                             modelo_bytes_ef, None, fornecedores_ef, {}
                         )
@@ -9116,7 +9149,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             key='ef242_download_fornecedor',
                         )
                     if recebidos_ef:
-                        arquivo_recebido_ef = gerar_modelo_dominio_eletro_forte(
+                        arquivo_recebido_ef = _ef242_gerar_modelo(
                             arq_recebido_ef.getvalue(), arq_recebido_ef.name,
                             modelo_bytes_ef, None, {}, recebidos_ef
                         )
@@ -9133,7 +9166,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             key='ef242_download_recebido',
                         )
                     if despesas_ef and fornecedores_ef and recebidos_ef:
-                        arquivo_consolidado_ef = gerar_consolidado_bancos_eletro_forte(
+                        arquivo_consolidado_ef = _ef242_gerar_consolidado(
                             modelo_bytes_ef,
                             despesas_ef,
                             fornecedores_ef,

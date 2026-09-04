@@ -88,3 +88,28 @@ def test_conferencia_242_usa_consolidado_separado_por_conta():
     assert "'slug': 'itau_508'" in texto
     assert "'slug': 'itau_509'" in texto
     assert "ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)" in texto
+
+
+def test_empresa_242_reutiliza_processamentos_pesados_entre_interacoes():
+    texto = APP.read_text(encoding="utf-8")
+    caches_242 = [
+        "_ef242_processar_despesas",
+        "_ef242_processar_fornecedores",
+        "_ef242_processar_recebidos",
+        "_ef242_processar_francesinhas",
+        "_ef242_corrigir_datas",
+        "_ef242_gerar_modelo",
+        "_ef242_gerar_consolidado",
+    ]
+    for cache in caches_242:
+        assert texto.count(cache) >= 2
+
+    for funcao in [
+        "classificar_planilha_final",
+        "ler_planilha_organizada_conferencia",
+        "processar_extrato_conferencia_empresa",
+        "conciliar_empresa_com_extrato",
+    ]:
+        posicao = texto.index(f"def {funcao}")
+        trecho_anterior = texto[max(0, posicao - 100):posicao]
+        assert "@st.cache_data" in trecho_anterior
