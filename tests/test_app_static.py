@@ -121,3 +121,12 @@ def test_detector_prioriza_bb_e_contas_itau_da_242():
     assert "EXTRATO DE CONTA CORRENTE - AUTORIZAVEL" in texto
     assert "CLIENTE - CONTA ATUAL" in texto
     assert "return 'BANCO DO BRASIL'" in texto
+
+
+def test_base_242_classifica_planilha_consolidada_em_uma_etapa():
+    texto = APP.read_text(encoding="utf-8")
+    assert "'Consolidada', 'Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'" in texto
+    assert "modo_consolidado_eletro_forte=False" in texto
+    assert "if modo_consolidado_eletro_forte:" in texto
+    assert "valores_regra = {'0', '166'}" in texto
+    assert "valores_regra = {'', '0', '14', '16', '166'}" in texto
