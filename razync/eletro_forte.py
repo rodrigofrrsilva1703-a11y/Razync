@@ -332,3 +332,56 @@ def gerar_modelo_dominio_eletro_forte(
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
+
+
+def gerar_consolidado_bancos_eletro_forte(
+    modelo_bytes: bytes,
+    despesas: Dict[str, pd.DataFrame] | None,
+    fornecedores: Dict[str, pd.DataFrame] | None,
+    recebidos: Dict[str, pd.DataFrame] | None,
+) -> bytes:
+    """Reúne os três relatórios em um único Modelo Domínio, por conta bancária."""
+    from openpyxl import load_workbook
+
+    if not modelo_bytes:
+        raise FileNotFoundError("Modelo Domínio não encontrado no sistema.")
+
+    grupos: Dict[str, list[pd.DataFrame]] = {}
+    for conjunto in (despesas or {}, fornecedores or {}, recebidos or {}):
+        for conta, df in conjunto.items():
+            if df is not None and not df.empty:
+                grupos.setdefault(str(conta), []).append(df.copy())
+
+    if not grupos:
+        raise ValueError("Nenhum lançamento válido foi encontrado nos três relatórios.")
+
+    wb = load_workbook(io.BytesIO(modelo_bytes))
+    template = wb[wb.sheetnames[0]]
+    nomes_abas = {
+        "8": "Banco do Brasil - 8",
+        "508": "Itau - 508",
+        "509": "Itau - 509",
+        "0": "Revisar - 0",
+    }
+    ordem_contas = ["8", "508", "509", "0"]
+    restantes = sorted(conta for conta in grupos if conta not in ordem_contas)
+
+    for conta in ordem_contas + restantes:
+        partes = grupos.get(conta)
+        if not partes:
+            continue
+        consolidado = pd.concat(partes, ignore_index=True)
+        consolidado["DATA"] = pd.to_datetime(
+            consolidado["DATA"], dayfirst=True, errors="coerce"
+        )
+        consolidado = consolidado.sort_values(
+            ["DATA", "HISTÓRICO"], kind="stable", na_position="last"
+        ).reset_index(drop=True)
+        ws = wb.copy_worksheet(template)
+        ws.title = nomes_abas.get(conta, f"Conta - {conta}")[:31]
+        _preencher_aba_modelo(ws, consolidado)
+
+    wb.remove(template)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
