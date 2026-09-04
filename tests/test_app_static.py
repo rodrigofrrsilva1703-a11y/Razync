@@ -72,7 +72,10 @@ def test_erros_nao_expoem_traceback():
 
 def test_empresa_242_usa_periodo_em_vez_de_ano_manual():
     texto = APP.read_text(encoding="utf-8")
-    assert "'Período dos lançamentos'" in texto
-    assert "key='ef242_periodo'" in texto
+    assert "Período dos lançamentos" in texto
+    assert "key='ef242_data_inicial'" in texto
+    assert "key='ef242_data_final'" in texto
+    assert "placeholder='DD/MM/AAAA'" in texto
+    assert "key='ef242_periodo'" not in texto
     assert "key='ef242_ano'" not in texto
     assert "Nenhum lançamento foi encontrado no período selecionado." in texto
