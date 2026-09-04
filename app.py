@@ -35,7 +35,8 @@ from razync.santander_statement import (parece_extrato_santander_empresarial, pr
 from razync.radani import analisar_desmembramentos, consolidar_comprovantes_sispag
 from razync.bradesco_radani import processar_extrato_bradesco_radani
 from razync.eletro_forte import (
-    CONTAS_ELETRO_FORTE, gerar_consolidado_bancos_eletro_forte,
+    CONTAS_ELETRO_FORTE, corrigir_datas_com_francesinhas,
+    gerar_consolidado_bancos_eletro_forte,
     gerar_modelo_dominio_eletro_forte, inferir_ano_recebidos,
     processar_despesas, processar_fornecedores, processar_recebidos,
 )
@@ -8872,6 +8873,15 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     'Planilha Recebido', type=['xls', 'xlsx'], key='ef242_recebido'
                 )
                 download_recebido_ef = st.empty()
+            zip_correcao_francesinhas_ef = st.file_uploader(
+                'ZIP das Francesinhas · corrigir datas automaticamente',
+                type=['zip'],
+                key='ef242_zip_correcao_datas',
+                help=(
+                    'O ZIP não cria novos lançamentos. Ele identifica os recebimentos '
+                    'existentes e substitui somente a data pela informação “Emitido em”.'
+                ),
+            )
 
             hoje_ef = datetime.now().date()
             inicio_padrao_ef = hoje_ef.replace(day=1)
@@ -8921,6 +8931,21 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         arq_recebido_ef.getvalue(), int(ano_ef)
                     ) if arq_recebido_ef is not None else {}
 
+                    resumo_correcao_ef = None
+                    pendencias_correcao_ef = pd.DataFrame()
+                    avisos_zip_correcao_ef = []
+                    if zip_correcao_francesinhas_ef is not None:
+                        francesinhas_correcao_ef, avisos_zip_correcao_ef = (
+                            processar_zip_francesinhas(
+                                zip_correcao_francesinhas_ef.getvalue()
+                            )
+                        )
+                        recebidos_ef, resumo_correcao_ef, pendencias_correcao_ef = (
+                            corrigir_datas_com_francesinhas(
+                                recebidos_ef, francesinhas_correcao_ef
+                            )
+                        )
+
                     if data_final_ef < data_inicial_ef:
                         raise ValueError('A Data Final não pode ser anterior à Data Inicial.')
                     if data_final_ef.year != data_inicial_ef.year:
@@ -8949,6 +8974,30 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         raise ValueError(
                             'Nenhum lançamento foi encontrado no período selecionado.'
                         )
+
+                    if resumo_correcao_ef is not None:
+                        st.markdown('#### Correção pelas Francesinhas')
+                        cf1, cf2, cf3 = st.columns(3)
+                        cf1.metric('Datas corrigidas', resumo_correcao_ef['corrigidos'])
+                        cf2.metric(
+                            'Não encontradas', resumo_correcao_ef['nao_encontrados']
+                        )
+                        cf3.metric('Ambíguas', resumo_correcao_ef['ambiguos'])
+                        if not pendencias_correcao_ef.empty:
+                            previa_pendencias_ef = pendencias_correcao_ef.copy()
+                            previa_pendencias_ef['DATA FRANCESINHA'] = pd.to_datetime(
+                                previa_pendencias_ef['DATA FRANCESINHA']
+                            ).dt.strftime('%d/%m/%Y')
+                            st.warning(
+                                'As pendências abaixo foram preservadas sem alteração.'
+                            )
+                            st.dataframe(
+                                previa_pendencias_ef,
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+                        for aviso_zip_ef in avisos_zip_correcao_ef:
+                            st.caption(aviso_zip_ef)
 
                     st.markdown('#### Pré-visualização dos lançamentos')
                     tabs_nomes_ef = []
