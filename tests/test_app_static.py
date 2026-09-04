@@ -113,3 +113,11 @@ def test_empresa_242_reutiliza_processamentos_pesados_entre_interacoes():
         posicao = texto.index(f"def {funcao}")
         trecho_anterior = texto[max(0, posicao - 100):posicao]
         assert "@st.cache_data" in trecho_anterior
+
+
+def test_detector_prioriza_bb_e_contas_itau_da_242():
+    texto = APP.read_text(encoding="utf-8")
+    assert "['105318', '181537']" in texto
+    assert "EXTRATO DE CONTA CORRENTE - AUTORIZAVEL" in texto
+    assert "CLIENTE - CONTA ATUAL" in texto
+    assert "return 'BANCO DO BRASIL'" in texto

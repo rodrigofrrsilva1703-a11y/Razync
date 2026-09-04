@@ -1635,6 +1635,23 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
     digitos_nome = re.sub(r'\D', '', str(filename_str))
     digitos_cabecalho = re.sub(r'\D', '', str(texto_conteudo)[:6000])
 
+    # Contas Itaú da Eletro Forte. A identificação explícita pelo nome deve
+    # ocorrer antes de analisar códigos de bancos citados nos lançamentos.
+    if any(conta in digitos_nome for conta in ['105318', '181537']):
+        return 'BANCO ITAU'
+
+    # Os arquivos do Banco do Brasil costumam ser nomeados apenas como "BB" e
+    # o PDF Autorizável não imprime o nome completo do banco na camada de texto.
+    # Sem estas assinaturas, um código 341 de uma TED dentro do extrato fazia o
+    # documento inteiro ser confundido com Itaú.
+    if re.search(r'(^|[^A-Z0-9])BB([^A-Z0-9]|$)', nome):
+        return 'BANCO DO BRASIL'
+    if (
+        'EXTRATO DE CONTA CORRENTE - AUTORIZAVEL' in cabecalho
+        and 'CLIENTE - CONTA ATUAL' in cabecalho
+    ):
+        return 'BANCO DO BRASIL'
+
     # As empresas também nomeiam os extratos apenas com agência/conta. Essa
     # identificação não depende do mês ou do ano presentes no nome do arquivo.
     contas_nova_geracao = [
