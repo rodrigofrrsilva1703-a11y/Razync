@@ -5460,6 +5460,9 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename):
     """Lê a conferência pelo mesmo motor central usado em todo o Razync."""
+    # Versão do parser para invalidar resultados antigos do cache quando a regra
+    # de leitura do BB Autorizável mudar.
+    _parser_conferencia_version = 'bb-rende-facil-v2'
     termos_saldo = [
         'saldo anterior', 'saldo aplic', 'saldo invest', 'saldo total disponivel',
         'saldo movimentacao conta', 'sdo aplic aut mais ap', 'saldo final',
