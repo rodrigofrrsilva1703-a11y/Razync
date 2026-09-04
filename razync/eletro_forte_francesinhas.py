@@ -31,7 +31,7 @@ def _texto_pdf(conteudo: bytes) -> str:
 
 
 def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.DataFrame:
-    """Extrai apenas liquidações L e usa a data de emissão do relatório."""
+    """Extrai liquidações L usando Emitido em e Crédito/Débito."""
     texto = _texto_pdf(conteudo)
     conta_encontrada = re.search(r"\b\d{4}/(10531-8|18153-7)\b", texto)
     if not conta_encontrada:
@@ -59,29 +59,19 @@ def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.Dat
         encontrado = padrao_linha.match(linha)
         if not encontrado:
             continue
-        # A coluna VALOR da francesinha é o valor nominal do título. O campo
-        # final (crédito) pode vir líquido de pequenos ajustes/tarifas e, por isso,
-        # não deve substituir o valor do lançamento no Modelo Domínio.
-        valor_titulo = _valor_br(encontrado.group("valor"))
-        if valor_titulo <= 0:
+        # Regra da empresa 242: o lançamento usa o valor efetivamente
+        # creditado pelo Itaú (coluna Crédito/Débito), inclusive quando houver
+        # desconto no título. Ex.: 3.478,06 - 2.773,80 = 704,26.
+        valor_creditado = _valor_br(encontrado.group("credito"))
+        if valor_creditado <= 0:
             continue
 
-        # A data correta do lançamento é a data de liquidação indicada logo após
-        # o histórico L, e não a data em que o relatório foi emitido.
-        dia_mes = encontrado.group("data_liquidacao")
-        ano_liquidacao = int(data_emissao.year)
-        data_liquidacao = pd.to_datetime(
-            f"{dia_mes}/{ano_liquidacao}", dayfirst=True, errors="raise"
-        )
-        # Proteção para relatórios emitidos no começo de janeiro contendo
-        # liquidações dos últimos dias de dezembro do ano anterior.
-        if data_liquidacao > data_emissao + pd.Timedelta(days=31):
-            data_liquidacao = data_liquidacao.replace(year=ano_liquidacao - 1)
-
+        # A data contábil definida para as francesinhas da 242 é a data
+        # "Emitido em" do relatório, não o Dia/mês da liquidação.
         registros.append({
             "DESCRIÇÃO": "BANCO ITAÚ",
-            "DATA": data_liquidacao,
-            "VALOR": valor_titulo,
+            "DATA": data_emissao,
+            "VALOR": valor_creditado,
             "DÉBITO": conta_dominio,
             "CRÉDITO": "",
             "HISTÓRICO": (

@@ -210,7 +210,7 @@ def corrigir_datas_com_francesinhas(
     francesinhas: pd.DataFrame,
     limite_dias: int = 7,
 ) -> tuple[Dict[str, pd.DataFrame], dict, pd.DataFrame]:
-    """Corrige somente a data de recebimentos conciliados com liquidações L."""
+    """Corrige data e, quando necessário, até 1 centavo pelo valor da francesinha."""
     corrigidos = {
         str(conta): df.copy().reset_index(drop=True)
         for conta, df in (recebidos or {}).items()
@@ -235,7 +235,9 @@ def corrigir_datas_com_francesinhas(
                 if identificador in usados:
                     continue
                 valor_linha = round(float(linha.get("VALOR", 0) or 0), 2)
-                if valor_linha != valor_correto:
+                # Alguns relatórios recebidos podem vir com diferença de 1 centavo
+                # em relação à francesinha. A francesinha é a fonte de verdade.
+                if abs(valor_linha - valor_correto) > 0.01:
                     continue
                 data_linha = pd.to_datetime(linha.get("DATA"), errors="coerce")
                 if pd.isna(data_linha):
@@ -270,6 +272,7 @@ def corrigir_datas_com_francesinhas(
             else:
                 indice = melhor[2]
                 grupo.at[indice, "DATA"] = data_correta
+                grupo.at[indice, "VALOR"] = valor_correto
                 usados.add((conta, indice))
                 resumo["corrigidos"] += 1
 
