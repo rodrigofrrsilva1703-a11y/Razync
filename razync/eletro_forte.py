@@ -246,7 +246,7 @@ def corrigir_datas_com_francesinhas(
                 if pd.isna(data_linha):
                     continue
                 diferenca_dias = (data_correta.normalize() - data_linha.normalize()).days
-                if not 0 <= diferenca_dias <= limite_dias:
+                if abs(diferenca_dias) > limite_dias:
                     continue
                 similaridade = SequenceMatcher(
                     None,

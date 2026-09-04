@@ -4212,7 +4212,12 @@ def classificar_planilha_final(
                     resumo['ja_preenchidos'] += 1
                     continue
                 resumo['elegiveis_regra'] += 1
-                if coluna_regra == 'debito':
+                # Na 242, o 0 é apenas marcador de pendência. Não o apaga antes de
+                # confirmar uma classificação segura: se a Base não encontrar conta,
+                # o arquivo deve continuar com 0 (nunca trocar por 1000 ou outro valor).
+                if atual_regra == '0':
+                    pass
+                elif coluna_regra == 'debito':
                     ws.cell(numero_linha, col_debito).value = None
                     debito_atual = ''
                 else:
@@ -4282,7 +4287,8 @@ def classificar_planilha_final(
             contrapartida_atual = texto_celula_seguro(
                 ws.cell(numero_linha, coluna_contrapartida).value
             )
-            if contrapartida_atual:
+            marcador_zero = (empresa_classificacao == 'eletro_forte' and contrapartida_atual == '0')
+            if contrapartida_atual and not marcador_zero:
                 resumo['automaticos'] += 1
                 if linha_estava_parcial:
                     resumo['parciais_completados'] += 1
@@ -4302,7 +4308,7 @@ def classificar_planilha_final(
                 assinatura_outro = f"outro|{sufixo_assinatura}" if sufixo_assinatura else assinatura
                 candidatos = candidatos_banco.get(assinatura_outro, set())
                 conta_segura = mapas_banco.get(assinatura_outro)
-            if 'antecipad' in normalizar_texto(historico):
+            if 'antecipad' in normalizar_texto(historico) and empresa_classificacao != 'eletro_forte':
                 ws.cell(numero_linha, coluna_contrapartida).value = 532
                 resumo['automaticos'] += 1
                 resumo['antecipados'] += 1
