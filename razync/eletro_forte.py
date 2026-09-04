@@ -235,9 +235,12 @@ def corrigir_datas_com_francesinhas(
                 if identificador in usados:
                     continue
                 valor_linha = round(float(linha.get("VALOR", 0) or 0), 2)
-                # Alguns relatórios recebidos podem vir com diferença de 1 centavo
-                # em relação à francesinha. A francesinha é a fonte de verdade.
-                if abs(valor_linha - valor_correto) > 0.01:
+                # Compara em centavos inteiros para evitar que 704,25 x 704,26
+                # vire 0,010000000000... no ponto flutuante e seja rejeitado.
+                # A francesinha é a fonte de verdade e aceita até 1 centavo.
+                centavos_linha = int(round(valor_linha * 100))
+                centavos_correto = int(round(valor_correto * 100))
+                if abs(centavos_linha - centavos_correto) > 1:
                     continue
                 data_linha = pd.to_datetime(linha.get("DATA"), errors="coerce")
                 if pd.isna(data_linha):
