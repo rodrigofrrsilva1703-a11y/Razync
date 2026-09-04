@@ -1,0 +1,28 @@
+name: Integrar leitor BB na conferencia
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/integrate_bb_statement.py'
+      - '.github/workflows/integrate_bb_statement.yml'
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/integrate_bb_statement.py
+      - run: python -m py_compile app.py razync/bb_statement.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py razync/bb_statement.py
+          git commit -m 'Usa leitor BB Autorizavel na conferencia de extratos' || true
+          git rm scripts/integrate_bb_statement.py .github/workflows/integrate_bb_statement.yml
+          git commit -m 'Remove integracao temporaria do leitor BB'
+          git push
