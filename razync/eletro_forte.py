@@ -210,7 +210,7 @@ def corrigir_datas_com_francesinhas(
     francesinhas: pd.DataFrame,
     limite_dias: int = 7,
 ) -> tuple[Dict[str, pd.DataFrame], dict, pd.DataFrame]:
-    """Corrige data e, quando necessário, até 1 centavo pelo valor da francesinha."""
+    """Corrige somente a data de recebimentos conciliados com liquidações L."""
     corrigidos = {
         str(conta): df.copy().reset_index(drop=True)
         for conta, df in (recebidos or {}).items()
@@ -235,18 +235,13 @@ def corrigir_datas_com_francesinhas(
                 if identificador in usados:
                     continue
                 valor_linha = round(float(linha.get("VALOR", 0) or 0), 2)
-                # Compara em centavos inteiros para evitar que 704,25 x 704,26
-                # vire 0,010000000000... no ponto flutuante e seja rejeitado.
-                # A francesinha é a fonte de verdade e aceita até 1 centavo.
-                centavos_linha = int(round(valor_linha * 100))
-                centavos_correto = int(round(valor_correto * 100))
-                if abs(centavos_linha - centavos_correto) > 1:
+                if valor_linha != valor_correto:
                     continue
                 data_linha = pd.to_datetime(linha.get("DATA"), errors="coerce")
                 if pd.isna(data_linha):
                     continue
                 diferenca_dias = (data_correta.normalize() - data_linha.normalize()).days
-                if abs(diferenca_dias) > limite_dias:
+                if not 0 <= diferenca_dias <= limite_dias:
                     continue
                 similaridade = SequenceMatcher(
                     None,
@@ -275,7 +270,6 @@ def corrigir_datas_com_francesinhas(
             else:
                 indice = melhor[2]
                 grupo.at[indice, "DATA"] = data_correta
-                grupo.at[indice, "VALOR"] = valor_correto
                 usados.add((conta, indice))
                 resumo["corrigidos"] += 1
 

@@ -31,7 +31,7 @@ def _texto_pdf(conteudo: bytes) -> str:
 
 
 def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.DataFrame:
-    """Extrai liquidações L usando Emitido em e Crédito/Débito."""
+    """Extrai apenas liquidações L e usa a data de emissão do relatório."""
     texto = _texto_pdf(conteudo)
     conta_encontrada = re.search(r"\b\d{4}/(10531-8|18153-7)\b", texto)
     if not conta_encontrada:
@@ -50,7 +50,7 @@ def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.Dat
     padrao_linha = re.compile(
         r"^\s*\d{3}\s+\S+\s+\S+\s+"
         r"(?P<pagador>.+?)\s+\d{4}\s+\d{2}/\d{2}/\d{2}\s+"
-        r"(?P<valor>[\d.]+,\d{2})\s+L\s+(?P<data_liquidacao>\d{2}/\d{2})"
+        r"(?P<valor>[\d.]+,\d{2})\s+L\s+\d{2}/\d{2}"
         r"(?:\s+\d{2}\s+[\d.]+,\d{2})?\s+"
         r"(?P<credito>[\d.]+,\d{2})\s*$"
     )
@@ -59,15 +59,9 @@ def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.Dat
         encontrado = padrao_linha.match(linha)
         if not encontrado:
             continue
-        # Regra da empresa 242: o lançamento usa o valor efetivamente
-        # creditado pelo Itaú (coluna Crédito/Débito), inclusive quando houver
-        # desconto no título. Ex.: 3.478,06 - 2.773,80 = 704,26.
         valor_creditado = _valor_br(encontrado.group("credito"))
         if valor_creditado <= 0:
             continue
-
-        # A data contábil definida para as francesinhas da 242 é a data
-        # "Emitido em" do relatório, não o Dia/mês da liquidação.
         registros.append({
             "DESCRIÇÃO": "BANCO ITAÚ",
             "DATA": data_emissao,
