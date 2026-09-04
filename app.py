@@ -5019,7 +5019,7 @@ def nome_banco_por_chave(chave):
         'santander': 'Santander', 'banco_brasil': 'Banco do Brasil'
     }.get(chave, chave)
 
-def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
+def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None):
     """Lê a planilha final e retorna somente o banco escolhido para conferência."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     colunas_base = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
@@ -5052,12 +5052,23 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo):
         col_hist = mapa.get('historico')
         col_desc = mapa.get('descricao')
         col_motivo = mapa.get('motivo')
+        col_debito = mapa.get('debito')
+        col_credito = mapa.get('credito')
         if col_data is None or col_valor is None or col_hist is None:
             continue
 
         banco_aba = identificar_chave_banco_empresa(nome_aba)
         aba_retirados = 'retir' in normalizar_texto(nome_aba)
         for _, linha in df_aba.iterrows():
+            if conta_alvo:
+                contas_linha = {
+                    re.sub(r'\D', '', texto_celula_seguro(linha[coluna]))
+                    for coluna in [col_debito, col_credito]
+                    if coluna is not None
+                }
+                conta_normalizada = re.sub(r'\D', '', str(conta_alvo))
+                if conta_normalizada not in contas_linha:
+                    continue
             banco_linha = (
                 identificar_chave_banco_empresa(linha[col_desc]) if col_desc is not None else ''
             ) or banco_aba
@@ -5490,7 +5501,10 @@ def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados
 
     return diario, faltando_planilha, a_mais_planilha, ignorados
 
-def renderizar_conferencia_autokraft(prefixo_chaves='autokraft', bancos_config=None):
+def renderizar_conferencia_autokraft(
+    prefixo_chaves='autokraft', bancos_config=None,
+    rotulo_planilha='Planilha final organizada'
+):
     """Exibe a conferência independente da planilha final do Grupo Autokraft."""
     st.markdown("---")
     st.markdown("### Conferência com o extrato bancário")
@@ -5533,7 +5547,7 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft', bancos_config=N
     coluna_planilha, coluna_extratos = st.columns(2)
     with coluna_planilha:
         planilha_final = st.file_uploader(
-            "Planilha final organizada",
+            rotulo_planilha,
             type=['xlsx', 'xls'],
             key=f"{prefixo_chaves}_planilha_final_conferencia",
             help="Pode ser o arquivo baixado pelo organizador com uma ou duas abas bancárias."
@@ -5561,8 +5575,9 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft', bancos_config=N
         bancos_detectados = set()
         datas_planilha = []
         for config in configs_escolhidas:
+            banco_leitura = config.get('banco', config['slug'])
             df_modelo, df_retirados, bancos_arquivo = ler_planilha_organizada_conferencia(
-                planilha_final.getvalue(), config['slug']
+                planilha_final.getvalue(), banco_leitura, config.get('conta')
             )
             dados_planilha[config['slug']] = {
                 'modelo': df_modelo,
@@ -5634,16 +5649,32 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft', bancos_config=N
                 continue
 
             chave_nome = identificar_chave_banco_empresa(arquivo_extrato.name)
-            if chave_nome in extratos_por_banco:
-                extratos_por_banco[chave_nome].extend(df_extrato.to_dict('records'))
+            digitos_nome = re.sub(r'\D', '', arquivo_extrato.name)
+            destinos_nome = [
+                config['slug'] for config in configs_escolhidas
+                if (
+                    (
+                        config.get('banco', config['slug']) == chave_nome
+                        and not config.get('identificadores')
+                    )
+                    or any(
+                        identificador in digitos_nome
+                        for identificador in config.get('identificadores', [])
+                    )
+                )
+            ]
+            if len(destinos_nome) == 1:
+                extratos_por_banco[destinos_nome[0]].extend(
+                    df_extrato.to_dict('records')
+                )
                 continue
 
             chaves_linhas = df_extrato['DESCRIÇÃO'].apply(identificar_chave_banco_empresa)
             chaves_reconhecidas = {
-                chave for chave in chaves_linhas.unique().tolist()
-                if chave in extratos_por_banco
+                config['slug'] for config in configs_escolhidas
+                if config.get('banco', config['slug']) in chaves_linhas.unique().tolist()
             }
-            if not chaves_reconhecidas:
+            if len(chaves_reconhecidas) != 1:
                 if len(configs_escolhidas) == 1:
                     chave_unica = configs_escolhidas[0]['slug']
                     extratos_por_banco[chave_unica].extend(df_extrato.to_dict('records'))
@@ -5651,9 +5682,14 @@ def renderizar_conferencia_autokraft(prefixo_chaves='autokraft', bancos_config=N
                     arquivos_nao_identificados.append(arquivo_extrato.name)
                 continue
 
-            for chave in chaves_reconhecidas:
-                df_banco = df_extrato[chaves_linhas.eq(chave)]
-                extratos_por_banco[chave].extend(df_banco.to_dict('records'))
+            chave_destino = next(iter(chaves_reconhecidas))
+            banco_destino = next(
+                config.get('banco', config['slug'])
+                for config in configs_escolhidas
+                if config['slug'] == chave_destino
+            )
+            df_banco = df_extrato[chaves_linhas.eq(banco_destino)]
+            extratos_por_banco[chave_destino].extend(df_banco.to_dict('records'))
 
         if arquivos_nao_identificados:
             st.warning(
@@ -9126,113 +9162,32 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
         with aba_operacoes_ef:
             st.markdown('#### Conferência com Extrato')
-            st.caption(
-                'Conferência independente por conta. Despesa e Fornecedor entram como saídas; '
-                'Recebido entra como entrada. A conta 0 fica somente para revisão manual.'
+            renderizar_conferencia_autokraft(
+                'eletro_forte_242',
+                bancos_config=[
+                    {
+                        'nome': 'Banco do Brasil · Conta 8',
+                        'slug': 'bb_8',
+                        'banco': 'banco_brasil',
+                        'conta': '8',
+                    },
+                    {
+                        'nome': 'Itaú · Conta 508',
+                        'slug': 'itau_508',
+                        'banco': 'itau',
+                        'conta': '508',
+                        'identificadores': ['105318'],
+                    },
+                    {
+                        'nome': 'Itaú · Conta 509',
+                        'slug': 'itau_509',
+                        'banco': 'itau',
+                        'conta': '509',
+                        'identificadores': ['181537'],
+                    },
+                ],
+                rotulo_planilha='Planilha consolidada',
             )
-
-            dados_conferencia_ef = {'8': [], '508': [], '509': []}
-            for origem_ef, grupos_ef, sinal_ef in [
-                ('Despesa', despesas_ef, -1),
-                ('Fornecedor', fornecedores_ef, -1),
-                ('Recebido', recebidos_ef, 1),
-            ]:
-                for conta_ef, df_origem_ef in (grupos_ef or {}).items():
-                    if conta_ef not in dados_conferencia_ef or df_origem_ef.empty:
-                        continue
-                    df_temp_ef = df_origem_ef.copy()
-                    df_temp_ef['DATA'] = pd.to_datetime(df_temp_ef['DATA'], dayfirst=True, errors='coerce')
-                    df_temp_ef['VALOR'] = pd.to_numeric(df_temp_ef['VALOR'], errors='coerce').fillna(0.0).abs() * sinal_ef
-                    df_temp_ef['ORIGEM'] = origem_ef
-                    dados_conferencia_ef[conta_ef].append(df_temp_ef)
-
-            configs_conf_ef = [
-                ('8', 'Banco do Brasil · Conta 8'),
-                ('508', 'Itaú · 105318 · Conta 508'),
-                ('509', 'Itaú · 181537 · Conta 509'),
-            ]
-            abas_conf_ef = st.tabs([rotulo for _, rotulo in configs_conf_ef])
-            for aba_conf_ef, (conta_conf_ef, rotulo_conf_ef) in zip(abas_conf_ef, configs_conf_ef):
-                with aba_conf_ef:
-                    partes_ef = dados_conferencia_ef.get(conta_conf_ef, [])
-                    if not partes_ef:
-                        st.info(f'Nenhum lançamento da conta {conta_conf_ef} nas planilhas anexadas.')
-                        continue
-                    df_plan_ef = pd.concat(partes_ef, ignore_index=True).dropna(subset=['DATA'])
-                    if df_plan_ef.empty:
-                        st.info('Não há datas válidas para conferência nesta conta.')
-                        continue
-                    inicio_ef = df_plan_ef['DATA'].min().normalize()
-                    fim_ef = df_plan_ef['DATA'].max().normalize()
-                    st.caption(f"Período: {inicio_ef.strftime('%d/%m/%Y')} a {fim_ef.strftime('%d/%m/%Y')}")
-
-                    extrato_ef = st.file_uploader(
-                        f'Extrato — {rotulo_conf_ef}',
-                        type=['pdf', 'ofx', 'csv', 'xlsx', 'xls'],
-                        key=f'ef242_extrato_conferencia_{conta_conf_ef}',
-                        help='Envie somente o extrato desta conta. Os dois Itaús são conferidos separadamente.',
-                    )
-                    if extrato_ef is None:
-                        st.info('Envie o extrato desta conta para iniciar a conferência.')
-                        continue
-                    try:
-                        movs_ef = executar_com_loading(
-                            f'Lendo o extrato da conta {conta_conf_ef}...',
-                            processar_extrato_conferencia_empresa,
-                            extrato_ef.getvalue(), extrato_ef.name,
-                        )
-                        df_ext_ef = pd.DataFrame(movs_ef or [])
-                        if df_ext_ef.empty:
-                            st.warning('Nenhum lançamento foi reconhecido neste extrato.')
-                            continue
-                        df_ext_ef['DATA'] = pd.to_datetime(df_ext_ef['DATA'], dayfirst=True, errors='coerce')
-                        df_ext_ef['VALOR'] = pd.to_numeric(df_ext_ef['VALOR'], errors='coerce').fillna(0.0)
-                        df_ext_ef = df_ext_ef[df_ext_ef['DATA'].between(inicio_ef, fim_ef, inclusive='both')].dropna(subset=['DATA'])
-                        if df_ext_ef.empty:
-                            st.warning('O extrato não possui lançamentos dentro do período das planilhas.')
-                            continue
-
-                        datas_ef = sorted(set(df_plan_ef['DATA'].dt.normalize()) | set(df_ext_ef['DATA'].dt.normalize()))
-                        linhas_ef = []
-                        for data_ef in datas_ef:
-                            p_ef = df_plan_ef[df_plan_ef['DATA'].dt.normalize().eq(data_ef)]
-                            e_ef = df_ext_ef[df_ext_ef['DATA'].dt.normalize().eq(data_ef)]
-                            ep = float(p_ef.loc[p_ef['VALOR'] > 0, 'VALOR'].sum())
-                            sp = float(abs(p_ef.loc[p_ef['VALOR'] < 0, 'VALOR'].sum()))
-                            ee = float(e_ef.loc[e_ef['VALOR'] > 0, 'VALOR'].sum())
-                            se = float(abs(e_ef.loc[e_ef['VALOR'] < 0, 'VALOR'].sum()))
-                            de, ds = round(ep - ee, 2), round(sp - se, 2)
-                            bate = abs(de) <= 0.02 and abs(ds) <= 0.02
-                            linhas_ef.append({
-                                'Data': data_ef.strftime('%d/%m/%Y'),
-                                'Entrada Planilha': ep, 'Entrada Extrato': ee, 'Dif. Entradas': de,
-                                'Saída Planilha': sp, 'Saída Extrato': se, 'Dif. Saídas': ds,
-                                'Status': '✅ Batendo' if bate else '❌ Divergente',
-                            })
-                        diario_ef = pd.DataFrame(linhas_ef)
-                        batendo_ef = int((diario_ef['Status'] == '✅ Batendo').sum())
-                        divergentes_ef = int((diario_ef['Status'] == '❌ Divergente').sum())
-                        c1_ef, c2_ef = st.columns(2)
-                        c1_ef.metric('Dias batendo', batendo_ef)
-                        c2_ef.metric('Dias divergentes', divergentes_ef)
-                        st.dataframe(
-                            diario_ef, use_container_width=True, hide_index=True,
-                            height=min(420, 38 + max(1, min(len(diario_ef), 10)) * 35),
-                            column_config={
-                                'Entrada Planilha': st.column_config.NumberColumn(format='R$ %.2f'),
-                                'Entrada Extrato': st.column_config.NumberColumn(format='R$ %.2f'),
-                                'Dif. Entradas': st.column_config.NumberColumn(format='R$ %.2f'),
-                                'Saída Planilha': st.column_config.NumberColumn(format='R$ %.2f'),
-                                'Saída Extrato': st.column_config.NumberColumn(format='R$ %.2f'),
-                                'Dif. Saídas': st.column_config.NumberColumn(format='R$ %.2f'),
-                            },
-                        )
-                        if divergentes_ef == 0:
-                            st.success('Conferência concluída: todos os dias estão batendo.')
-                        else:
-                            st.warning(f'{divergentes_ef} dia(s) possuem diferença entre planilhas e extrato.')
-                    except Exception as erro_conf_ef:
-                        st.error(f'Não foi possível conferir a conta {conta_conf_ef}: {erro_conf_ef}')
 
     if st.session_state['empresa_organizador'] == 'lcarlos':
         contas_lcarlos = {'santander': '513'}

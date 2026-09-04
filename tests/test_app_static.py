@@ -79,3 +79,12 @@ def test_empresa_242_usa_periodo_em_vez_de_ano_manual():
     assert "key='ef242_periodo'" not in texto
     assert "key='ef242_ano'" not in texto
     assert "Nenhum lançamento foi encontrado no período selecionado." in texto
+
+
+def test_conferencia_242_usa_consolidado_separado_por_conta():
+    texto = APP.read_text(encoding="utf-8")
+    assert "rotulo_planilha='Planilha consolidada'" in texto
+    assert "'slug': 'bb_8'" in texto
+    assert "'slug': 'itau_508'" in texto
+    assert "'slug': 'itau_509'" in texto
+    assert "ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)" in texto
