@@ -38,8 +38,9 @@ def processar_extrato_bb_autorizavel(file_bytes: bytes):
     """Lê o extrato BB Empresa no formato 'Extrato de conta corrente - Autorizável'.
 
     O PDF coloca o favorecido/pagador na linha seguinte e, em linhas de Rende Fácil,
-    pode colar o movimento ao saldo (ex.: '15.472,09 C0,00 C'). O parser usa somente
-    a primeira quantia como movimento e ignora saldos/aplicações automáticas.
+    pode colar o movimento ao saldo (ex.: '15.472,09 C0,00 C'). O parser usa a
+    primeira quantia como movimento e mantém BB Rende Fácil como lançamento real,
+    ignorando apenas linhas que sejam efetivamente saldos.
     """
     reader = PdfReader(io.BytesIO(file_bytes))
     linhas = []
@@ -50,8 +51,6 @@ def processar_extrato_bb_autorizavel(file_bytes: bytes):
     atual = None
     termos_ignorar = (
         'saldo anterior',
-        'bb rende fácil',
-        'bb rende facil',
         's a l d o',
     )
 
