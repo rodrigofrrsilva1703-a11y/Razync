@@ -35,13 +35,13 @@ from razync.santander_statement import (parece_extrato_santander_empresarial, pr
 from razync.radani import analisar_desmembramentos, consolidar_comprovantes_sispag
 from razync.bradesco_radani import processar_extrato_bradesco_radani
 from razync.eletro_forte import (
-    CONTAS_ELETRO_FORTE, corrigir_datas_com_francesinhas,
-    gerar_consolidado_bancos_eletro_forte,
+    CONTAS_ELETRO_FORTE, gerar_consolidado_bancos_eletro_forte,
     gerar_modelo_dominio_eletro_forte, inferir_ano_recebidos,
     processar_despesas, processar_fornecedores, processar_recebidos,
 )
 from razync.eletro_forte_francesinhas import (
-    gerar_excel_francesinhas, processar_zip_francesinhas,
+    corrigir_datas_com_francesinhas, gerar_excel_francesinhas,
+    processar_zip_francesinhas,
 )
 from razync.gz_1211 import (
     CONTA_ITAU_GZ, gerar_modelo_dominio_gz, processar_gz,
