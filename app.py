@@ -3251,8 +3251,8 @@ def renderizar_base_inteligente_eletro_forte():
         'separados. A classificação também é separada por origem: Despesa, Fornecedor e Recebido.'
     )
     st.caption(
-        'Fornecedor: somente DÉBITO 166 ou 0 é substituído. '
-        'Recebido: somente CRÉDITO 166, 0, 14 ou 16 é substituído. '
+        'Fornecedor: DÉBITO 166, 0 ou vazio pode ser classificado. '
+        'Recebido: CRÉDITO 166, 0, 14, 16 ou vazio pode ser classificado. '
         'Demais contas preenchidas são preservadas.'
     )
 
@@ -3314,9 +3314,9 @@ def renderizar_base_inteligente_eletro_forte():
     ])
     configuracoes = [
         ('Consolidada', '', set(), True),
-        ('Despesa', 'debito', {'0'}, False),
-        ('Fornecedor', 'debito', {'166', '0'}, False),
-        ('Recebido', 'credito', {'166', '0', '14', '16'}, False),
+        ('Despesa', 'debito', {'0', ''}, False),
+        ('Fornecedor', 'debito', {'166', '0', ''}, False),
+        ('Recebido', 'credito', {'166', '0', '14', '16', ''}, False),
         ('Francesinhas', 'credito', {''}, False),
     ]
 
@@ -3331,11 +3331,11 @@ def renderizar_base_inteligente_eletro_forte():
                     'a regra de CRÉDITO. Contas já classificadas são preservadas.'
                 )
             elif origem == 'Despesa':
-                st.caption('Somente as abas bancárias serão classificadas; na Despesa, apenas linhas com DÉBITO 0. A aba Principal é preservada.')
+                st.caption('Somente as abas bancárias serão classificadas; na Despesa, linhas com DÉBITO 0 ou vazio. A aba Principal é preservada.')
             elif origem == 'Fornecedor':
-                st.caption('Somente as abas bancárias serão classificadas; linhas com DÉBITO 166 ou 0. A aba Principal é preservada.')
+                st.caption('Somente as abas bancárias serão classificadas; linhas com DÉBITO 166, 0 ou vazio. A aba Principal é preservada.')
             elif origem == 'Recebido':
-                st.caption('Somente as abas bancárias serão classificadas; linhas com CRÉDITO 166, 0, 14 ou 16. A aba Principal é preservada.')
+                st.caption('Somente as abas bancárias serão classificadas; linhas com CRÉDITO 166, 0, 14, 16 ou vazio. A aba Principal é preservada.')
             elif origem == 'Francesinhas':
                 st.caption(
                     'Classifica a planilha gerada pela ferramenta Francesinhas, '
