@@ -208,3 +208,11 @@ def gerar_excel_francesinhas(modelo_bytes: bytes, dados: pd.DataFrame) -> bytes:
     saida = io.BytesIO()
     wb.save(saida)
     return saida.getvalue()
+
+def corrigir_datas_com_francesinhas(recebidos, francesinhas, limite_dias=7):
+    """Carrega a correção sob demanda para não bloquear a inicialização do app."""
+    from razync.eletro_forte import (
+        corrigir_datas_com_francesinhas as executar_correcao,
+    )
+
+    return executar_correcao(recebidos, francesinhas, limite_dias)
