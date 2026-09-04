@@ -1,0 +1,28 @@
+name: Invalidar cache conferencia BB
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/invalidate_bb_conferencia_cache.py'
+      - '.github/workflows/invalidate_bb_conferencia_cache.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/invalidate_bb_conferencia_cache.py
+      - run: python -m py_compile app.py razync/bb_statement.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git commit -m 'Invalida cache da conferencia para BB Rende Facil' || true
+          git rm scripts/invalidate_bb_conferencia_cache.py .github/workflows/invalidate_bb_conferencia_cache.yml
+          git commit -m 'Remove invalidador temporario do cache BB'
+          git push
