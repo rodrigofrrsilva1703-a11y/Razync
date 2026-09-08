@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 # Deploy sync: pesquisa de empresas aprovada em 2026-09-01.
 import pandas as pd
 import re
@@ -216,14 +215,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-_pesquisa_empresa_instantanea = components.declare_component(
-    "razync_company_search",
-    path=os.path.join(
-        os.path.dirname(__file__),
-        "components",
-        "company_search",
-    ),
-)
+def _pesquisa_empresa_instantanea(value="", placeholder="Pesquisar empresa", key=None, default=None, **kwargs):
+    """Busca de empresas usando widget nativo do Streamlit.
+
+    Evita o iframe/componente customizado que podia causar NotFoundError/removeChild
+    durante reruns rápidos no Streamlit Cloud.
+    """
+    if value is None:
+        value = default or ""
+    return st.text_input(
+        "Pesquisar empresa",
+        value=str(value or ""),
+        placeholder=placeholder or "Pesquisar empresa",
+        key=key or "razync_company_search_native",
+        label_visibility="collapsed",
+    )
 
 # ==============================================================================
 # ESTILIZAÇÃO CSS DARK MODE
