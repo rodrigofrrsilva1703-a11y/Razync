@@ -1,0 +1,32 @@
+name: Corrigir removeChild Streamlit
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix_streamlit_removechild.py'
+      - '.github/workflows/fix_streamlit_removechild.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fix_streamlit_removechild.py
+      - run: python -m py_compile app.py
+      - name: Validar remoção do componente customizado
+        run: |
+          ! grep -q "components.declare_component" app.py
+          grep -q "def _pesquisa_empresa_instantanea" app.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git commit -m 'Troca busca customizada por widget nativo do Streamlit'
+          git rm scripts/fix_streamlit_removechild.py .github/workflows/fix_streamlit_removechild.yml
+          git commit -m 'Remove correção temporária do removeChild'
+          git push
