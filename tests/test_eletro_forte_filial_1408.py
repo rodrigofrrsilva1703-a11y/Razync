@@ -33,3 +33,32 @@ def test_monta_extrato_substitui_recebido_e_desmembra_francesinha(monkeypatch):
     assert resumo["historicos_substituidos"] == 1
     assert resumo["grupos_francesinhas"] == 1
     assert set(modelo.loc[modelo["VALOR"] > 0, "DÉBITO"]) == {"512"}
+
+
+def test_preserva_cartao_rede_e_remove_documentos_do_historico(monkeypatch):
+    extrato = [
+        {
+            "DATA": "04/08/2026", "VALOR": 330.76,
+            "HISTÓRICO": "RECEBIMENTO REDE VISA 01.425.787/0001-04",
+        },
+        {
+            "DATA": "04/08/2026", "VALOR": -10.0,
+            "HISTÓRICO": "PIX ENVIADO CLIENTE 123.456.789-01",
+        },
+    ]
+    recebidos = pd.DataFrame([{
+        "DESCRIÇÃO": "BANCO ITAÚ", "DATA": pd.Timestamp("2026-08-04"),
+        "VALOR": 330.76, "DÉBITO": "512", "CRÉDITO": "",
+        "HISTÓRICO": "Recebido: HISTÓRICO QUE NÃO PODE SUBSTITUIR",
+    }])
+    monkeypatch.setattr(
+        "razync.eletro_forte_filial_1408.processar_recebidos",
+        lambda *args: {"512": recebidos},
+    )
+
+    modelo, resumo = montar_modelo_1408(extrato, b"xls", 2026)
+
+    assert resumo["historicos_substituidos"] == 0
+    assert modelo.iloc[0]["HISTÓRICO"] == "Recebido: RECEBIMENTO REDE VISA"
+    assert modelo.iloc[1]["HISTÓRICO"] == "Pago: PIX ENVIADO CLIENTE"
+    assert not modelo["HISTÓRICO"].str.contains(r"\d{3}\.\d{3}", regex=True).any()
