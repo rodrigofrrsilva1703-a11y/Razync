@@ -7,6 +7,9 @@ from razync.eletro_forte import (
     COLUNAS_MODELO,
     corrigir_datas_com_francesinhas,
     gerar_consolidado_bancos_eletro_forte,
+    processar_despesas,
+    processar_fornecedores,
+    processar_recebidos,
 )
 
 
@@ -29,6 +32,15 @@ def _modelo():
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
+
+
+def _relatorio_html(debito="166", credito="2", valor="100,50"):
+    return f"""
+    <table>
+      <tr><th>Data</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Histórico</th></tr>
+      <tr><td>03/08</td><td>{debito}</td><td>{credito}</td><td>{valor}</td><td>CLIENTE TESTE</td></tr>
+    </table>
+    """.encode("cp1252")
 
 
 def test_consolida_tres_origens_em_abas_por_banco():
@@ -67,6 +79,32 @@ def test_consolidado_mantem_conta_zero_separada():
     )
     wb = load_workbook(io.BytesIO(saida), data_only=False)
     assert wb.sheetnames == ["Revisar - 0"]
+
+
+def test_filial_1408_normaliza_todas_as_origens_para_conta_512():
+    despesas = processar_despesas(_relatorio_html(), 2026, "512")
+    fornecedores = processar_fornecedores(_relatorio_html(), 2026, "512")
+    recebidos = processar_recebidos(_relatorio_html(), 2026, "512")
+
+    assert list(despesas) == ["512"]
+    assert list(fornecedores) == ["512"]
+    assert list(recebidos) == ["512"]
+    assert despesas["512"].iloc[0]["CRÉDITO"] == "512"
+    assert fornecedores["512"].iloc[0]["CRÉDITO"] == "512"
+    assert recebidos["512"].iloc[0]["DÉBITO"] == "512"
+    assert despesas["512"].iloc[0]["VALOR"] == -100.50
+    assert recebidos["512"].iloc[0]["VALOR"] == 100.50
+
+
+def test_filial_1408_gera_consolidado_unico_itau_512():
+    despesas = {"512": _linha("2026-08-03", -100, "10", "512", "Pago: teste")}
+    recebidos = {"512": _linha("2026-08-04", 150, "512", "20", "Recebido: teste")}
+    saida = gerar_consolidado_bancos_eletro_forte(
+        _modelo(), despesas, {}, recebidos
+    )
+    wb = load_workbook(io.BytesIO(saida), data_only=False)
+    assert wb.sheetnames == ["Itau - 512"]
+    assert wb["Itau - 512"].max_row == 3
 
 
 def test_francesinha_corrige_data_sem_criar_ou_duplicar_lancamento():

@@ -30,14 +30,18 @@ def _texto_pdf(conteudo: bytes) -> str:
     )
 
 
-def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.DataFrame:
+def processar_francesinha_pdf(
+    conteudo: bytes, nome_arquivo: str = "", conta_dominio_unica: str | None = None
+) -> pd.DataFrame:
     """Extrai apenas liquidações L e usa a data de emissão do relatório."""
     texto = _texto_pdf(conteudo)
-    conta_encontrada = re.search(r"\b\d{4}/(10531-8|18153-7)\b", texto)
+    padrao_conta = r"\b\d{4}/(\d{4,8}-\d)\b" if conta_dominio_unica else r"\b\d{4}/(10531-8|18153-7)\b"
+    conta_encontrada = re.search(padrao_conta, texto)
     if not conta_encontrada:
-        raise ValueError(f"Conta Itaú 10531-8/18153-7 não encontrada em {nome_arquivo}.")
+        esperada = "conta Itaú" if conta_dominio_unica else "conta Itaú 10531-8/18153-7"
+        raise ValueError(f"{esperada.capitalize()} não encontrada em {nome_arquivo}.")
     conta_itau = conta_encontrada.group(1)
-    conta_dominio = CONTAS_POR_CONTA_ITAU[conta_itau]
+    conta_dominio = str(conta_dominio_unica or CONTAS_POR_CONTA_ITAU[conta_itau])
 
     emissao = re.search(
         rf"\b\d{{4}}/{re.escape(conta_itau)}\s+\S+\s+(\d{{2}}/\d{{2}}/\d{{2,4}})\b",
@@ -80,7 +84,9 @@ def processar_francesinha_pdf(conteudo: bytes, nome_arquivo: str = "") -> pd.Dat
     )
 
 
-def processar_zip_francesinhas(conteudo_zip: bytes) -> tuple[pd.DataFrame, list[str]]:
+def processar_zip_francesinhas(
+    conteudo_zip: bytes, conta_dominio_unica: str | None = None
+) -> tuple[pd.DataFrame, list[str]]:
     """Processa, de uma só vez, todos os PDFs válidos de um ZIP."""
     resultados = []
     avisos = []
@@ -114,7 +120,8 @@ def processar_zip_francesinhas(conteudo_zip: bytes) -> tuple[pd.DataFrame, list[
             hashes.add(assinatura)
             try:
                 df = processar_francesinha_pdf(
-                    conteudo, PurePosixPath(membro.filename).name
+                    conteudo, PurePosixPath(membro.filename).name,
+                    conta_dominio_unica,
                 )
                 if df.empty:
                     avisos.append(
@@ -187,14 +194,21 @@ def _preencher_modelo(ws, dados: pd.DataFrame) -> None:
             celula.protection = copy(protecao)
 
 
-def gerar_excel_francesinhas(modelo_bytes: bytes, dados: pd.DataFrame) -> bytes:
+def gerar_excel_francesinhas(
+    modelo_bytes: bytes, dados: pd.DataFrame,
+    contas_abas: tuple[tuple[str, str], ...] | None = None,
+) -> bytes:
     """Gera um único Excel, com abas separadas para as contas 508 e 509."""
     from openpyxl import load_workbook
 
     wb = load_workbook(io.BytesIO(modelo_bytes))
     template = wb[wb.sheetnames[0]]
     abas_criadas = 0
-    for conta, nome_aba in (("508", "Francesinhas - Itau 508"), ("509", "Francesinhas - Itau 509")):
+    contas_abas = contas_abas or (
+        ("508", "Francesinhas - Itau 508"),
+        ("509", "Francesinhas - Itau 509"),
+    )
+    for conta, nome_aba in contas_abas:
         parte = dados.loc[dados["DÉBITO"].astype(str) == conta].copy()
         if parte.empty:
             continue
@@ -203,7 +217,7 @@ def gerar_excel_francesinhas(modelo_bytes: bytes, dados: pd.DataFrame) -> bytes:
         _preencher_modelo(ws, parte)
         abas_criadas += 1
     if not abas_criadas:
-        raise ValueError("Nenhum lançamento das contas 508 ou 509 foi encontrado.")
+        raise ValueError("Nenhum lançamento das contas Itaú configuradas foi encontrado.")
     wb.remove(template)
     saida = io.BytesIO()
     wb.save(saida)

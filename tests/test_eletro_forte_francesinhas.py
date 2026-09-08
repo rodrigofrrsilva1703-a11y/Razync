@@ -68,6 +68,32 @@ def test_gera_excel_unico_com_abas_por_conta(monkeypatch):
     assert wb["Francesinhas - Itau 509"]["C2"].value == 403.60
 
 
+def test_filial_1408_aceita_conta_itau_do_pdf_e_converte_para_512(monkeypatch):
+    texto_filial = TEXTO_508.replace("10531-8", "99999-9")
+    monkeypatch.setattr(francesinhas, "_texto_pdf", lambda conteudo: texto_filial)
+
+    dados = francesinhas.processar_francesinha_pdf(
+        b"pdf-filial", "filial.pdf", conta_dominio_unica="512"
+    )
+
+    assert list(dados["DÉBITO"]) == ["512"]
+    assert list(dados["CONTA_ITAU"]) == ["99999-9"]
+    assert list(dados["HISTÓRICO"]) == ["Recebido: SIKA SA"]
+
+    wb_modelo = Workbook()
+    ws = wb_modelo.active
+    ws.append(francesinhas.COLUNAS_MODELO)
+    ws.append(["", None, 0.0, "", "", ""])
+    modelo = io.BytesIO()
+    wb_modelo.save(modelo)
+    saida = francesinhas.gerar_excel_francesinhas(
+        modelo.getvalue(), dados, (("512", "Francesinhas - Itau 512"),)
+    )
+    wb = load_workbook(io.BytesIO(saida), data_only=False)
+    assert wb.sheetnames == ["Francesinhas - Itau 512"]
+    assert wb["Francesinhas - Itau 512"]["D2"].value == 512
+
+
 def test_zip_rejeita_caminho_inseguro():
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as arquivo:
@@ -78,4 +104,3 @@ def test_zip_rejeita_caminho_inseguro():
         assert "inseguro" in str(erro)
     else:
         raise AssertionError("ZIP inseguro deveria ser rejeitado")
-

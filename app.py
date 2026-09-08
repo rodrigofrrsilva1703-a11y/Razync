@@ -3236,11 +3236,16 @@ def renderizar_base_inteligente_empresa(
                         f"{erro_classificacao}"
                     )
 
-def renderizar_base_inteligente_eletro_forte():
-    empresa = 'eletro_forte'
-    nome_empresa = '242 - ELETRO FORTE COMERCIAL ELETRICA LTDA'
-    bancos_permitidos = {'bb', 'itau_508', 'itau_509'}
-    contas_bancarias = {'bb': '8', 'itau_508': '508', 'itau_509': '509'}
+def renderizar_base_inteligente_eletro_forte(
+    empresa='eletro_forte',
+    nome_empresa='242 - ELETRO FORTE COMERCIAL ELETRICA LTDA',
+    contas_bancarias=None,
+):
+    contas_bancarias = contas_bancarias or {
+        'bb': '8', 'itau_508': '508', 'itau_509': '509'
+    }
+    bancos_permitidos = set(contas_bancarias)
+    prefixo_chaves = re.sub(r'[^a-z0-9_]+', '_', empresa.lower())
 
     url_base, chave_base, senha_admin = obter_config_classificacao_online()
     base = []
@@ -3253,8 +3258,8 @@ def renderizar_base_inteligente_eletro_forte():
 
     st.markdown(f'#### Base inteligente — {nome_empresa}')
     st.caption(
-        'O aprendizado é exclusivo da empresa 242 e mantém BB 8, Itaú 508 e Itaú 509 '
-        'separados. A classificação também é separada por origem: Despesa, Fornecedor e Recebido.'
+        f'O aprendizado é exclusivo da {nome_empresa} e mantém as contas bancárias '
+        'separadas. A classificação também é separada por origem: Despesa, Fornecedor e Recebido.'
     )
     st.caption(
         'Fornecedor: DÉBITO 166, 0 ou vazio pode ser classificado. '
@@ -3276,16 +3281,16 @@ def renderizar_base_inteligente_eletro_forte():
 
     st.markdown('##### Ensinar a Base Inteligente')
     arquivos_base = st.file_uploader(
-        'Planilhas já classificadas da 242',
+        f'Planilhas já classificadas da {nome_empresa.split(" - ", 1)[0]}',
         type=['xlsx', 'xls', 'zip'],
         accept_multiple_files=True,
-        key='base_upload_eletro_forte',
-        help='Use somente arquivos revisados da empresa 242.'
+        key=f'base_upload_{prefixo_chaves}',
+        help=f'Use somente arquivos revisados da {nome_empresa}.'
     )
     senha_digitada = st.text_input(
         'Senha administrativa para gravar aprendizado',
         type='password',
-        key='base_senha_eletro_forte'
+        key=f'base_senha_{prefixo_chaves}'
     ) if senha_admin else ''
     pode_gravar = bool(arquivos_base) and (
         not senha_admin or hmac.compare_digest(str(senha_digitada), str(senha_admin))
@@ -3294,7 +3299,7 @@ def renderizar_base_inteligente_eletro_forte():
         st.error('Senha administrativa inválida.')
     if st.button(
         'Aprender com planilhas revisadas',
-        key='base_aprender_eletro_forte',
+        key=f'base_aprender_{prefixo_chaves}',
         disabled=not pode_gravar,
         use_container_width=True
     ):
@@ -3302,16 +3307,16 @@ def renderizar_base_inteligente_eletro_forte():
             registros = importar_arquivos_classificados(arquivos_base, empresa)
             registros = [r for r in registros if r.get('banco') in bancos_permitidos]
             if not registros:
-                st.warning('Nenhum padrão válido da 242 foi encontrado.')
+                st.warning('Nenhum padrão válido desta empresa foi encontrado.')
             else:
                 quantidade = salvar_classificacoes_online(registros, empresa)
-                st.success(f'{quantidade} padrões da empresa 242 foram gravados/atualizados.')
+                st.success(f'{quantidade} padrões da empresa foram gravados/atualizados.')
                 st.rerun()
         except Exception as erro:
             st.error(f'Não foi possível atualizar a base: {erro}')
 
     if not base_empresa:
-        st.info('A empresa 242 ainda não possui padrões aprendidos.')
+        st.info('Esta empresa ainda não possui padrões aprendidos.')
 
     st.markdown('---')
     st.markdown('#### Classificar por planilha')
@@ -3332,8 +3337,8 @@ def renderizar_base_inteligente_eletro_forte():
         with aba:
             if origem == 'Consolidada':
                 st.caption(
-                    'Classifica de uma vez as abas Banco do Brasil 8, Itaú 508 e '
-                    'Itaú 509. Pagamentos usam a regra de DÉBITO; recebimentos usam '
+                    'Classifica de uma vez todas as abas bancárias da planilha. '
+                    'Pagamentos usam a regra de DÉBITO; recebimentos usam '
                     'a regra de CRÉDITO. Contas já classificadas são preservadas.'
                 )
             elif origem == 'Despesa':
@@ -3345,7 +3350,7 @@ def renderizar_base_inteligente_eletro_forte():
             elif origem == 'Francesinhas':
                 st.caption(
                     'Classifica a planilha gerada pela ferramenta Francesinhas, '
-                    'preenchendo o CRÉDITO e mantendo Itaú 508 e Itaú 509 separados.'
+                    'preenchendo o CRÉDITO e mantendo cada conta bancária separada.'
                 )
             else:
                 st.caption('Classificação exclusiva da planilha de Despesa; nenhuma regra adicional foi definida para substituir contas já preenchidas.')
@@ -3353,12 +3358,12 @@ def renderizar_base_inteligente_eletro_forte():
             planilha_final = st.file_uploader(
                 f'Planilha {origem} para classificar',
                 type=['xlsx'],
-                key=f'base_242_classificar_{origem.lower()}'
+                key=f'base_{prefixo_chaves}_classificar_{origem.lower()}'
             )
             if not planilha_final:
                 continue
             if not base_empresa:
-                st.warning('A Base Inteligente da 242 ainda não possui padrões aprendidos.')
+                st.warning('A Base Inteligente desta empresa ainda não possui padrões aprendidos.')
                 continue
 
             try:
@@ -3369,7 +3374,7 @@ def renderizar_base_inteligente_eletro_forte():
                     planilha_final.name,
                     base_empresa,
                     contas_bancarias,
-                    'eletro_forte',
+                    empresa,
                     coluna_regra,
                     valores_regra,
                     modo_consolidado,
@@ -3386,7 +3391,7 @@ def renderizar_base_inteligente_eletro_forte():
                     empresa,
                     contas_bancarias,
                     senha_admin,
-                    f'base_revisao_242_{origem.lower()}'
+                    f'base_revisao_{prefixo_chaves}_{origem.lower()}'
                 )
             except Exception as erro_classificacao:
                 st.error(f'Não foi possível classificar a planilha {origem}: {erro_classificacao}')
@@ -3881,6 +3886,8 @@ def identificar_banco_classificacao_eletro_forte(nome_aba='', descricao='', debi
         return 'itau_509'
     if '508' in valores:
         return 'itau_508'
+    if '512' in valores:
+        return 'itau_512'
     if '8' in valores:
         return 'bb'
 
@@ -3889,6 +3896,8 @@ def identificar_banco_classificacao_eletro_forte(nome_aba='', descricao='', debi
         return 'itau_509'
     if '508' in texto or '105318' in texto:
         return 'itau_508'
+    if '512' in texto:
+        return 'itau_512'
     if 'bb' in texto or 'banco do brasil' in texto:
         return 'bb'
     return ''
@@ -3902,7 +3911,7 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
     for nome_aba in xls.sheet_names:
         # Na empresa 242, a aba Principal é apenas a cópia preservada do relatório
         # original. A Base Inteligente aprende somente com as abas bancárias geradas.
-        if empresa == 'eletro_forte' and normalizar_texto(nome_aba).strip() == 'principal':
+        if empresa.startswith('eletro_forte') and normalizar_texto(nome_aba).strip() == 'principal':
             continue
         bruto = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
         indice_cabecalho = None
@@ -3934,7 +3943,7 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
             if not historico or not debito or not credito:
                 continue
             descricao_linha = linha[col_descricao] if col_descricao is not None else ''
-            if empresa == 'eletro_forte':
+            if empresa.startswith('eletro_forte'):
                 banco_linha = identificar_banco_classificacao_eletro_forte(
                     nome_aba, descricao_linha, debito, credito
                 )
@@ -4159,7 +4168,7 @@ def classificar_planilha_final(
     for ws in wb.worksheets:
         # Na 242, nunca classificar a aba Principal. Ela deve permanecer exatamente
         # como foi recebida; somente as abas BB/Itau do Modelo Domínio são alteradas.
-        if empresa_classificacao == 'eletro_forte' and normalizar_texto(ws.title).strip() == 'principal':
+        if empresa_classificacao.startswith('eletro_forte') and normalizar_texto(ws.title).strip() == 'principal':
             continue
         if 'retir' in normalizar_texto(ws.title):
             continue
@@ -4234,7 +4243,7 @@ def classificar_planilha_final(
                 ws.cell(numero_linha, col_descricao).value
                 if col_descricao is not None else ''
             )
-            if empresa_classificacao == 'eletro_forte':
+            if empresa_classificacao.startswith('eletro_forte'):
                 banco_linha = identificar_banco_classificacao_eletro_forte(
                     ws.title, descricao_linha, debito_atual, credito_atual
                 )
@@ -8862,27 +8871,44 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 bancos_config=[{'nome': 'Itaú', 'slug': 'itau'}],
             )
 
-    if st.session_state['empresa_organizador'] == 'eletro_forte':
-        empresa_ef = '242 - ELETRO FORTE COMERCIAL ELETRICA LTDA'
+    if st.session_state['empresa_organizador'] in {
+        'eletro_forte', 'eletro_forte_filial'
+    }:
+        filial_ef = st.session_state['empresa_organizador'] == 'eletro_forte_filial'
+        codigo_ef = '1408' if filial_ef else '242'
+        empresa_ef = (
+            '1408 - ELETRO FORTE COMERCIAL ELÉTRICA LTDA. (FILIAL)'
+            if filial_ef else '242 - ELETRO FORTE COMERCIAL ELETRICA LTDA'
+        )
+        chave_base_ef = 'eletro_forte_filial_1408' if filial_ef else 'eletro_forte'
+        prefixo_ef = 'ef1408' if filial_ef else 'ef242'
+        conta_unica_ef = '512' if filial_ef else None
+        contas_base_ef = (
+            {'itau_512': '512'} if filial_ef
+            else {'bb': '8', 'itau_508': '508', 'itau_509': '509'}
+        )
         aba_operacoes_ef, aba_francesinhas_ef, aba_base_ef = st.tabs([
             'Organizar arquivos', 'Francesinhas', 'Base Inteligente'
         ])
 
         with aba_base_ef:
-            renderizar_base_inteligente_eletro_forte()
+            renderizar_base_inteligente_eletro_forte(
+                chave_base_ef, empresa_ef, contas_base_ef
+            )
 
         with aba_francesinhas_ef:
             st.markdown('#### Francesinhas Itaú → Modelo Domínio')
             st.caption(
                 'Envie um único ZIP com todos os relatórios. O Razync identifica as '
-                'contas 10531-8 (508) e 18153-7 (509), utiliza a data “Emitido em” e '
+                + ('contas Itaú e usa a conta Domínio 512' if filial_ef else 'contas 10531-8 (508) e 18153-7 (509)')
+                + ', utiliza a data “Emitido em” e '
                 'importa somente as liquidações com Hist. L.'
             )
             zip_francesinhas_ef = st.file_uploader(
                 'Arquivo ZIP com todas as francesinhas',
                 type=['zip'],
-                key='ef242_francesinhas_zip',
-                help='O ZIP pode reunir os PDFs das duas contas Itaú e de todas as datas.'
+                key=f'{prefixo_ef}_francesinhas_zip',
+                help='O ZIP pode reunir os PDFs Itaú de todas as datas.'
             )
             if zip_francesinhas_ef is not None:
                 try:
@@ -8890,25 +8916,25 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         'Lendo e organizando as francesinhas...',
                         _ef242_processar_francesinhas,
                         zip_francesinhas_ef.getvalue(),
+                        conta_unica_ef,
                     )
-                    conta_508_ef = df_francesinhas_ef.loc[
-                        df_francesinhas_ef['DÉBITO'].astype(str) == '508'
-                    ]
-                    conta_509_ef = df_francesinhas_ef.loc[
-                        df_francesinhas_ef['DÉBITO'].astype(str) == '509'
-                    ]
+                    contas_francesinhas_ef = ['512'] if filial_ef else ['508', '509']
+                    partes_francesinhas_ef = {
+                        conta: df_francesinhas_ef.loc[
+                            df_francesinhas_ef['DÉBITO'].astype(str) == conta
+                        ] for conta in contas_francesinhas_ef
+                    }
                     fm1, fm2, fm3 = st.columns(3)
                     fm1.metric('Liquidações encontradas', len(df_francesinhas_ef))
-                    fm2.metric(
-                        'Itaú 508',
-                        formatar_moeda(float(conta_508_ef['VALOR'].sum())),
-                        help=f'{len(conta_508_ef)} lançamento(s)',
-                    )
-                    fm3.metric(
-                        'Itaú 509',
-                        formatar_moeda(float(conta_509_ef['VALOR'].sum())),
-                        help=f'{len(conta_509_ef)} lançamento(s)',
-                    )
+                    for coluna_metrica, conta in zip(
+                        [fm2, fm3], contas_francesinhas_ef
+                    ):
+                        parte = partes_francesinhas_ef[conta]
+                        coluna_metrica.metric(
+                            f'Itaú {conta}',
+                            formatar_moeda(float(parte['VALOR'].sum())),
+                            help=f'{len(parte)} lançamento(s)',
+                        )
 
                     datas_francesinhas_ef = pd.to_datetime(
                         df_francesinhas_ef['DATA'], errors='coerce'
@@ -8922,11 +8948,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     )
 
                     abas_previa_francesinhas = st.tabs([
-                        f'Itaú 508 · {len(conta_508_ef)}',
-                        f'Itaú 509 · {len(conta_509_ef)}',
+                        f'Itaú {conta} · {len(partes_francesinhas_ef[conta])}'
+                        for conta in contas_francesinhas_ef
                     ])
                     for aba_previa, conta_previa in zip(
-                        abas_previa_francesinhas, [conta_508_ef, conta_509_ef]
+                        abas_previa_francesinhas,
+                        [partes_francesinhas_ef[c] for c in contas_francesinhas_ef]
                     ):
                         with aba_previa:
                             if conta_previa.empty:
@@ -8966,10 +8993,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         raise FileNotFoundError('Modelo Domínio não encontrado no sistema.')
 
                     arquivo_francesinhas_ef = _ef242_gerar_francesinhas(
-                        modelo_francesinhas_ef, df_francesinhas_ef
+                        modelo_francesinhas_ef, df_francesinhas_ef,
+                        (("512", "Francesinhas - Itau 512"),) if filial_ef else None,
                     )
                     nome_francesinhas_ef = (
-                        'ELETRO_FORTE_242_FRANCESINHAS_'
+                        f'ELETRO_FORTE_{codigo_ef}_FRANCESINHAS_'
                         f'{inicio_francesinhas_ef.strftime("%d%m%Y")}_a_'
                         f'{fim_francesinhas_ef.strftime("%d%m%Y")}.xlsx'
                     )
@@ -8979,11 +9007,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         file_name=nome_francesinhas_ef,
                         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         use_container_width=True,
-                        key='ef242_download_francesinhas',
+                        key=f'{prefixo_ef}_download_francesinhas',
                     )
                 except Exception as erro_francesinhas_ef:
                     st.error(
-                        'Não foi possível processar as francesinhas da empresa 242: '
+                        f'Não foi possível processar as francesinhas da empresa {codigo_ef}: '
                         f'{erro_francesinhas_ef}'
                     )
 
@@ -8992,28 +9020,28 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             st.markdown('#### Relatórios bancários → Modelo Domínio')
             st.caption(
                 'Envie Despesa, Fornecedor e/ou Recebido. O processamento é automático. '
-                'BB = conta 8 · Itaú 105318 = 508 · Itaú 181537 = 509.'
+                + ('Itaú = conta 512.' if filial_ef else 'BB = conta 8 · Itaú 105318 = 508 · Itaú 181537 = 509.')
             )
             col_ef1, col_ef2, col_ef3 = st.columns(3)
             with col_ef1:
                 arq_despesa_ef = st.file_uploader(
-                    'Planilha Despesa', type=['xls', 'xlsx'], key='ef242_despesa'
+                    'Planilha Despesa', type=['xls', 'xlsx'], key=f'{prefixo_ef}_despesa'
                 )
                 download_despesa_ef = st.empty()
             with col_ef2:
                 arq_fornecedor_ef = st.file_uploader(
-                    'Planilha Fornecedor', type=['xls', 'xlsx'], key='ef242_fornecedor'
+                    'Planilha Fornecedor', type=['xls', 'xlsx'], key=f'{prefixo_ef}_fornecedor'
                 )
                 download_fornecedor_ef = st.empty()
             with col_ef3:
                 arq_recebido_ef = st.file_uploader(
-                    'Planilha Recebido', type=['xls', 'xlsx'], key='ef242_recebido'
+                    'Planilha Recebido', type=['xls', 'xlsx'], key=f'{prefixo_ef}_recebido'
                 )
                 download_recebido_ef = st.empty()
             zip_correcao_francesinhas_ef = st.file_uploader(
                 'ZIP das Francesinhas · corrigir datas automaticamente',
                 type=['zip'],
-                key='ef242_zip_correcao_datas',
+                key=f'{prefixo_ef}_zip_correcao_datas',
                 help=(
                     'O ZIP não cria novos lançamentos. Ele identifica os recebimentos '
                     'existentes e substitui somente a data pela informação “Emitido em”.'
@@ -9031,13 +9059,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 'Data Inicial',
                 value=inicio_padrao_ef.strftime('%d/%m/%Y'),
                 placeholder='DD/MM/AAAA',
-                key='ef242_data_inicial',
+                key=f'{prefixo_ef}_data_inicial',
             )
             data_final_texto_ef = col_periodo_final_ef.text_input(
                 'Data Final',
                 value=fim_padrao_ef.strftime('%d/%m/%Y'),
                 placeholder='DD/MM/AAAA',
-                key='ef242_data_final',
+                key=f'{prefixo_ef}_data_final',
             )
             periodo_valido_ef = True
             try:
@@ -9059,13 +9087,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             ]):
                 try:
                     despesas_ef = _ef242_processar_despesas(
-                        arq_despesa_ef.getvalue(), int(ano_ef)
+                        arq_despesa_ef.getvalue(), int(ano_ef), conta_unica_ef
                     ) if arq_despesa_ef is not None else {}
                     fornecedores_ef = _ef242_processar_fornecedores(
-                        arq_fornecedor_ef.getvalue(), int(ano_ef)
+                        arq_fornecedor_ef.getvalue(), int(ano_ef), conta_unica_ef
                     ) if arq_fornecedor_ef is not None else {}
                     recebidos_ef = _ef242_processar_recebidos(
-                        arq_recebido_ef.getvalue(), int(ano_ef)
+                        arq_recebido_ef.getvalue(), int(ano_ef), conta_unica_ef
                     ) if arq_recebido_ef is not None else {}
 
                     resumo_correcao_ef = None
@@ -9074,7 +9102,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     if zip_correcao_francesinhas_ef is not None:
                         francesinhas_correcao_ef, avisos_zip_correcao_ef = (
                             _ef242_processar_francesinhas(
-                                zip_correcao_francesinhas_ef.getvalue()
+                                zip_correcao_francesinhas_ef.getvalue(), conta_unica_ef
                             )
                         )
                         recebidos_ef, resumo_correcao_ef, pendencias_correcao_ef = (
@@ -9166,7 +9194,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             if 'Revisar · Conta 0' in nome_ef:
                                 st.warning('Conta 0 separada para revisão manual, conforme a regra da empresa.')
 
-                    # Cada relatório da 242 gera seu próprio arquivo final.
+                    # Cada relatório da empresa gera seu próprio arquivo final.
                     # A primeira aba preserva o relatório original e as abas seguintes
                     # são cópias do Modelo Domínio real existente no Razync.
                     mime_excel_ef = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -9191,13 +9219,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             'Baixar Despesa · Modelo Domínio',
                             data=arquivo_despesa_ef,
                             file_name=(
-                                'ELETRO_FORTE_242_DESPESA_'
+                                f'ELETRO_FORTE_{codigo_ef}_DESPESA_'
                                 f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
                                 f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
                             ),
                             mime=mime_excel_ef,
                             use_container_width=True,
-                            key='ef242_download_despesa',
+                            key=f'{prefixo_ef}_download_despesa',
                         )
                     if fornecedores_ef:
                         arquivo_fornecedor_ef = _ef242_gerar_modelo(
@@ -9208,13 +9236,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             'Baixar Fornecedor · Modelo Domínio',
                             data=arquivo_fornecedor_ef,
                             file_name=(
-                                'ELETRO_FORTE_242_FORNECEDOR_'
+                                f'ELETRO_FORTE_{codigo_ef}_FORNECEDOR_'
                                 f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
                                 f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
                             ),
                             mime=mime_excel_ef,
                             use_container_width=True,
-                            key='ef242_download_fornecedor',
+                            key=f'{prefixo_ef}_download_fornecedor',
                         )
                     if recebidos_ef:
                         arquivo_recebido_ef = _ef242_gerar_modelo(
@@ -9225,13 +9253,13 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             'Baixar Recebido · Modelo Domínio',
                             data=arquivo_recebido_ef,
                             file_name=(
-                                'ELETRO_FORTE_242_RECEBIDO_'
+                                f'ELETRO_FORTE_{codigo_ef}_RECEBIDO_'
                                 f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
                                 f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
                             ),
                             mime=mime_excel_ef,
                             use_container_width=True,
-                            key='ef242_download_recebido',
+                            key=f'{prefixo_ef}_download_recebido',
                         )
                     if despesas_ef and fornecedores_ef and recebidos_ef:
                         arquivo_consolidado_ef = _ef242_gerar_consolidado(
@@ -9249,23 +9277,28 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             'Baixar consolidado · Banco por banco',
                             data=arquivo_consolidado_ef,
                             file_name=(
-                                'ELETRO_FORTE_242_CONSOLIDADO_'
+                                f'ELETRO_FORTE_{codigo_ef}_CONSOLIDADO_'
                                 f'{data_inicial_ef.strftime("%d%m%Y")}_A_'
                                 f'{data_final_ef.strftime("%d%m%Y")}.xlsx'
                             ),
                             mime=mime_excel_ef,
                             use_container_width=True,
-                            key='ef242_download_consolidado',
+                            key=f'{prefixo_ef}_download_consolidado',
                         )
                 except Exception as erro_ef:
-                    st.error(f'Não foi possível processar os relatórios da empresa 242: {erro_ef}')
+                    st.error(f'Não foi possível processar os relatórios da empresa {codigo_ef}: {erro_ef}')
 
 
         with aba_operacoes_ef:
             st.markdown('#### Conferência com Extrato')
             renderizar_conferencia_autokraft(
-                'eletro_forte_242',
-                bancos_config=[
+                f'eletro_forte_{codigo_ef}',
+                bancos_config=([{
+                    'nome': 'Itaú · Conta 512',
+                    'slug': 'itau_512',
+                    'banco': 'itau',
+                    'conta': '512',
+                }] if filial_ef else [
                     {
                         'nome': 'Banco do Brasil · Conta 8',
                         'slug': 'bb_8',
@@ -9286,7 +9319,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         'conta': '509',
                         'identificadores': ['181537'],
                     },
-                ],
+                ]),
                 rotulo_planilha='Planilha consolidada',
             )
 
