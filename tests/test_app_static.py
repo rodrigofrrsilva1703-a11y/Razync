@@ -130,3 +130,11 @@ def test_base_242_classifica_planilha_consolidada_em_uma_etapa():
     assert "if modo_consolidado_eletro_forte:" in texto
     assert "valores_regra = {'0', '166'}" in texto
     assert "valores_regra = {'', '0', '14', '16', '166'}" in texto
+
+
+def test_pesquisa_nao_usa_componente_customizado_que_quebra_rerun():
+    texto = APP.read_text(encoding="utf-8")
+    assert "components.declare_component" not in texto
+    assert "streamlit.components" not in texto
+    assert "return st.text_input(" in texto
+    assert not (ROOT / 'components' / 'company_search' / 'index.html').exists()
