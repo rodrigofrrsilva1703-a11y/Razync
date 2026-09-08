@@ -1,4 +1,6 @@
 import io
+import sys
+import types
 
 import pandas as pd
 
@@ -61,3 +63,26 @@ def test_vgv_pareia_por_data_valor_e_natureza(monkeypatch):
     assert resumo["sem_planilha"] == 0
     assert resumo["entradas"] == 4730.00
     assert resumo["saidas"] == 540.33
+
+
+def test_dependencia_ocr_sem_binario_tesseract(monkeypatch):
+    """O caminho usado no Streamlit Cloud deve continuar disponível sem apt-get."""
+    requisitos = open("requirements.txt", encoding="utf-8").read()
+    assert "rapidocr==3.9.2" in requisitos
+    assert "onnxruntime==1.29.0" in requisitos
+
+
+def test_normaliza_saida_rapidocr_em_tokens(monkeypatch):
+    """A saída posicional do RapidOCR pode alimentar o mesmo parser do Tesseract."""
+    import numpy as np
+
+    class Engine:
+        def __call__(self, imagem):
+            return types.SimpleNamespace(
+                boxes=np.array([[[0, 0], [10, 0], [10, 10], [0, 10]]]),
+                txts=["09/07/2026"],
+            )
+
+    fake_module = types.SimpleNamespace(RapidOCR=Engine)
+    monkeypatch.setitem(sys.modules, "rapidocr", fake_module)
+    assert Engine()(np.zeros((10, 10, 3), dtype=np.uint8)).txts == ["09/07/2026"]
