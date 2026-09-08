@@ -128,8 +128,8 @@ def test_base_242_classifica_planilha_consolidada_em_uma_etapa():
     assert "'Consolidada', 'Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'" in texto
     assert "modo_consolidado_eletro_forte=False" in texto
     assert "if modo_consolidado_eletro_forte:" in texto
-    assert "valores_regra = {'0', '166'}" in texto
-    assert "valores_regra = {'', '0', '14', '16', '166'}" in texto
+    assert "else {'0', '166'}" in texto
+    assert "else {'', '0', '14', '16', '166'}" in texto
 
 
 def test_empresa_1408_reutiliza_fluxo_242_com_itau_512_e_base_isolada():
