@@ -73,8 +73,8 @@ def test_erros_nao_expoem_traceback():
 def test_empresa_242_usa_periodo_em_vez_de_ano_manual():
     texto = APP.read_text(encoding="utf-8")
     assert "Período dos lançamentos" in texto
-    assert "key='ef242_data_inicial'" in texto
-    assert "key='ef242_data_final'" in texto
+    assert "key=f'{prefixo_ef}_data_inicial'" in texto
+    assert "key=f'{prefixo_ef}_data_final'" in texto
     assert "placeholder='DD/MM/AAAA'" in texto
     assert "key='ef242_periodo'" not in texto
     assert "key='ef242_ano'" not in texto
@@ -130,6 +130,20 @@ def test_base_242_classifica_planilha_consolidada_em_uma_etapa():
     assert "if modo_consolidado_eletro_forte:" in texto
     assert "valores_regra = {'0', '166'}" in texto
     assert "valores_regra = {'', '0', '14', '16', '166'}" in texto
+
+
+def test_empresa_1408_reutiliza_fluxo_242_com_itau_512_e_base_isolada():
+    texto = APP.read_text(encoding="utf-8")
+    catalogo = (ROOT / "razync" / "company_catalog.py").read_text(encoding="utf-8")
+    assert '"codigo": 1408' in catalogo
+    assert '"chave_sistema": "eletro_forte_filial"' in catalogo
+    assert "chave_base_ef = 'eletro_forte_filial_1408'" in texto
+    assert "{'itau_512': '512'}" in texto
+    assert "conta_unica_ef = '512'" in texto
+    assert "'slug': 'itau_512'" in texto
+    assert "'conta': '512'" in texto
+    assert "classificar_planilha_final," in texto
+    assert "                    empresa,\n                    coluna_regra," in texto
 
 
 def test_pesquisa_nao_usa_componente_customizado_que_quebra_rerun():
