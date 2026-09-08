@@ -43,6 +43,7 @@ from razync.eletro_forte_francesinhas import (
     corrigir_datas_com_francesinhas, gerar_excel_francesinhas,
     processar_zip_francesinhas,
 )
+from razync.eletro_forte_filial_1408 import montar_modelo_1408
 from razync.gz_1211 import (
     CONTA_ITAU_GZ, gerar_modelo_dominio_gz, processar_gz,
 )
@@ -84,6 +85,9 @@ _ef242_gerar_modelo = st.cache_data(
 _ef242_gerar_consolidado = st.cache_data(
     show_spinner=False, ttl=3600, max_entries=8
 )(gerar_consolidado_bancos_eletro_forte)
+_ef1408_montar_modelo = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(montar_modelo_1408)
 _vgv_processar = st.cache_data(
     show_spinner=False, ttl=3600, max_entries=8
 )(processar_vgv)
@@ -8904,9 +8908,99 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 bancos_config=[{'nome': 'Itaú', 'slug': 'itau'}],
             )
 
-    if st.session_state['empresa_organizador'] in {
-        'eletro_forte', 'eletro_forte_filial'
-    }:
+    if st.session_state['empresa_organizador'] == 'eletro_forte_filial':
+        empresa_1408 = '1408 - ELETRO FORTE COMERCIAL ELÉTRICA LTDA. (FILIAL)'
+        aba_operacoes_1408, aba_base_1408 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente'
+        ])
+
+        with aba_base_1408:
+            renderizar_base_inteligente_eletro_forte(
+                'eletro_forte_filial_1408', empresa_1408, {'itau_512': '512'}
+            )
+
+        with aba_operacoes_1408:
+            st.markdown('#### Extrato Itaú + Recebidos → Modelo Domínio')
+            st.caption(
+                'O extrato é a base dos movimentos. A planilha Recebidos substitui '
+                'os históricos encontrados pela mesma data e valor. O ZIP das '
+                'francesinhas detalha os totais “BOLETO RECEBIDO”. Conta Domínio 512.'
+            )
+            col_extrato_1408, col_recebidos_1408 = st.columns(2)
+            with col_extrato_1408:
+                extrato_1408 = st.file_uploader(
+                    '1º · Extrato Itaú', type=['pdf'], key='ef1408_extrato_itau'
+                )
+            with col_recebidos_1408:
+                recebidos_1408 = st.file_uploader(
+                    '2º · Planilha de recebidos',
+                    type=['xls', 'xlsx'], key='ef1408_recebidos_detalhados'
+                )
+            francesinhas_1408 = st.file_uploader(
+                '3º · ZIP das francesinhas (opcional)',
+                type=['zip'], key='ef1408_francesinhas_integradas',
+            )
+
+            if extrato_1408 is not None and recebidos_1408 is not None:
+                try:
+                    movimentos_1408 = executar_com_loading(
+                        'Lendo o extrato Itaú...', processar_extrato_unificado,
+                        extrato_1408.getvalue(), extrato_1408.name,
+                    )
+                    francesinhas_df_1408 = None
+                    avisos_francesinhas_1408 = []
+                    if francesinhas_1408 is not None:
+                        francesinhas_df_1408, avisos_francesinhas_1408 = executar_com_loading(
+                            'Lendo as francesinhas...', _ef242_processar_francesinhas,
+                            francesinhas_1408.getvalue(), '512',
+                        )
+                    datas_movimentos_1408 = pd.to_datetime(
+                        pd.DataFrame(movimentos_1408)['DATA'], dayfirst=True, errors='coerce'
+                    ).dropna()
+                    ano_1408 = int(datas_movimentos_1408.mode().iloc[0].year)
+                    modelo_1408, resumo_1408 = executar_com_loading(
+                        'Montando e conferindo os lançamentos...', _ef1408_montar_modelo,
+                        movimentos_1408, recebidos_1408.getvalue(), ano_1408,
+                        francesinhas_df_1408,
+                    )
+
+                    m1408_1, m1408_2, m1408_3, m1408_4 = st.columns(4)
+                    m1408_1.metric('Movimentos do extrato', resumo_1408['movimentos_extrato'])
+                    m1408_2.metric('Históricos detalhados', resumo_1408['historicos_substituidos'])
+                    m1408_3.metric('Grupos de francesinhas', resumo_1408['grupos_francesinhas'])
+                    m1408_4.metric('Linhas finais', resumo_1408['linhas_finais'])
+
+                    previa_1408 = modelo_1408.copy()
+                    previa_1408['DATA'] = pd.to_datetime(previa_1408['DATA']).dt.strftime('%d/%m/%Y')
+                    st.dataframe(
+                        previa_1408, use_container_width=True, hide_index=True, height=360,
+                        column_config={'VALOR': st.column_config.NumberColumn('Valor', format='R$ %.2f')},
+                    )
+                    for aviso_1408 in avisos_francesinhas_1408:
+                        st.warning(aviso_1408)
+
+                    datas_1408 = pd.to_datetime(modelo_1408['DATA'])
+                    st.download_button(
+                        'Baixar 1408 · Modelo Domínio',
+                        data=gerar_excel_modelo_dominio(modelo_1408),
+                        file_name=(
+                            'ELETRO_FORTE_1408_ITAU_'
+                            f'{datas_1408.min().strftime("%d%m%Y")}_A_'
+                            f'{datas_1408.max().strftime("%d%m%Y")}.xlsx'
+                        ),
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True,
+                        key='ef1408_download_modelo_integrado',
+                    )
+                except Exception as erro_1408:
+                    st.error(f'Não foi possível processar a empresa 1408: {erro_1408}')
+
+            st.markdown(f'#### Conferência — {empresa_1408}')
+            renderizar_conferencia_autokraft(
+                'ef1408', bancos_config=[{'nome': 'Itaú · Conta 512', 'slug': 'itau'}]
+            )
+
+    if st.session_state['empresa_organizador'] == 'eletro_forte':
         filial_ef = st.session_state['empresa_organizador'] == 'eletro_forte_filial'
         codigo_ef = '1408' if filial_ef else '242'
         empresa_ef = (
@@ -11518,4 +11612,3 @@ elif st.session_state['pagina_ativa'] == 'razao':
         
         except Exception as e:
             st.error("Não foi possível concluir o cruzamento dos dados. Verifique os arquivos enviados e tente novamente.")
-
