@@ -146,6 +146,17 @@ def test_empresa_1408_reutiliza_fluxo_242_com_itau_512_e_base_isolada():
     assert "                    empresa,\n                    coluna_regra," in texto
 
 
+def test_empresa_1402_tem_btg_510_base_e_conferencia():
+    texto = APP.read_text(encoding="utf-8")
+    catalogo = (ROOT / "razync" / "company_catalog.py").read_text(encoding="utf-8")
+    assert '"codigo": 1402' in catalogo
+    assert '"chave_sistema": "vgv_1402"' in catalogo
+    assert "contas_vgv = {'btg': '510'}" in texto
+    assert "renderizar_base_inteligente_empresa(\n                'vgv_1402'" in texto
+    assert "'nome': 'BTG · Conta 510'" in texto
+    assert "processar_extrato_btg_vgv" in texto
+
+
 def test_pesquisa_nao_usa_componente_customizado_que_quebra_rerun():
     texto = APP.read_text(encoding="utf-8")
     assert "components.declare_component" not in texto
