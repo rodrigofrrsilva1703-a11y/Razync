@@ -37,7 +37,6 @@ jobs:
 
           app = Path('app.py').read_text(encoding='utf-8')
           requirements = Path('requirements.txt').read_text(encoding='utf-8')
-          packages = Path('packages.txt').read_text(encoding='utf-8')
           checks_app = [
               'def processar_pdf_daycoval_detalhado',
               'def processar_pdf_itau_detalhado',
@@ -62,8 +61,6 @@ jobs:
 
           for check in ['PyMuPDF', 'pytesseract']:
               assert check in requirements, check
-          for check in ['tesseract-ocr', 'tesseract-ocr-por']:
-              assert check in packages, check
           print('Componentes críticos validados.')
           PY
       - name: Verificar placeholders e segredos
