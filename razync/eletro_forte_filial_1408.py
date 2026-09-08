@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
+import unicodedata
 
 import pandas as pd
 
@@ -9,6 +11,30 @@ from razync.eletro_forte import COLUNAS_MODELO, processar_recebidos
 
 
 CONTA_ITAU_1408 = "512"
+
+
+def _texto_normalizado(valor: str) -> str:
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    return texto.encode("ascii", "ignore").decode().upper()
+
+
+def _eh_recebimento_cartao(valor: str) -> bool:
+    texto = _texto_normalizado(valor)
+    return "RECEBIMENTO REDE" in texto or any(
+        bandeira in texto for bandeira in ("REDE VISA", "REDE MAST", "REDE ELO")
+    )
+
+
+def _remover_cpf_cnpj(valor: str) -> str:
+    texto = str(valor or "")
+    texto = re.sub(
+        r"(?<!\d)(?:\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|"
+        r"\d{3}\.?\d{3}\.?\d{3}-?\d{2})(?!\d)",
+        "",
+        texto,
+    )
+    texto = re.sub(r"\b(?:CNPJ|CPF)(?:/CPF)?\s*[:\-]?\s*", "", texto, flags=re.I)
+    return re.sub(r"\s{2,}", " ", texto).strip(" -|")
 
 
 def _chave(data, valor) -> tuple[pd.Timestamp, int]:
@@ -48,6 +74,8 @@ def montar_modelo_1408(
     usados_recebidos = set()
     historicos_substituidos = 0
     for indice, linha in modelo.loc[modelo["VALOR"] > 0].iterrows():
+        if _eh_recebimento_cartao(linha.get("HISTÓRICO", "")):
+            continue
         candidatos = detalhes.get(_chave(linha["DATA"], linha["VALOR"]), [])
         candidato = next((item for item in candidatos if item[0] not in usados_recebidos), None)
         if candidato:
@@ -77,7 +105,7 @@ def montar_modelo_1408(
     if linhas_francesinhas:
         modelo = pd.concat([modelo[COLUNAS_MODELO], *linhas_francesinhas], ignore_index=True)
 
-    historico = modelo["HISTÓRICO"].fillna("").astype(str).str.strip()
+    historico = modelo["HISTÓRICO"].fillna("").astype(str).map(_remover_cpf_cnpj)
     modelo["HISTÓRICO"] = [
         texto if texto.lower().startswith(("pago: ", "recebido: "))
         else ("Recebido: " if valor > 0 else "Pago: ") + texto
