@@ -128,8 +128,8 @@ def test_base_242_classifica_planilha_consolidada_em_uma_etapa():
     assert "'Consolidada', 'Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'" in texto
     assert "modo_consolidado_eletro_forte=False" in texto
     assert "if modo_consolidado_eletro_forte:" in texto
-    assert "valores_regra = {'0', '166'}" in texto
-    assert "valores_regra = {'', '0', '14', '16', '166'}" in texto
+    assert "else {'0', '166'}" in texto
+    assert "else {'', '0', '14', '16', '166'}" in texto
 
 
 def test_empresa_1408_reutiliza_fluxo_242_com_itau_512_e_base_isolada():
@@ -138,6 +138,14 @@ def test_empresa_1408_reutiliza_fluxo_242_com_itau_512_e_base_isolada():
     assert '"codigo": 1408' in catalogo
     assert '"chave_sistema": "eletro_forte_filial"' in catalogo
     assert "chave_base_ef = 'eletro_forte_filial_1408'" in texto
+
+
+def test_base_1408_tem_perfil_consolidado_e_regras_proprias():
+    texto = Path('app.py').read_text(encoding='utf-8')
+    assert "perfil_1408 = empresa == 'eletro_forte_filial_1408'" in texto
+    assert "abas = st.tabs(['Modelo Domínio consolidado'])" in texto
+    assert "{'itau_512'} if empresa == 'eletro_forte_filial_1408'" in texto
+    assert "{'', '0'} if empresa_classificacao == 'eletro_forte_filial_1408'" in texto
     assert "{'itau_512': '512'}" in texto
     assert "conta_unica_ef = '512'" in texto
     assert "'slug': 'itau_512'" in texto

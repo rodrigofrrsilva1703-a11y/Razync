@@ -3268,6 +3268,7 @@ def renderizar_base_inteligente_eletro_forte(
         'bb': '8', 'itau_508': '508', 'itau_509': '509'
     }
     bancos_permitidos = set(contas_bancarias)
+    perfil_1408 = empresa == 'eletro_forte_filial_1408'
     prefixo_chaves = re.sub(r'[^a-z0-9_]+', '_', empresa.lower())
 
     url_base, chave_base, senha_admin = obter_config_classificacao_online()
@@ -3280,15 +3281,25 @@ def renderizar_base_inteligente_eletro_forte(
             erro_base = str(erro)
 
     st.markdown(f'#### Base inteligente — {nome_empresa}')
-    st.caption(
-        f'O aprendizado é exclusivo da {nome_empresa} e mantém as contas bancárias '
-        'separadas. A classificação também é separada por origem: Despesa, Fornecedor e Recebido.'
-    )
-    st.caption(
-        'Fornecedor: DÉBITO 166, 0 ou vazio pode ser classificado. '
-        'Recebido: CRÉDITO 166, 0, 14, 16 ou vazio pode ser classificado. '
-        'Demais contas preenchidas são preservadas.'
-    )
+    if perfil_1408:
+        st.caption(
+            'Aprendizado exclusivo da empresa 1408 para o Modelo Domínio consolidado '
+            'do Itaú. A conta bancária 512 é sempre preservada.'
+        )
+        st.caption(
+            'Pagamentos: preenche somente o DÉBITO vazio ou 0. Recebimentos: '
+            'preenche somente o CRÉDITO vazio ou 0. Contas já classificadas são preservadas.'
+        )
+    else:
+        st.caption(
+            f'O aprendizado é exclusivo da {nome_empresa} e mantém as contas bancárias '
+            'separadas. A classificação também é separada por origem: Despesa, Fornecedor e Recebido.'
+        )
+        st.caption(
+            'Fornecedor: DÉBITO 166, 0 ou vazio pode ser classificado. '
+            'Recebido: CRÉDITO 166, 0, 14, 16 ou vazio pode ser classificado. '
+            'Demais contas preenchidas são preservadas.'
+        )
 
     if erro_base:
         st.warning(f'Não foi possível carregar a base online: {erro_base}')
@@ -3343,22 +3354,31 @@ def renderizar_base_inteligente_eletro_forte(
 
     st.markdown('---')
     st.markdown('#### Classificar por planilha')
-    abas = st.tabs([
-        'Consolidada', 'Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'
-    ])
-    configuracoes = [
-        ('Consolidada', '', set(), True),
-        ('Despesa', 'debito', {'0', ''}, False),
-        ('Fornecedor', 'debito', {'166', '0', ''}, False),
-        ('Recebido', 'credito', {'166', '0', '14', '16', ''}, False),
-        ('Francesinhas', 'credito', {''}, False),
-    ]
+    if perfil_1408:
+        abas = st.tabs(['Modelo Domínio consolidado'])
+        configuracoes = [('Modelo Domínio consolidado', '', set(), True)]
+    else:
+        abas = st.tabs([
+            'Consolidada', 'Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'
+        ])
+        configuracoes = [
+            ('Consolidada', '', set(), True),
+            ('Despesa', 'debito', {'0', ''}, False),
+            ('Fornecedor', 'debito', {'166', '0', ''}, False),
+            ('Recebido', 'credito', {'166', '0', '14', '16', ''}, False),
+            ('Francesinhas', 'credito', {''}, False),
+        ]
 
     for aba, (
         origem, coluna_regra, valores_regra, modo_consolidado
     ) in zip(abas, configuracoes):
         with aba:
-            if origem == 'Consolidada':
+            if perfil_1408:
+                st.caption(
+                    'Classifica de uma vez o arquivo gerado pelo organizador da 1408. '
+                    'A conta Itaú 512 permanece na posição bancária.'
+                )
+            elif origem == 'Consolidada':
                 st.caption(
                     'Classifica de uma vez todas as abas bancárias da planilha. '
                     'Pagamentos usam a regra de DÉBITO; recebimentos usam '
@@ -3970,7 +3990,10 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
                 banco_linha = identificar_banco_classificacao_eletro_forte(
                     nome_aba, descricao_linha, debito, credito
                 )
-                bancos_validos = {'bb', 'itau_508', 'itau_509'}
+                bancos_validos = (
+                    {'itau_512'} if empresa == 'eletro_forte_filial_1408'
+                    else {'bb', 'itau_508', 'itau_509'}
+                )
             else:
                 banco_linha = (
                     identificar_chave_banco_empresa(descricao_linha)
@@ -4240,10 +4263,16 @@ def classificar_planilha_final(
                 )
                 if valor_consolidado < 0:
                     coluna_regra = 'debito'
-                    valores_regra = {'0', '166'}
+                    valores_regra = (
+                        {'', '0'} if empresa_classificacao == 'eletro_forte_filial_1408'
+                        else {'0', '166'}
+                    )
                 elif valor_consolidado > 0:
                     coluna_regra = 'credito'
-                    valores_regra = {'', '0', '14', '16', '166'}
+                    valores_regra = (
+                        {'', '0'} if empresa_classificacao == 'eletro_forte_filial_1408'
+                        else {'', '0', '14', '16', '166'}
+                    )
                 else:
                     resumo['preservados_regra'] += 1
                     continue
