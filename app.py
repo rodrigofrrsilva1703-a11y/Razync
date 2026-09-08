@@ -49,6 +49,11 @@ from razync.gz_1211 import (
 from razync.engekraft_969 import (
     CONTA_ITAU_969, gerar_modelo_dominio_engekraft_969, processar_extrato_engekraft_969,
 )
+from razync.vgv_1402 import (
+    COLUNAS_MODELO as COLUNAS_MODELO_VGV,
+    processar_extrato_btg_vgv,
+    processar_vgv,
+)
 
 
 # Cache dos processamentos pesados da empresa 242. O Streamlit executa o script
@@ -78,6 +83,9 @@ _ef242_gerar_modelo = st.cache_data(
 _ef242_gerar_consolidado = st.cache_data(
     show_spinner=False, ttl=3600, max_entries=8
 )(gerar_consolidado_bancos_eletro_forte)
+_vgv_processar = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(processar_vgv)
 
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
@@ -1671,6 +1679,7 @@ def identificar_banco_inteligente(texto_conteudo, filename_str=""):
             return banco
 
     bancos = [
+        (['BTG', 'PACTUAL'], 'BANCO BTG'),
         (['ITAU'], 'BANCO ITAU'),
         (['BRADESCO'], 'BANCO BRADESCO'),
         (['FIBRA'], 'BANCO FIBRA'),
@@ -2608,6 +2617,12 @@ def processar_arquivo_pdf(caminho_pdf, filename_original=None):
             
         nome_para_identificacao = filename_original or os.path.basename(caminho_pdf)
         banco_identificado = identificar_banco_inteligente(texto_completo, nome_para_identificacao)
+
+        if banco_identificado == 'BANCO BTG':
+            with open(caminho_pdf, 'rb') as arquivo_btg:
+                return processar_extrato_btg_vgv(
+                    arquivo_btg.read()
+                ).to_dict('records')
 
         # Santander Empresarial: formato Data / Histórico / Valor.
         # É processado antes do parser universal porque o próprio PDF informa
@@ -3953,7 +3968,10 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
                     identificar_chave_banco_empresa(descricao_linha)
                     if col_descricao is not None else ''
                 ) or banco_aba or banco_arquivo
-                bancos_validos = {'itau', 'bradesco', 'fibra', 'daycoval', 'sicredi', 'santander'}
+                bancos_validos = {
+                    'itau', 'bradesco', 'fibra', 'daycoval', 'sicredi',
+                    'santander', 'btg'
+                }
             assinatura = criar_assinatura_classificacao(historico)
             if banco_linha not in bancos_validos or not assinatura:
                 continue
@@ -5086,6 +5104,8 @@ def identificar_chave_banco_empresa(valor):
     """Identifica os bancos conhecidos por descrição, aba, arquivo ou conta."""
     texto = normalizar_texto(texto_celula_seguro(valor))
     digitos = re.sub(r'\D', '', texto_celula_seguro(valor))
+    if 'btg' in texto or 'pactual' in texto or '5606318' in digitos:
+        return 'btg'
     if 'itau' in texto or any(conta in digitos for conta in ['995495', '980026']):
         return 'itau'
     if 'bradesco' in texto or any(conta in digitos for conta in ['4519906', '30848']):
@@ -5104,6 +5124,7 @@ def identificar_chave_banco_empresa(valor):
 
 def nome_banco_por_chave(chave):
     return {
+        'btg': 'BTG',
         'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra',
         'daycoval': 'Daycoval', 'sicredi': 'Sicredi',
         'santander': 'Santander', 'banco_brasil': 'Banco do Brasil'
@@ -5180,6 +5201,7 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)
             descricao = texto_celula_seguro(linha[col_desc]) if col_desc is not None else ''
             if not descricao:
                 descricao = {
+                    'btg': 'BANCO BTG',
                     'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO',
                     'fibra': 'BANCO FIBRA', 'daycoval': 'BANCO DAYCOVAL',
                     'sicredi': 'SICREDI', 'santander': 'BANCO SANTANDER',
@@ -5473,7 +5495,7 @@ def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
     return lancamentos
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
-def processar_extrato_conferencia_empresa(file_bytes, filename):
+def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
     """Lê a conferência pelo mesmo motor central usado em todo o Razync."""
     # Versão do parser para invalidar resultados antigos do cache quando a regra
     # de leitura do BB Autorizável mudar.
@@ -5484,9 +5506,11 @@ def processar_extrato_conferencia_empresa(file_bytes, filename):
         'saldo do dia', 'saldo total', 'saldo disponivel', 'saldo em conta',
     ]
     filtrados = []
+    if banco_forcado == 'btg' and str(filename).lower().endswith('.pdf'):
+        origem_extrato = processar_extrato_btg_vgv(file_bytes).to_dict('records')
     # O extrato BB Empresa 'Autorizável' possui linhas quebradas e pode colar
     # movimento e saldo. Usa leitor dedicado para não perder/duplicar valores.
-    if str(filename).lower().endswith('.pdf') and parece_extrato_bb_autorizavel(file_bytes):
+    elif str(filename).lower().endswith('.pdf') and parece_extrato_bb_autorizavel(file_bytes):
         origem_extrato = processar_extrato_bb_autorizavel(file_bytes)
     else:
         origem_extrato = processar_extrato_unificado(file_bytes, filename) or []
@@ -5742,7 +5766,12 @@ def renderizar_conferencia_autokraft(
                 f"Lendo {arquivo_extrato.name}...",
                 processar_extrato_conferencia_empresa,
                 arquivo_extrato.getvalue(),
-                arquivo_extrato.name
+                arquivo_extrato.name,
+                (
+                    configs_escolhidas[0].get(
+                        'banco', configs_escolhidas[0]['slug']
+                    ) if len(configs_escolhidas) == 1 else None
+                ),
             )
             df_extrato = filtrar_dataframe_periodo(
                 pd.DataFrame(lancamentos), data_inicial, data_final
@@ -9471,6 +9500,115 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             renderizar_conferencia_autokraft(
                 'lcarlos',
                 bancos_config=[{'nome': 'Santander', 'slug': 'santander'}],
+            )
+
+    if st.session_state['empresa_organizador'] == 'vgv_1402':
+        empresa_vgv = '1402 - VGV EMPREENDIMENTOS LTDA - ME'
+        contas_vgv = {'btg': '510'}
+        aba_operacoes_vgv, aba_base_vgv = st.tabs([
+            'Organizar arquivos', 'Base Inteligente'
+        ])
+
+        with aba_base_vgv:
+            renderizar_base_inteligente_empresa(
+                'vgv_1402', empresa_vgv, {'btg'}, contas_vgv
+            )
+
+        with aba_operacoes_vgv:
+            st.markdown('#### Caixa detalhado + Extrato BTG → Modelo Domínio')
+            st.caption(
+                'O extrato confirma data e valor; o histórico detalhado vem da '
+                'planilha Caixa VGV. Entradas recebem débito 510 e saídas recebem '
+                'crédito 510.'
+            )
+            col_caixa_vgv, col_extrato_vgv = st.columns(2)
+            with col_caixa_vgv:
+                arquivo_caixa_vgv = st.file_uploader(
+                    '1º · Planilha Caixa VGV',
+                    type=['xlsx', 'xls'],
+                    key='vgv_1402_caixa',
+                )
+            with col_extrato_vgv:
+                arquivo_extrato_vgv = st.file_uploader(
+                    '2º · Extrato BTG',
+                    type=['pdf'],
+                    key='vgv_1402_extrato',
+                )
+
+            if arquivo_caixa_vgv is not None and arquivo_extrato_vgv is not None:
+                try:
+                    modelo_vgv, _, sem_planilha_vgv, resumo_vgv = executar_com_loading(
+                        'Lendo o BTG e cruzando os movimentos...',
+                        _vgv_processar,
+                        arquivo_caixa_vgv.getvalue(),
+                        arquivo_extrato_vgv.getvalue(),
+                    )
+                    vm1, vm2, vm3, vm4 = st.columns(4)
+                    vm1.metric('Movimentos', resumo_vgv['planilha'])
+                    vm2.metric('Conferidos', resumo_vgv['conferidos'])
+                    vm3.metric('Entradas', formatar_moeda(resumo_vgv['entradas']))
+                    vm4.metric('Saídas', formatar_moeda(resumo_vgv['saidas']))
+
+                    if not resumo_vgv['sem_extrato'] and not resumo_vgv['sem_planilha']:
+                        st.success('Todos os movimentos estão batendo por data e valor.')
+                    else:
+                        st.warning(
+                            f"{resumo_vgv['sem_extrato']} lançamento(s) da planilha sem "
+                            f"correspondência e {resumo_vgv['sem_planilha']} do extrato "
+                            'sem detalhe na planilha. O arquivo pode ser baixado para revisão.'
+                        )
+
+                    previa_vgv = modelo_vgv.copy()
+                    previa_vgv['DATA'] = pd.to_datetime(
+                        previa_vgv['DATA']
+                    ).dt.strftime('%d/%m/%Y')
+                    st.dataframe(
+                        previa_vgv,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=340,
+                        column_config={
+                            'VALOR': st.column_config.NumberColumn(
+                                'Valor', format='R$ %.2f'
+                            )
+                        },
+                    )
+                    if not sem_planilha_vgv.empty:
+                        with st.expander('Movimentos do extrato sem detalhe na planilha'):
+                            st.dataframe(
+                                sem_planilha_vgv,
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+
+                    arquivo_modelo_vgv = gerar_excel_modelo_dominio(
+                        modelo_vgv[COLUNAS_MODELO_VGV]
+                    )
+                    datas_vgv = pd.to_datetime(modelo_vgv['DATA'])
+                    st.download_button(
+                        'Baixar VGV · Modelo Domínio',
+                        data=arquivo_modelo_vgv,
+                        file_name=(
+                            'VGV_1402_MODELO_DOMINIO_'
+                            f'{datas_vgv.min().strftime("%d%m%Y")}_A_'
+                            f'{datas_vgv.max().strftime("%d%m%Y")}.xlsx'
+                        ),
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True,
+                        key='vgv_1402_download_modelo',
+                    )
+                except Exception as erro_vgv:
+                    st.error(f'Não foi possível processar a empresa 1402: {erro_vgv}')
+
+            st.markdown('#### Conferência — VGV 1402')
+            renderizar_conferencia_autokraft(
+                'vgv_1402',
+                bancos_config=[{
+                    'nome': 'BTG · Conta 510',
+                    'slug': 'btg',
+                    'banco': 'btg',
+                    'conta': '510',
+                }],
             )
 
     if st.session_state['empresa_organizador'] in {
