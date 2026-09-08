@@ -22,12 +22,12 @@ def _ocr_teste():
     return pd.DataFrame([
         {"text": "09/07/2026", "left": 70, "top": 100, "width": 130, "height": 22},
         {"text": "4.730,00", "left": 1260, "top": 100, "width": 100, "height": 22},
-        {"text": "7.850,69", "left": 1660, "top": 100, "width": 100, "height": 22},
+        {"text": "7.850,69", "left": 2000, "top": 100, "width": 100, "height": 22},
         {"text": "09/07/2026", "left": 70, "top": 180, "width": 130, "height": 22},
         {"text": "-540,33", "left": 1260, "top": 180, "width": 100, "height": 22},
-        {"text": "7.310,36", "left": 1660, "top": 180, "width": 100, "height": 22},
+        {"text": "7.310,36", "left": 2000, "top": 180, "width": 100, "height": 22},
         {"text": "01/07/2026", "left": 70, "top": 260, "width": 130, "height": 22},
-        {"text": "3.120,25", "left": 1660, "top": 260, "width": 100, "height": 22},
+        {"text": "3.120,25", "left": 2000, "top": 260, "width": 100, "height": 22},
     ])
 
 
