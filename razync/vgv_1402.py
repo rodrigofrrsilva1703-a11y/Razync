@@ -91,8 +91,57 @@ def _ocr_paginas(conteudo: bytes):
         raise ValueError("Os componentes de leitura OCR do extrato BTG não estão disponíveis.") from erro
 
     executavel = shutil.which("tesseract")
+
+    # O Streamlit Cloud não disponibiliza binários do sistema.  O RapidOCR é
+    # distribuído como dependência Python e mantém a mesma saída posicional
+    # usada pelo parser abaixo, permitindo ler PDFs escaneados sem apt-get.
     if not executavel:
-        raise ValueError("O leitor OCR necessário para o extrato BTG não está instalado.")
+        try:
+            import numpy as np
+            from rapidocr import RapidOCR
+        except ImportError as erro:
+            raise ValueError(
+                "O leitor OCR do extrato BTG não está disponível. "
+                "Reinicie o aplicativo para instalar as dependências."
+            ) from erro
+
+        documento = fitz.open(stream=conteudo, filetype="pdf")
+        paginas = []
+        engine = RapidOCR()
+        try:
+            for pagina in documento:
+                pix = pagina.get_pixmap(matrix=fitz.Matrix(3.0, 3.0), alpha=False)
+                imagem = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+                    pix.height, pix.width, pix.n
+                )
+                resultado = engine(imagem)
+                caixas = getattr(resultado, "boxes", None)
+                textos = getattr(resultado, "txts", None)
+                if caixas is None or textos is None:
+                    # Compatibilidade com versões que retornam tupla/lista.
+                    if isinstance(resultado, (tuple, list)) and len(resultado) >= 2:
+                        caixas, textos = resultado[0], resultado[1]
+                registros = []
+                if caixas is None:
+                    caixas = []
+                if textos is None:
+                    textos = []
+                for caixa, texto in zip(caixas, textos):
+                    pontos = np.asarray(caixa, dtype=float)
+                    if pontos.size < 8:
+                        continue
+                    registros.append({
+                        "text": str(texto),
+                        "left": float(pontos[:, 0].min()),
+                        "top": float(pontos[:, 1].min()),
+                        "width": float(pontos[:, 0].max() - pontos[:, 0].min()),
+                        "height": float(pontos[:, 1].max() - pontos[:, 1].min()),
+                    })
+                paginas.append((pix.width, pd.DataFrame(registros)))
+        finally:
+            documento.close()
+        return paginas
+
     idiomas = subprocess.run(
         [executavel, "--list-langs"], capture_output=True, text=True, check=False
     ).stdout.splitlines()
