@@ -1,0 +1,3 @@
+Forçar redeploy do Streamlit Cloud após correção do erro removeChild.
+Commit esperado com busca nativa: 3dc6cf6a5406a05f699ffb9618cdb77edc6dd644
+Data: 2026-09-08 08:25 -03:00
