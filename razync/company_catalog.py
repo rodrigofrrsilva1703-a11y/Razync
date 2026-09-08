@@ -46,7 +46,7 @@ EMPRESAS = [
     {"codigo": 1320, "nome": "T. W. GUAIMBÊ – EXCLUSIVE SUÍTES HOTEL LTDA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1396, "nome": "NOVA GERAÇÃO COMERCIAL ELETRICA LTDA (FILIAL)", "regime": "LUCRO PRESUMIDO", "chave_sistema": "nova_geracao", "estabelecimento": "filial"},
     {"codigo": 1402, "nome": "VGV EMPREENDIMENTOS LTDA - ME", "regime": "LUCRO PRESUMIDO"},
-    {"codigo": 1408, "nome": "ELETRO FORTE COMERCIAL ELÉTRICA LTDA. (FILIAL)", "regime": "LUCRO REAL"},
+    {"codigo": 1408, "nome": "ELETRO FORTE COMERCIAL ELÉTRICA LTDA. (FILIAL)", "regime": "LUCRO REAL", "chave": "eletro_forte_filial", "chave_sistema": "eletro_forte_filial"},
     {"codigo": 1487, "nome": "H & G CONSULTORIA FINANCEIRAS LTDA (Cliente a partir de 01/09/2025)", "regime": "SIMPLES NACIONAL"},
     {"codigo": 1520, "nome": "SOUZA LEMES HOLDING PATRIMONIAL LTDA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 1522, "nome": "PRISCILA CAMARGO GARCIA DE OLIVEIRA LTDA", "regime": "SIMPLES NACIONAL"},
