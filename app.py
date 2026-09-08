@@ -51,6 +51,7 @@ from razync.engekraft_969 import (
 )
 from razync.vgv_1402 import (
     COLUNAS_MODELO as COLUNAS_MODELO_VGV,
+    ler_caixa_vgv,
     processar_extrato_btg_vgv,
     processar_vgv,
 )
@@ -86,6 +87,9 @@ _ef242_gerar_consolidado = st.cache_data(
 _vgv_processar = st.cache_data(
     show_spinner=False, ttl=3600, max_entries=8
 )(processar_vgv)
+_vgv_gerar_modelo = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(ler_caixa_vgv)
 
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
@@ -9515,48 +9519,29 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             )
 
         with aba_operacoes_vgv:
-            st.markdown('#### Caixa detalhado + Extrato BTG → Modelo Domínio')
+            st.markdown('#### Caixa detalhado → Modelo Domínio')
             st.caption(
-                'O extrato confirma data e valor; o histórico detalhado vem da '
-                'planilha Caixa VGV. Entradas recebem débito 510 e saídas recebem '
-                'crédito 510.'
+                'A planilha Caixa VGV gera o Modelo Domínio. O extrato BTG é usado '
+                'somente na aba de conferência abaixo.'
             )
-            col_caixa_vgv, col_extrato_vgv = st.columns(2)
-            with col_caixa_vgv:
-                arquivo_caixa_vgv = st.file_uploader(
-                    '1º · Planilha Caixa VGV',
-                    type=['xlsx', 'xls'],
-                    key='vgv_1402_caixa',
-                )
-            with col_extrato_vgv:
-                arquivo_extrato_vgv = st.file_uploader(
-                    '2º · Extrato BTG',
-                    type=['pdf'],
-                    key='vgv_1402_extrato',
-                )
+            arquivo_caixa_vgv = st.file_uploader(
+                'Planilha Caixa VGV',
+                type=['xlsx', 'xls'],
+                key='vgv_1402_caixa',
+            )
 
-            if arquivo_caixa_vgv is not None and arquivo_extrato_vgv is not None:
+            if arquivo_caixa_vgv is not None:
                 try:
-                    modelo_vgv, _, sem_planilha_vgv, resumo_vgv = executar_com_loading(
-                        'Lendo o BTG e cruzando os movimentos...',
-                        _vgv_processar,
+                    modelo_vgv = executar_com_loading(
+                        'Montando o Modelo Domínio...',
+                        _vgv_gerar_modelo,
                         arquivo_caixa_vgv.getvalue(),
-                        arquivo_extrato_vgv.getvalue(),
                     )
                     vm1, vm2, vm3, vm4 = st.columns(4)
-                    vm1.metric('Movimentos', resumo_vgv['planilha'])
-                    vm2.metric('Conferidos', resumo_vgv['conferidos'])
-                    vm3.metric('Entradas', formatar_moeda(resumo_vgv['entradas']))
-                    vm4.metric('Saídas', formatar_moeda(resumo_vgv['saidas']))
-
-                    if not resumo_vgv['sem_extrato'] and not resumo_vgv['sem_planilha']:
-                        st.success('Todos os movimentos estão batendo por data e valor.')
-                    else:
-                        st.warning(
-                            f"{resumo_vgv['sem_extrato']} lançamento(s) da planilha sem "
-                            f"correspondência e {resumo_vgv['sem_planilha']} do extrato "
-                            'sem detalhe na planilha. O arquivo pode ser baixado para revisão.'
-                        )
+                    vm1.metric('Movimentos', len(modelo_vgv))
+                    vm2.metric('Entradas', formatar_moeda(modelo_vgv.loc[modelo_vgv['VALOR'] > 0, 'VALOR'].sum()))
+                    vm3.metric('Saídas', formatar_moeda(-modelo_vgv.loc[modelo_vgv['VALOR'] < 0, 'VALOR'].sum()))
+                    vm4.metric('Conta bancária', '510 · BTG')
 
                     previa_vgv = modelo_vgv.copy()
                     previa_vgv['DATA'] = pd.to_datetime(
@@ -9573,14 +9558,6 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             )
                         },
                     )
-                    if not sem_planilha_vgv.empty:
-                        with st.expander('Movimentos do extrato sem detalhe na planilha'):
-                            st.dataframe(
-                                sem_planilha_vgv,
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-
                     arquivo_modelo_vgv = gerar_excel_modelo_dominio(
                         modelo_vgv[COLUNAS_MODELO_VGV]
                     )
@@ -11541,3 +11518,4 @@ elif st.session_state['pagina_ativa'] == 'razao':
         
         except Exception as e:
             st.error("Não foi possível concluir o cruzamento dos dados. Verifique os arquivos enviados e tente novamente.")
+
