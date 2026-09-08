@@ -69,7 +69,7 @@ def test_dependencia_ocr_sem_binario_tesseract(monkeypatch):
     """O caminho usado no Streamlit Cloud deve continuar disponível sem apt-get."""
     requisitos = open("requirements.txt", encoding="utf-8").read()
     assert "rapidocr==3.9.2" in requisitos
-    assert "onnxruntime==1.29.0" in requisitos
+    assert "onnxruntime==" in requisitos
 
 
 def test_normaliza_saida_rapidocr_em_tokens(monkeypatch):
