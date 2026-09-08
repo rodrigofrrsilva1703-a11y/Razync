@@ -1,4 +1,4 @@
-"""Processamento específico da empresa 242 - Eletro Forte.
+"""Processamento das empresas Eletro Forte 242 e filial 1408.
 
 Os relatórios recebidos usam principalmente extensão .xls em formato HTML exportado
 pelo sistema do cliente. Cada arquivo final preserva a aba principal do relatório e
@@ -21,6 +21,7 @@ CONTAS_ELETRO_FORTE = {
     "8": "Banco BB · Conta 8",
     "508": "Itaú · 105318 · Conta 508",
     "509": "Itaú · 181537 · Conta 509",
+    "512": "Itaú · Conta 512",
     "0": "Revisar · Conta 0",
 }
 
@@ -28,6 +29,7 @@ DESCRICOES_BANCOS = {
     "8": "BANCO DO BRASIL",
     "508": "BANCO ITAÚ",
     "509": "BANCO ITAÚ",
+    "512": "BANCO ITAÚ",
     "0": "REVISAR CONTA 0",
 }
 
@@ -168,7 +170,7 @@ def _com_descricao(df: pd.DataFrame, coluna_banco: str) -> pd.DataFrame:
 
 def _separar_por_conta(df: pd.DataFrame, coluna_conta: str) -> Dict[str, pd.DataFrame]:
     resultado: Dict[str, pd.DataFrame] = {}
-    ordem = ["8", "508", "509", "0"]
+    ordem = ["8", "508", "509", "512", "0"]
     contas_presentes = list(dict.fromkeys(df[coluna_conta].astype(str).tolist()))
     for conta in ordem + [c for c in contas_presentes if c not in ordem]:
         parte = df.loc[df[coluna_conta].astype(str) == conta].copy()
@@ -177,23 +179,36 @@ def _separar_por_conta(df: pd.DataFrame, coluna_conta: str) -> Dict[str, pd.Data
     return resultado
 
 
-def processar_despesas(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
+def processar_despesas(
+    conteudo: bytes, ano_referencia: int, conta_bancaria_unica: str | None = None
+) -> Dict[str, pd.DataFrame]:
     """Despesa: converte 001→8 e 002→508, força valor negativo e prefixa Pago:."""
     df = _padronizar(conteudo, ano_referencia)
-    df["CRÉDITO"] = df["CRÉDITO"].replace({"1": "8", "2": "508"})
+    if conta_bancaria_unica:
+        df["CRÉDITO"] = str(conta_bancaria_unica)
+    else:
+        df["CRÉDITO"] = df["CRÉDITO"].replace({"1": "8", "2": "508"})
     df = _aplicar_regra_movimento(df, "despesa")
     return _separar_por_conta(df, "CRÉDITO")
 
 
-def processar_fornecedores(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
+def processar_fornecedores(
+    conteudo: bytes, ano_referencia: int, conta_bancaria_unica: str | None = None
+) -> Dict[str, pd.DataFrame]:
     """Fornecedor: separa por CRÉDITO, força valor negativo e prefixa Pago:."""
     df = _aplicar_regra_movimento(_padronizar(conteudo, ano_referencia), "fornecedor")
+    if conta_bancaria_unica:
+        df["CRÉDITO"] = str(conta_bancaria_unica)
     return _separar_por_conta(df, "CRÉDITO")
 
 
-def processar_recebidos(conteudo: bytes, ano_referencia: int) -> Dict[str, pd.DataFrame]:
+def processar_recebidos(
+    conteudo: bytes, ano_referencia: int, conta_bancaria_unica: str | None = None
+) -> Dict[str, pd.DataFrame]:
     """Recebido: separa por DÉBITO, mantém valor positivo e prefixa Recebido:."""
     df = _aplicar_regra_movimento(_padronizar(conteudo, ano_referencia), "recebido")
+    if conta_bancaria_unica:
+        df["DÉBITO"] = str(conta_bancaria_unica)
     return _separar_por_conta(df, "DÉBITO")
 
 
@@ -302,6 +317,7 @@ def _nome_aba(prefixo: str, conta: str) -> str:
         "8": "BB 8",
         "508": "Itau 508",
         "509": "Itau 509",
+        "512": "Itau 512",
         "0": "Revisar 0",
     }
     return f"{prefixo} - {nomes.get(conta, conta)}"[:31]
@@ -451,9 +467,10 @@ def gerar_consolidado_bancos_eletro_forte(
         "8": "Banco do Brasil - 8",
         "508": "Itau - 508",
         "509": "Itau - 509",
+        "512": "Itau - 512",
         "0": "Revisar - 0",
     }
-    ordem_contas = ["8", "508", "509", "0"]
+    ordem_contas = ["8", "508", "509", "512", "0"]
     restantes = sorted(conta for conta in grupos if conta not in ordem_contas)
 
     for conta in ordem_contas + restantes:
