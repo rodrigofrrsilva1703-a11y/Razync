@@ -31,7 +31,11 @@ def identificar_conta_folha_accede_1000(historico) -> str:
     tokens = set(texto.split())
 
     for codigo, aliases in _ALIASES_CODIGOS.items():
-        if tokens.intersection(aliases):
+        if tokens.intersection(aliases) or any(
+            re.fullmatch(rf"{re.escape(alias)}\d{{2,4}}", token)
+            for alias in aliases
+            for token in tokens
+        ):
             return CONTAS_FOLHA_ACCEDE_1000[codigo]
 
     if re.search(r"\bADIANT\w*\s+(?:DE\s+)?SALARI\w*\b", texto):
