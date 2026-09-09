@@ -231,17 +231,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-def _pesquisa_empresa_instantanea(value="", placeholder="Pesquisar empresa", key=None, default=None, **kwargs):
-    """Busca de empresas usando widget nativo do Streamlit.
+def _pesquisa_empresa_instantanea(options=None, placeholder="Pesquisar empresa", key=None, **kwargs):
+    """Busca local e instantânea usando o seletor pesquisável do Streamlit.
 
-    Evita o iframe/componente customizado que podia causar NotFoundError/removeChild
-    durante reruns rápidos no Streamlit Cloud.
+    As opções são filtradas no navegador enquanto o usuário digita. O Python só
+    executa novamente quando uma empresa é escolhida, evitando espera e também
+    evitando o iframe customizado que causava NotFoundError/removeChild.
     """
-    if value is None:
-        value = default or ""
-    return st.text_input(
+    return st.selectbox(
         "Pesquisar empresa",
-        value=str(value or ""),
+        options=list(options or []),
+        index=None,
         placeholder=placeholder or "Pesquisar empresa",
         key=key or "razync_company_search_native",
         label_visibility="collapsed",
@@ -8666,10 +8666,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         with st.container(key='org_pesquisa_nativa'):
             with st.container(key='org_campo_pesquisa'):
                 termo_busca_empresas = _pesquisa_empresa_instantanea(
-                    value='',
+                    options=[
+                        f"{empresa['codigo']} — {empresa['nome']}"
+                        for empresa in empresas_catalogo_completo
+                    ],
                     placeholder='Digite o código ou o nome da empresa',
                     key='org_busca_empresas_instantanea',
-                    default='',
                 ) or ''
 
             termo_normalizado = _normalizar_busca_empresa(termo_busca_empresas)
