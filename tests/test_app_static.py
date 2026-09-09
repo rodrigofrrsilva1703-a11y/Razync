@@ -165,6 +165,17 @@ def test_empresa_1402_tem_btg_510_base_e_conferencia():
     assert "processar_extrato_btg_vgv" in texto
 
 
+
+def test_empresa_88_tem_itau_508_modelo_base_e_conferencia():
+    texto = APP.read_text(encoding="utf-8")
+    catalogo = (ROOT / "razync" / "company_catalog.py").read_text(encoding="utf-8")
+    assert \'"codigo": 88\' in catalogo
+    assert \'"chave_sistema": "hw_88"\' in catalogo
+    assert "contas_hw88 = {\'itau\': \'508\'}" in texto
+    assert "renderizar_base_inteligente_empresa(\\n                \'hw_88\'" in texto
+    assert "processar_extrato_hw88" in texto
+    assert "\'banco\': \'itau_hw88\', \'conta\': \'508\'" in texto
+
 def test_pesquisa_preserva_visual_original_e_cache_otimizado():
     texto = APP.read_text(encoding="utf-8")
     assert "components.declare_component" not in texto
