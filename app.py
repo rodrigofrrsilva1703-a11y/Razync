@@ -9,11 +9,12 @@ from pathlib import Path
 import razync.company_catalog as _catalogo
 
 
-# Ativa a empresa 841 no Organizador antes de carregar a aplicação histórica.
+# Ativa as empresas acrescentadas ao Organizador antes de carregar a aplicação histórica.
 for _empresa in _catalogo.EMPRESAS:
-    if str(_empresa.get("codigo")) == "841":
-        _empresa["chave_sistema"] = "lucrativite_841"
-        break
+    _chaves_novas = {"625": "valean_625", "841": "lucrativite_841"}
+    _codigo_empresa = str(_empresa.get("codigo"))
+    if _codigo_empresa in _chaves_novas:
+        _empresa["chave_sistema"] = _chaves_novas[_codigo_empresa]
 
 _catalogo.EMPRESAS_POR_REGIME = {
     regime: [empresa for empresa in _catalogo.EMPRESAS if empresa["regime"] == regime]
@@ -41,12 +42,16 @@ _processar_extrato_conferencia_legado = processar_extrato_conferencia_empresa
 
 def identificar_chave_banco_empresa(valor):
     texto = normalizar_texto(texto_celula_seguro(valor))
+    if "caixa" in texto or "cef" in texto:
+        return "caixa"
     if "inter" in texto:
         return "inter"
     return _identificar_chave_banco_legado(valor)
 
 
 def nome_banco_por_chave(chave):
+    if chave == "caixa":
+        return "Caixa"
     if chave == "inter":
         return "Banco Inter"
     return _nome_banco_por_chave_legado(chave)
@@ -54,6 +59,11 @@ def nome_banco_por_chave(chave):
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
+    if banco_forcado in {"banco_brasil_625", "caixa_625", "sicredi_625"}:
+        from razync.valean_625 import processar_extrato_625
+
+        banco = banco_forcado.removesuffix("_625")
+        return processar_extrato_625(file_bytes, banco).to_dict("records")
     if banco_forcado in {"inter", "inter_841"}:
         from razync.lucrativite_841 import processar_extrato_inter_conferencia_841
 
@@ -169,3 +179,102 @@ def _renderizar_lucrativite_841():
 
 if st.session_state.get("empresa_organizador") == "lucrativite_841":
     _renderizar_lucrativite_841()
+
+
+def _renderizar_valean_625():
+    from razync.valean_625 import CONTAS_VALEAN_625, processar_extrato_625
+
+    empresa_625 = "625 - VALEAN SEGURANÇA E MEDICINA DO TRABALHO EIRELI ME"
+    configs = [
+        {"nome": "Banco do Brasil · Conta 8", "slug": "banco_brasil", "banco": "banco_brasil_625", "conta": "8"},
+        {"nome": "Caixa · Conta 508", "slug": "caixa", "banco": "caixa_625", "conta": "508"},
+        {"nome": "Sicredi · Conta 3999", "slug": "sicredi", "banco": "sicredi_625", "conta": "3999"},
+    ]
+    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
+
+    with aba_operacoes:
+        st.markdown("#### Extratos bancários → Modelo Domínio")
+        st.caption(
+            "Envie os extratos dos bancos desejados. O download será um único Excel, "
+            "com uma aba separada para cada banco enviado."
+        )
+        col_bb, col_caixa, col_sicredi = st.columns(3)
+        with col_bb:
+            arquivo_bb = st.file_uploader(
+                "Banco do Brasil · conta 8", type=["pdf"], key="valean_625_bb"
+            )
+        with col_caixa:
+            arquivo_caixa = st.file_uploader(
+                "Caixa · conta 508", type=["pdf"], key="valean_625_caixa"
+            )
+        with col_sicredi:
+            arquivo_sicredi = st.file_uploader(
+                "Sicredi · conta 3999", type=["pdf"], key="valean_625_sicredi"
+            )
+
+        enviados = {
+            "Banco do Brasil": ("banco_brasil", arquivo_bb),
+            "Caixa": ("caixa", arquivo_caixa),
+            "Sicredi": ("sicredi", arquivo_sicredi),
+        }
+        arquivos_presentes = {nome: item for nome, item in enviados.items() if item[1] is not None}
+        if arquivos_presentes and st.button(
+            "Processar extratos", type="primary", use_container_width=True,
+            key="valean_625_processar"
+        ):
+            try:
+                quadros = {}
+                for nome, (banco, arquivo) in arquivos_presentes.items():
+                    quadros[nome] = executar_com_loading(
+                        f"Lendo {nome}...", processar_extrato_625,
+                        arquivo.getvalue(), banco,
+                    )
+                st.session_state["valean_625_quadros"] = quadros
+                st.session_state.pop("valean_625_erro", None)
+            except Exception as erro:
+                st.session_state["valean_625_erro"] = str(erro)
+                st.session_state.pop("valean_625_quadros", None)
+
+        if st.session_state.get("valean_625_erro"):
+            st.error(f"Não foi possível montar o Modelo Domínio: {st.session_state['valean_625_erro']}")
+
+        quadros = st.session_state.get("valean_625_quadros", {})
+        if quadros:
+            renderizar_previa_bancos_padrao(
+                quadros, ordem=["Banco do Brasil", "Caixa", "Sicredi"]
+            )
+            dados_excel = {
+                nome: {"principal": quadro, "retirados": pd.DataFrame()}
+                for nome, quadro in quadros.items()
+            }
+            arquivo_saida = gerar_excel_nova_geracao(dados_excel)
+            todas_datas = pd.concat(
+                [pd.to_datetime(q["DATA"], errors="coerce") for q in quadros.values()]
+            ).dropna()
+            periodo_nome = (
+                f"{todas_datas.min().strftime('%d%m%Y')}_A_{todas_datas.max().strftime('%d%m%Y')}"
+                if not todas_datas.empty else "PERIODO"
+            )
+            st.download_button(
+                "Baixar Modelo Domínio por banco",
+                data=arquivo_saida,
+                file_name=f"VALEAN_625_MODELO_DOMINIO_{periodo_nome}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="valean_625_download",
+            )
+
+        renderizar_conferencia_autokraft(
+            "valean_625", bancos_config=configs,
+            rotulo_planilha="Planilha final organizada da empresa 625",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "valean_625", empresa_625,
+            {"banco_brasil", "caixa", "sicredi"}, CONTAS_VALEAN_625,
+        )
+
+
+if st.session_state.get("empresa_organizador") == "valean_625":
+    _renderizar_valean_625()
