@@ -172,3 +172,10 @@ def test_pesquisa_preserva_visual_original_e_cache_otimizado():
     assert "return st.text_input(" in texto
     assert "@st.cache_data(show_spinner=False, ttl=900, max_entries=12)\ndef carregar_tarefas_competencia" in texto
     assert not (ROOT / 'components' / 'company_search' / 'index.html').exists()
+
+
+def test_base_inteligente_1000_aplica_regras_fixas_antes_do_aprendizado():
+    texto = APP.read_text(encoding="utf-8")
+    assert "empresa_classificacao == 'accede_automacao'" in texto
+    assert "identificar_conta_folha_accede_1000(historico)" in texto
+    assert "resumo['regras_fixas_1000'] += 1" in texto
