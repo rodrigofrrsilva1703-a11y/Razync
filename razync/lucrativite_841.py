@@ -1,6 +1,6 @@
 """Banco Inter da empresa 841 - Lucrativite.
 
-Lê o extrato Excel do Banco Inter, monta lançamentos no padrão do Modelo Domínio
+Lê extratos Excel e PDF do Banco Inter, monta lançamentos no padrão do Modelo Domínio
 e gera uma conferência diária entre extrato e planilha organizada.
 """
 
@@ -11,10 +11,25 @@ import re
 import unicodedata
 
 import pandas as pd
+from pypdf import PdfReader
 
 CONTA_INTER_841 = "506"
 BANCO_INTER_841 = "BANCO INTER"
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
+MESES_PT = {
+    "janeiro": 1,
+    "fevereiro": 2,
+    "marco": 3,
+    "abril": 4,
+    "maio": 5,
+    "junho": 6,
+    "julho": 7,
+    "agosto": 8,
+    "setembro": 9,
+    "outubro": 10,
+    "novembro": 11,
+    "dezembro": 12,
+}
 
 
 def _corrigir_mojibake(texto: str) -> str:
@@ -62,6 +77,17 @@ def _historico_inter(descricao: str, valor: float) -> str:
     prefixo = "Recebido: " if valor > 0 else "Pago: "
     descricao = re.sub(r"^(?:Recebido|Pago):\s*", "", descricao, flags=re.I)
     return prefixo + descricao
+
+
+def _registro_inter(data, valor: float, descricao: str) -> dict:
+    return {
+        "DESCRIÇÃO": BANCO_INTER_841,
+        "DATA": pd.Timestamp(data).normalize(),
+        "VALOR": round(float(valor), 2),
+        "DÉBITO": CONTA_INTER_841 if valor > 0 else "",
+        "CRÉDITO": CONTA_INTER_841 if valor < 0 else "",
+        "HISTÓRICO": _historico_inter(descricao, valor),
+    }
 
 
 def _localizar_tabela_excel(conteudo: bytes) -> pd.DataFrame:
@@ -115,17 +141,7 @@ def processar_extrato_inter_841(conteudo: bytes) -> pd.DataFrame:
 
         if pd.isna(data) or abs(valor) < 0.005:
             continue
-
-        registros.append(
-            {
-                "DESCRIÇÃO": BANCO_INTER_841,
-                "DATA": pd.Timestamp(data).normalize(),
-                "VALOR": valor,
-                "DÉBITO": CONTA_INTER_841 if valor > 0 else "",
-                "CRÉDITO": CONTA_INTER_841 if valor < 0 else "",
-                "HISTÓRICO": _historico_inter(descricao, valor),
-            }
-        )
+        registros.append(_registro_inter(data, valor, descricao))
 
     if not registros:
         raise ValueError("Nenhum lançamento válido foi encontrado no extrato Banco Inter.")
@@ -133,6 +149,98 @@ def processar_extrato_inter_841(conteudo: bytes) -> pd.DataFrame:
     return pd.DataFrame(registros, columns=COLUNAS_MODELO).sort_values(
         ["DATA"], kind="stable"
     ).reset_index(drop=True)
+
+
+def _valor_pdf_inter(texto: str) -> float:
+    texto = str(texto or "").strip()
+    negativo = texto.startswith("-")
+    numero = texto.replace("-", "").replace("R$", "").replace(" ", "")
+    numero = numero.replace(".", "").replace(",", ".")
+    valor = float(numero)
+    return round(-valor if negativo else valor, 2)
+
+
+def processar_extrato_inter_pdf_841(conteudo: bytes) -> pd.DataFrame:
+    """Lê o extrato PDF visual do Banco Inter, como o PDF emitido pelo internet banking."""
+    if not conteudo:
+        raise ValueError("O PDF do Banco Inter está vazio.")
+
+    try:
+        leitor = PdfReader(io.BytesIO(conteudo))
+    except Exception as erro:
+        raise ValueError(f"Não foi possível abrir o PDF do Banco Inter: {erro}") from erro
+
+    data_atual = None
+    registros = []
+    padrao_data = re.compile(
+        r"(\d{1,2})\s+de\s+([A-Za-zÀ-ÿ]+)\s+de\s+(\d{4})\s+Saldo do dia:",
+        flags=re.I,
+    )
+    padrao_valor = re.compile(r"-?R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}")
+
+    for pagina in leitor.pages:
+        texto = pagina.extract_text() or ""
+        for linha_bruta in texto.splitlines():
+            linha = re.sub(r"\s+", " ", linha_bruta.replace("\xa0", " ")).strip()
+            if not linha:
+                continue
+
+            achou_data = padrao_data.search(linha)
+            if achou_data:
+                mes = MESES_PT.get(_normalizar_texto(achou_data.group(2)))
+                if mes:
+                    data_atual = pd.Timestamp(
+                        year=int(achou_data.group(3)),
+                        month=mes,
+                        day=int(achou_data.group(1)),
+                    )
+                continue
+
+            if data_atual is None:
+                continue
+            if linha.startswith((
+                "Fale com a gente",
+                "SAC:",
+                "Solicitado em:",
+                "Saldo total",
+                "Saldo disponível",
+                "Saldo bloqueado",
+                "Valor Saldo por transação",
+            )):
+                continue
+
+            valores = padrao_valor.findall(linha)
+            # Cada transação do PDF possui o valor do movimento e o saldo após a transação.
+            if len(valores) < 2:
+                continue
+
+            posicao_valor = linha.find(valores[0])
+            descricao = linha[:posicao_valor].strip()
+            if not descricao:
+                continue
+
+            valor = _valor_pdf_inter(valores[0])
+            if abs(valor) < 0.005:
+                continue
+            registros.append(_registro_inter(data_atual, valor, descricao))
+
+    if not registros:
+        raise ValueError(
+            "Nenhum lançamento foi reconhecido no PDF. Use o extrato PDF detalhado do Banco Inter, "
+            "com data, descrição, valor e saldo por transação."
+        )
+
+    return pd.DataFrame(registros, columns=COLUNAS_MODELO).sort_values(
+        ["DATA"], kind="stable"
+    ).reset_index(drop=True)
+
+
+def processar_extrato_inter_conferencia_841(conteudo: bytes, nome_arquivo: str = "") -> pd.DataFrame:
+    """Aceita Excel ou PDF no card de extrato da conferência."""
+    nome = str(nome_arquivo or "").lower().strip()
+    if nome.endswith(".pdf") or conteudo[:5] == b"%PDF-":
+        return processar_extrato_inter_pdf_841(conteudo)
+    return processar_extrato_inter_841(conteudo)
 
 
 def ler_modelo_para_conferencia(conteudo: bytes) -> pd.DataFrame:
