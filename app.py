@@ -26,6 +26,7 @@ from razync.company_catalog import EMPRESAS, EMPRESAS_POR_REGIME, EMPRESAS_POR_C
 from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
 from razync.history import padronizar_historicos_modelo, prefixar_historico_movimento
+from razync.accede_1000 import aplicar_regras_accede_1000
 from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
 from razync.bb_statement import parece_extrato_bb_autorizavel, processar_extrato_bb_autorizavel
 from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia_operacional
@@ -5012,7 +5013,7 @@ def processar_mapa_autokraft(file_bytes, filename=''):
 
 
 @st.cache_data(show_spinner=False, max_entries=16)
-def processar_planilha_accede_sig(file_bytes, banco_nome):
+def processar_planilha_accede_sig(file_bytes, banco_nome, empresa=''):
     """
     Converte planilhas SIG da ACCEDE para o Modelo Domínio.
 
@@ -5125,7 +5126,13 @@ def processar_planilha_accede_sig(file_bytes, banco_nome):
     df = pd.DataFrame(registros, columns=colunas_saida)
     if df.empty:
         raise ValueError(f'Nenhum lançamento válido foi encontrado na planilha SIG do {banco_nome}.')
-    return df.sort_values('DATA', kind='stable').reset_index(drop=True)
+    df = df.sort_values('DATA', kind='stable').reset_index(drop=True)
+    if empresa == 'accede_automacao':
+        conta_bancaria = CONFIGURACOES_ACCEDE[empresa]['contas_bancarias'][
+            normalizar_texto(banco_nome)
+        ]
+        df = aplicar_regras_accede_1000(df, conta_bancaria)
+    return df
 
 
 def filtrar_dataframe_periodo(df, data_inicial, data_final):
@@ -9915,7 +9922,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             'Organizando a planilha SIG do Itaú...',
                             processar_planilha_accede_sig,
                             arquivo_itau_accede.getvalue(),
-                            'Itaú'
+                            'Itaú',
+                            slug_accede,
                         ),
                         'retirados': pd.DataFrame()
                     }
@@ -9925,7 +9933,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                             'Organizando a planilha SIG do Sicredi...',
                             processar_planilha_accede_sig,
                             arquivo_sicredi_accede.getvalue(),
-                            'Sicredi'
+                            'Sicredi',
+                            slug_accede,
                         ),
                         'retirados': pd.DataFrame()
                     }
