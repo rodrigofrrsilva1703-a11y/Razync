@@ -33,13 +33,41 @@ exec(
 )
 
 
+# Integra o Banco Inter ao mesmo motor de conferência usado pelas demais empresas.
+_identificar_chave_banco_legado = identificar_chave_banco_empresa
+_nome_banco_por_chave_legado = nome_banco_por_chave
+_processar_extrato_conferencia_legado = processar_extrato_conferencia_empresa
+
+
+def identificar_chave_banco_empresa(valor):
+    texto = normalizar_texto(texto_celula_seguro(valor))
+    if "inter" in texto:
+        return "inter"
+    return _identificar_chave_banco_legado(valor)
+
+
+def nome_banco_por_chave(chave):
+    if chave == "inter":
+        return "Banco Inter"
+    return _nome_banco_por_chave_legado(chave)
+
+
+def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
+    if banco_forcado in {"inter", "inter_841"}:
+        from razync.lucrativite_841 import processar_extrato_inter_conferencia_841
+
+        return processar_extrato_inter_conferencia_841(
+            file_bytes, filename
+        ).to_dict("records")
+    return _processar_extrato_conferencia_legado(
+        file_bytes, filename, banco_forcado
+    )
+
+
 def _renderizar_lucrativite_841():
     from razync.lucrativite_841 import (
         COLUNAS_MODELO as COLUNAS_MODELO_841,
-        conferir_extrato_modelo,
-        ler_modelo_para_conferencia,
         processar_extrato_inter_841,
-        processar_extrato_inter_conferencia_841,
     )
 
     empresa_841 = "841 - LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME"
@@ -119,93 +147,15 @@ def _renderizar_lucrativite_841():
                 key="lucrativite_841_download_modelo",
             )
 
-        st.markdown("---")
-        st.markdown("#### Conferência com Extrato")
-        st.caption(
-            "Banco Inter · conta 506. O extrato pode ser Excel ou o PDF detalhado emitido pelo Banco Inter."
+        renderizar_conferencia_autokraft(
+            "lucrativite_841",
+            bancos_config=[{
+                "nome": "Banco Inter · Conta 506",
+                "slug": "inter",
+                "banco": "inter",
+                "conta": "506",
+            }],
         )
-
-        col_planilha_841, col_extrato_841 = st.columns(2)
-        with col_planilha_841:
-            planilha_final_841 = st.file_uploader(
-                "Planilha final organizada",
-                type=["xlsx", "xls"],
-                key="lucrativite_841_modelo_conferencia",
-            )
-        with col_extrato_841:
-            extrato_conf_841 = st.file_uploader(
-                "Extrato Banco Inter para conferência",
-                type=["xlsx", "xls", "pdf"],
-                key="lucrativite_841_extrato_conferencia",
-                help="Aceita Excel ou PDF detalhado do Banco Inter com data, descrição, valor e saldo por transação.",
-            )
-
-        try:
-            if extrato_conf_841 is not None:
-                extrato_df_841 = processar_extrato_inter_conferencia_841(
-                    extrato_conf_841.getvalue(),
-                    extrato_conf_841.name,
-                )
-            else:
-                extrato_df_841 = st.session_state.get("lucrativite_841_extrato")
-
-            if planilha_final_841 is not None:
-                modelo_conf_841 = ler_modelo_para_conferencia(planilha_final_841.getvalue())
-            else:
-                modelo_conf_841 = st.session_state.get("lucrativite_841_modelo")
-
-            if (
-                isinstance(extrato_df_841, pd.DataFrame)
-                and not extrato_df_841.empty
-                and isinstance(modelo_conf_841, pd.DataFrame)
-                and not modelo_conf_841.empty
-            ):
-                diario_841, resumo_841 = conferir_extrato_modelo(
-                    extrato_df_841, modelo_conf_841
-                )
-
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Extrato", resumo_841["qtd_extrato"])
-                c2.metric("Planilha", resumo_841["qtd_modelo"])
-                c3.metric("Dif. entradas", formatar_moeda(resumo_841["diferenca_entradas"]))
-                c4.metric("Dif. saídas", formatar_moeda(resumo_841["diferenca_saidas"]))
-
-                if resumo_841["dias_divergentes"] == 0:
-                    st.success(
-                        "Conferência concluída: entradas e saídas da planilha batem com o extrato Banco Inter."
-                    )
-                else:
-                    st.warning(
-                        f"{resumo_841['dias_divergentes']} dia(s) apresentam divergência. "
-                        "Nenhuma diferença foi compensada automaticamente."
-                    )
-
-                exibicao_841 = diario_841.copy()
-                exibicao_841["DATA"] = pd.to_datetime(exibicao_841["DATA"]).dt.strftime("%d/%m/%Y")
-                st.dataframe(
-                    exibicao_841,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=420,
-                    column_config={
-                        coluna: st.column_config.NumberColumn(coluna, format="R$ %.2f")
-                        for coluna in [
-                            "EXTRATO ENTRADAS",
-                            "EXTRATO SAÍDAS",
-                            "MODELO ENTRADAS",
-                            "MODELO SAÍDAS",
-                            "DIF. ENTRADAS",
-                            "DIF. SAÍDAS",
-                        ]
-                    },
-                )
-            else:
-                st.info(
-                    "Envie o extrato e a planilha final nesta área para iniciar a conferência. "
-                    "Se o extrato já foi processado acima, ele pode ser reutilizado."
-                )
-        except Exception as erro_conf_841:
-            st.error(f"Não foi possível realizar a conferência: {erro_conf_841}")
 
     with aba_base:
         renderizar_base_inteligente_empresa(
