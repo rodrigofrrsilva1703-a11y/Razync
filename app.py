@@ -26,7 +26,9 @@ from razync.company_catalog import EMPRESAS, EMPRESAS_POR_REGIME, EMPRESAS_POR_C
 from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
 from razync.history import padronizar_historicos_modelo, prefixar_historico_movimento
-from razync.accede_1000 import aplicar_regras_accede_1000
+from razync.accede_1000 import (
+    aplicar_regras_accede_1000, identificar_conta_folha_accede_1000,
+)
 from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
 from razync.bb_statement import parece_extrato_bb_autorizavel, processar_extrato_bb_autorizavel
 from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia_operacional
@@ -4205,6 +4207,7 @@ def classificar_planilha_final(
         'automaticos': 0,
         'somente_banco': 0,
         'antecipados': 0,
+        'regras_fixas_1000': 0,
         'por_nome_empresa': 0,
         'ja_preenchidos': 0,
         'parciais_completados': 0,
@@ -4377,7 +4380,21 @@ def classificar_planilha_final(
                 assinatura_outro = f"outro|{sufixo_assinatura}" if sufixo_assinatura else assinatura
                 candidatos = candidatos_banco.get(assinatura_outro, set())
                 conta_segura = mapas_banco.get(assinatura_outro)
-            if 'antecipad' in normalizar_texto(historico):
+            conta_fixa_accede = (
+                identificar_conta_folha_accede_1000(historico)
+                if empresa_classificacao == 'accede_automacao'
+                and natureza == 'pago'
+                else ''
+            )
+            if conta_fixa_accede:
+                ws.cell(
+                    numero_linha, coluna_contrapartida
+                ).value = valor_conta_excel(conta_fixa_accede)
+                resumo['automaticos'] += 1
+                resumo['regras_fixas_1000'] += 1
+                if linha_estava_parcial:
+                    resumo['parciais_completados'] += 1
+            elif 'antecipad' in normalizar_texto(historico):
                 ws.cell(numero_linha, coluna_contrapartida).value = 532
                 resumo['automaticos'] += 1
                 resumo['antecipados'] += 1
