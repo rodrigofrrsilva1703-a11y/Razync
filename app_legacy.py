@@ -5320,8 +5320,12 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)
         [nome_banco_por_chave(chave) for chave in sorted(bancos_encontrados)]
     )
 
-def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
-    """Gera um único arquivo com uma aba do Modelo Domínio para cada banco."""
+def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None, prefixar_historicos=True):
+    """Gera um único arquivo com uma aba do Modelo Domínio para cada banco.
+
+    prefixar_historicos=False é exclusivo dos fluxos em que o histórico já traz
+    PAGO/RECEBIDO da origem, como Nova Geração 266 e 1396.
+    """
     from openpyxl import Workbook, load_workbook
 
     if modelo_bytes:
@@ -5346,7 +5350,7 @@ def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
             if coluna == 'DATA':
                 data = pd.to_datetime(valor, errors='coerce')
                 valor = data.strftime('%d/%m/%Y') if not pd.isna(data) else ''
-            elif coluna == 'HISTÓRICO':
+            elif coluna == 'HISTÓRICO' and prefixar_historicos:
                 valor = prefixar_historico_movimento(
                     valor, registro.get('VALOR', 0)
                 )
@@ -10878,7 +10882,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         "Gerando a planilha final...",
                         gerar_excel_nova_geracao,
                         dados_exportacao_por_banco,
-                        modelo_org_bytes
+                        modelo_org_bytes,
+                        False
                     )
                     try:
                         if registrar_conclusao_automatica_empresa(
