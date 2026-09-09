@@ -24,7 +24,7 @@ EMPRESAS = [
     {"codigo": 770, "nome": "BRAMEX SERVICE E SERVICOS DE FERROS LTDA - ME", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 831, "nome": "SUDANY HOLDING PATRIMONIAL LTDA", "regime": "LUCRO PRESUMIDO"},
     {"codigo": 832, "nome": "DANFAT HOLDING PATRIMONIAL EIRELI", "regime": "LUCRO PRESUMIDO"},
-    {"codigo": 841, "nome": "LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME", "regime": "SIMPLES NACIONAL"},
+    {"codigo": 841, "nome": "LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME", "regime": "SIMPLES NACIONAL", "chave_sistema": "lucrativite_841"},
     {"codigo": 912, "nome": "VITAL SAFETY CONSULTORIA E TREINAMENTO LTDA - ME", "regime": "SIMPLES NACIONAL"},
     {"codigo": 964, "nome": "WILLIANS VENANCIO ALMEIDA - ME", "regime": "SIMPLES NACIONAL"},
     {"codigo": 968, "nome": "RADANI ELETRONICA E AUTOMACAO LTDA", "regime": "SIMPLES NACIONAL", "chave_sistema": "radani"},
