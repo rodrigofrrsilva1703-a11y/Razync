@@ -60,6 +60,10 @@ from razync.vgv_1402 import (
     processar_extrato_btg_vgv,
     processar_vgv,
 )
+from razync.hw_88 import (
+    COLUNAS_MODELO as COLUNAS_MODELO_HW88,
+    processar_extrato_hw88,
+)
 
 
 # Cache dos processamentos pesados da empresa 242. O Streamlit executa o script
@@ -98,6 +102,9 @@ _vgv_processar = st.cache_data(
 _vgv_gerar_modelo = st.cache_data(
     show_spinner=False, ttl=3600, max_entries=8
 )(ler_caixa_vgv)
+_hw88_processar_extrato = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(processar_extrato_hw88)
 
 # Configuração da empresa 968 - Radani. As contas Domínio permanecem vazias até
 # serem confirmadas pelo usuário; o sistema não inventa conta bancária.
@@ -5575,7 +5582,9 @@ def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=No
         'saldo do dia', 'saldo total', 'saldo disponivel', 'saldo em conta',
     ]
     filtrados = []
-    if banco_forcado == 'btg' and str(filename).lower().endswith('.pdf'):
+    if banco_forcado == 'itau_hw88' and str(filename).lower().endswith('.pdf'):
+        origem_extrato = processar_extrato_hw88(file_bytes).to_dict('records')
+    elif banco_forcado == 'btg' and str(filename).lower().endswith('.pdf'):
         origem_extrato = processar_extrato_btg_vgv(file_bytes).to_dict('records')
     # O extrato BB Empresa 'Autorizável' possui linhas quebradas e pode colar
     # movimento e saldo. Usa leitor dedicado para não perder/duplicar valores.
@@ -8806,6 +8815,105 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "Empresa cadastrada no Razync. As ferramentas específicas desta empresa "
             "ainda não foram configuradas."
         )
+
+    if st.session_state['empresa_organizador'] == 'hw_88':
+        empresa_hw88 = '88 - H & W SERVIÇOS MÉDICOS S/S LTDA'
+        contas_hw88 = {'itau': '508'}
+        aba_operacoes_hw88, aba_base_hw88 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente'
+        ])
+
+        with aba_base_hw88:
+            renderizar_base_inteligente_empresa(
+                'hw_88', empresa_hw88, {'itau'}, contas_hw88
+            )
+
+        with aba_operacoes_hw88:
+            st.markdown('#### Extrato Itaú → Modelo Domínio')
+            st.caption(
+                'Conta Itaú 508. Digite o período; somente os movimentos entre '
+                'as duas datas serão levados ao Modelo Domínio.'
+            )
+            col_inicio_hw88, col_fim_hw88 = st.columns(2)
+            inicio_hw88_texto = col_inicio_hw88.text_input(
+                'Data inicial', placeholder='DD/MM/AAAA', key='hw88_inicio'
+            )
+            fim_hw88_texto = col_fim_hw88.text_input(
+                'Data final', placeholder='DD/MM/AAAA', key='hw88_fim'
+            )
+            extrato_hw88 = st.file_uploader(
+                'Extrato Itaú em PDF', type=['pdf'], key='hw88_extrato_modelo'
+            )
+            if extrato_hw88 is not None:
+                try:
+                    inicio_hw88 = datetime.strptime(
+                        inicio_hw88_texto.strip(), '%d/%m/%Y'
+                    ).date()
+                    fim_hw88 = datetime.strptime(
+                        fim_hw88_texto.strip(), '%d/%m/%Y'
+                    ).date()
+                    if inicio_hw88 > fim_hw88:
+                        raise ValueError('A data inicial não pode ser posterior à data final.')
+                    modelo_hw88 = executar_com_loading(
+                        'Lendo o extrato Itaú e montando o Modelo Domínio...',
+                        _hw88_processar_extrato,
+                        extrato_hw88.getvalue(), inicio_hw88, fim_hw88,
+                    )
+                    h1, h2, h3, h4 = st.columns(4)
+                    h1.metric('Movimentos', len(modelo_hw88))
+                    h2.metric('Entradas', formatar_moeda(
+                        modelo_hw88.loc[modelo_hw88['VALOR'] > 0, 'VALOR'].sum()
+                    ))
+                    h3.metric('Saídas', formatar_moeda(-modelo_hw88.loc[
+                        modelo_hw88['VALOR'] < 0, 'VALOR'
+                    ].sum()))
+                    h4.metric('Conta bancária', '508 · Itaú')
+                    previa_hw88 = modelo_hw88.copy()
+                    previa_hw88['DATA'] = pd.to_datetime(
+                        previa_hw88['DATA']
+                    ).dt.strftime('%d/%m/%Y')
+                    st.dataframe(
+                        previa_hw88, use_container_width=True,
+                        hide_index=True, height=340,
+                    )
+                    excel_hw88 = gerar_excel_modelo_dominio(
+                        modelo_hw88[COLUNAS_MODELO_HW88]
+                    )
+                    col_excel_hw88, col_txt_hw88 = st.columns(2)
+                    col_excel_hw88.download_button(
+                        'Baixar Modelo Domínio (.XLSX)', data=excel_hw88,
+                        file_name=(
+                            'HW_88_MODELO_DOMINIO_'
+                            f'{inicio_hw88.strftime("%d%m%Y")}_A_'
+                            f'{fim_hw88.strftime("%d%m%Y")}.xlsx'
+                        ),
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True, key='hw88_download_xlsx',
+                    )
+                    col_txt_hw88.download_button(
+                        'Baixar TXT para Domínio',
+                        data=gerar_txt_dominio(modelo_hw88),
+                        file_name=(
+                            'HW_88_MODELO_DOMINIO_'
+                            f'{inicio_hw88.strftime("%d%m%Y")}_A_'
+                            f'{fim_hw88.strftime("%d%m%Y")}.txt'
+                        ),
+                        mime='text/plain', use_container_width=True,
+                        key='hw88_download_txt',
+                    )
+                except ValueError as erro_hw88:
+                    st.warning(str(erro_hw88))
+                except Exception as erro_hw88:
+                    st.error(f'Não foi possível processar a empresa 88: {erro_hw88}')
+
+            st.markdown('#### Conferência — H & W 88')
+            renderizar_conferencia_autokraft(
+                'hw_88',
+                bancos_config=[{
+                    'nome': 'Itaú · Conta 508', 'slug': 'itau',
+                    'banco': 'itau_hw88', 'conta': '508',
+                }],
+            )
 
     if st.session_state['empresa_organizador'] == 'engekraft_969':
         empresa_969 = '969 - ENGEKRAFT AUTOMAÇÃO LTDA - EPP'
