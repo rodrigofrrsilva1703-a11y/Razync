@@ -52,6 +52,7 @@ def nome_banco_por_chave(chave):
     return _nome_banco_por_chave_legado(chave)
 
 
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
     if banco_forcado in {"inter", "inter_841"}:
         from razync.lucrativite_841 import processar_extrato_inter_conferencia_841
