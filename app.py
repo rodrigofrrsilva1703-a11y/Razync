@@ -25,6 +25,7 @@ from razync.companies import CONFIGURACOES_AUTOKRAFT, CONFIGURACOES_ACCEDE
 from razync.company_catalog import EMPRESAS, EMPRESAS_POR_REGIME, EMPRESAS_POR_CHAVE
 from razync.nibo import processar_extrato_nibo_pdf
 from razync.security import proteger_acesso
+from razync.history import padronizar_historicos_modelo, prefixar_historico_movimento
 from razync.bank_validation import diagnostico_pdf_sem_lancamentos, validar_fechamento_saldo
 from razync.bb_statement import parece_extrato_bb_autorizavel, processar_extrato_bb_autorizavel
 from razync.task_deadlines import calcular_prioridade_empresa, obter_competencia_operacional
@@ -2787,6 +2788,7 @@ def gerar_excel_modelo_dominio(df):
     if cabecalho_linha is None:
         raise ValueError('Cabeçalho do Modelo Domínio não foi localizado.')
 
+    df = padronizar_historicos_modelo(df)
     nomes_df = {normalizar_texto(str(c)).strip(): c for c in df.columns}
     linha_modelo = cabecalho_linha + 1
 
@@ -2853,6 +2855,7 @@ def carregar_modelo_dominio_base():
 
 
 def gerar_txt_dominio(df):
+    df = padronizar_historicos_modelo(df)
     linhas_txt = []
     for _, row in df.iterrows():
         hist_limpo = limpar_caracteres_ilegais(str(row['HISTÓRICO'])).replace(';', ' ')
@@ -5298,6 +5301,10 @@ def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None):
             if coluna == 'DATA':
                 data = pd.to_datetime(valor, errors='coerce')
                 valor = data.strftime('%d/%m/%Y') if not pd.isna(data) else ''
+            elif coluna == 'HISTÓRICO':
+                valor = prefixar_historico_movimento(
+                    valor, registro.get('VALOR', 0)
+                )
             elif pd.isna(valor):
                 valor = ''
             linha.append(valor)
