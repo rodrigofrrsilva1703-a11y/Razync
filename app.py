@@ -43,10 +43,9 @@ def _renderizar_lucrativite_841():
 
     empresa_841 = "841 - LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME"
 
-    # Mesmo padrão de navegação das demais empresas do Organizador.
-    aba_operacoes, aba_base, aba_conferencia = st.tabs(
-        ["Organizar arquivos", "Base Inteligente", "Conferência com Extrato"]
-    )
+    # Mesmo padrão das demais empresas: operações e conferência juntas,
+    # com Base Inteligente em uma segunda aba.
+    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
 
     with aba_operacoes:
         st.markdown("#### Banco Inter → Modelo Domínio")
@@ -121,15 +120,7 @@ def _renderizar_lucrativite_841():
                 key="lucrativite_841_download_modelo",
             )
 
-    with aba_base:
-        renderizar_base_inteligente_empresa(
-            "lucrativite_841",
-            empresa_841,
-            {"inter"},
-            {"inter": "506"},
-        )
-
-    with aba_conferencia:
+        st.markdown("---")
         st.markdown("#### Conferência com Extrato")
         st.caption(
             "Banco Inter · conta 506. Compare o extrato com a planilha final organizada, "
@@ -142,7 +133,7 @@ def _renderizar_lucrativite_841():
             key="lucrativite_841_modelo_conferencia",
         )
         extrato_conf_841 = st.file_uploader(
-            "Extrato Banco Inter",
+            "Extrato Banco Inter para conferência",
             type=["xlsx", "xls"],
             key="lucrativite_841_extrato_conferencia",
         )
@@ -213,11 +204,19 @@ def _renderizar_lucrativite_841():
                 )
             else:
                 st.info(
-                    "Envie o extrato e a planilha final nesta aba para iniciar a conferência. "
-                    "Se o extrato já foi processado em Organizar arquivos, ele também pode ser reutilizado."
+                    "Envie o extrato e a planilha final nesta área para iniciar a conferência. "
+                    "Se o extrato já foi processado acima, ele pode ser reutilizado."
                 )
         except Exception as erro_conf_841:
             st.error(f"Não foi possível realizar a conferência: {erro_conf_841}")
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "lucrativite_841",
+            empresa_841,
+            {"inter"},
+            {"inter": "506"},
+        )
 
 
 if st.session_state.get("empresa_organizador") == "lucrativite_841":
