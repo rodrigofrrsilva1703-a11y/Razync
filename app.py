@@ -3235,7 +3235,8 @@ def renderizar_base_inteligente_empresa(
                         planilha_final.getvalue(),
                         planilha_final.name,
                         base_empresa,
-                        contas_bancarias
+                        contas_bancarias,
+                        empresa,
                     )
                     m1, m2, m3 = st.columns(3)
                     m1.metric(
