@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from razync.lucrativite_841 import processar_extrato_inter_841
+from razync.lucrativite_841 import CONTA_INTER_841, processar_extrato_inter_841
 
 
 def test_processa_extrato_inter_real():
@@ -12,6 +12,7 @@ def test_processa_extrato_inter_real():
     df = processar_extrato_inter_841(caminho.read_bytes())
     assert len(df) == 28
     assert set(df['DESCRIÇÃO']) == {'BANCO INTER'}
+    assert CONTA_INTER_841 == '506'
     assert set(df.loc[df['VALOR'] > 0, 'DÉBITO']) == {'506'}
     assert set(df.loc[df['VALOR'] < 0, 'CRÉDITO']) == {'506'}
     assert df.loc[df['VALOR'] > 0, 'HISTÓRICO'].str.startswith('Recebido: ').all()
