@@ -6,9 +6,6 @@ import re
 
 import pandas as pd
 
-from razync.vgv_1402 import _ocr_paginas
-
-
 CONTA_ITAU_HW88 = "508"
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 _DATA = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
@@ -105,8 +102,22 @@ def processar_tokens_pagina(largura: float, dados: pd.DataFrame) -> list[dict]:
 def processar_extrato_hw88(
     conteudo: bytes, data_inicial=None, data_final=None
 ) -> pd.DataFrame:
+    # O extrato Itaú pode vir como PDF visual (sem uma camada de texto útil).
+    # Reutilizamos o leitor posicional já existente no projeto; a importação é
+    # tardia para que a tela da empresa continue abrindo mesmo sem OCR instalado.
+    try:
+        from razync.vgv_1402 import _ocr_paginas
+    except ImportError as erro:
+        raise ValueError("O leitor de extratos Itaú não está disponível. Reinicie o aplicativo para instalar as dependências.") from erro
+
     registros = []
-    for largura, dados in _ocr_paginas(conteudo):
+    try:
+        paginas = _ocr_paginas(conteudo)
+    except ValueError as erro:
+        # Não expor a implementação BTG no erro da empresa Itaú.
+        mensagem = str(erro).replace("extrato BTG", "extrato Itaú")
+        raise ValueError(mensagem) from erro
+    for largura, dados in paginas:
         registros.extend(processar_tokens_pagina(largura, dados))
     if not registros:
         raise ValueError("Nenhum lançamento foi reconhecido no extrato Itaú da empresa 88.")
@@ -118,3 +129,4 @@ def processar_extrato_hw88(
     if df.empty:
         raise ValueError("O extrato não possui lançamentos no período informado.")
     return df.sort_values(["DATA"], kind="stable").reset_index(drop=True)
+
