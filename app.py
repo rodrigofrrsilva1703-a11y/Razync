@@ -42,21 +42,17 @@ def _renderizar_lucrativite_841():
     )
 
     empresa_841 = "841 - LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME"
-    st.markdown("<p class='page-title'>Lucrativite · Empresa 841</p>", unsafe_allow_html=True)
-    st.markdown(
-        "<p class='page-subtitle'>Banco Inter · conta Domínio 506 · Modelo Domínio, Base Inteligente e conferência.</p>",
-        unsafe_allow_html=True,
+
+    # Mesmo padrão de navegação das demais empresas do Organizador.
+    aba_operacoes, aba_base, aba_conferencia = st.tabs(
+        ["Organizar arquivos", "Base Inteligente", "Conferência com Extrato"]
     )
 
-    aba_modelo, aba_base, aba_conferencia = st.tabs(
-        ["Modelo Domínio", "Base Inteligente", "Conferência com Extrato"]
-    )
-
-    with aba_modelo:
-        st.markdown("#### Extrato Banco Inter → Modelo Domínio")
+    with aba_operacoes:
+        st.markdown("#### Banco Inter → Modelo Domínio")
         st.caption(
-            "Envie o Excel do Banco Inter. Entradas recebem débito 506 e saídas recebem "
-            "crédito 506; a contrapartida fica disponível para classificação pela Base Inteligente."
+            "Envie o extrato Excel do Banco Inter. Entradas recebem débito 506 e saídas "
+            "recebem crédito 506; a contrapartida fica disponível para classificação pela Base Inteligente."
         )
         arquivo_inter = st.file_uploader(
             "Extrato Banco Inter (.xlsx/.xls)",
@@ -113,7 +109,7 @@ def _renderizar_lucrativite_841():
             )
             datas_841 = pd.to_datetime(modelo_841["DATA"])
             st.download_button(
-                "⬇️ Baixar Modelo Domínio · Banco Inter 506",
+                "Baixar Modelo Domínio · Banco Inter 506",
                 data=arquivo_modelo_841,
                 file_name=(
                     "LUCRATIVITE_841_INTER_506_MODELO_DOMINIO_"
@@ -134,19 +130,19 @@ def _renderizar_lucrativite_841():
         )
 
     with aba_conferencia:
-        st.markdown("#### Conferência com Extrato · Banco Inter 506")
+        st.markdown("#### Conferência com Extrato")
         st.caption(
-            "Use o resultado processado acima ou envie uma planilha final já classificada. "
-            "A conferência compara entradas e saídas por data, sem compensar diferenças."
+            "Banco Inter · conta 506. Compare o extrato com a planilha final organizada, "
+            "mantendo entradas e saídas separadas."
         )
 
         planilha_final_841 = st.file_uploader(
-            "Planilha final / Modelo Domínio para conferir (opcional)",
+            "Planilha final organizada",
             type=["xlsx", "xls"],
             key="lucrativite_841_modelo_conferencia",
         )
         extrato_conf_841 = st.file_uploader(
-            "Outro extrato Banco Inter para conferir (opcional)",
+            "Extrato Banco Inter",
             type=["xlsx", "xls"],
             key="lucrativite_841_extrato_conferencia",
         )
@@ -174,7 +170,7 @@ def _renderizar_lucrativite_841():
 
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Extrato", resumo_841["qtd_extrato"])
-                c2.metric("Modelo", resumo_841["qtd_modelo"])
+                c2.metric("Planilha", resumo_841["qtd_modelo"])
                 c3.metric(
                     "Dif. entradas",
                     formatar_moeda(resumo_841["diferenca_entradas"]),
@@ -186,8 +182,7 @@ def _renderizar_lucrativite_841():
 
                 if resumo_841["dias_divergentes"] == 0:
                     st.success(
-                        "Conferência concluída: entradas e saídas do Modelo Domínio "
-                        "batem com o extrato Banco Inter."
+                        "Conferência concluída: entradas e saídas da planilha batem com o extrato Banco Inter."
                     )
                 else:
                     st.warning(
@@ -218,8 +213,8 @@ def _renderizar_lucrativite_841():
                 )
             else:
                 st.info(
-                    "Processe um extrato na aba Modelo Domínio ou envie os arquivos "
-                    "acima para iniciar a conferência."
+                    "Envie o extrato e a planilha final nesta aba para iniciar a conferência. "
+                    "Se o extrato já foi processado em Organizar arquivos, ele também pode ser reutilizado."
                 )
         except Exception as erro_conf_841:
             st.error(f"Não foi possível realizar a conferência: {erro_conf_841}")
