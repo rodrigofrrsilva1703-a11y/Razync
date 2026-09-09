@@ -1,0 +1,40 @@
+name: Remover prefixos Nova Geracao 266 1396
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/remove_prefixos_nova_geracao_266_1396.py'
+      - '.github/workflows/remove_prefixos_nova_geracao_266_1396.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/remove_prefixos_nova_geracao_266_1396.py
+      - run: python -m py_compile app.py app_legacy.py
+      - name: Validar escopo
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('app_legacy.py').read_text(encoding='utf-8')
+          trecho=s[s.index('def processar_nova_geracao_banco'):s.index('def processar_nova_geracao_itau')]
+          assert "parte for parte in [historico_origem, documento]" in trecho
+          assert "parte for parte in [lacto, historico_origem, documento]" not in trecho
+          assert "f'Recebido: {historico_credito_final}'" in s
+          assert "f'Pago: {historico_debito_final}'" in s
+          print('Escopo validado: somente Nova Geração sem prefixos; demais regras preservadas.')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app_legacy.py
+          git commit -m 'Remove Pago e Recebido dos históricos da Nova Geração 266 e 1396'
+          git rm scripts/remove_prefixos_nova_geracao_266_1396.py .github/workflows/remove_prefixos_nova_geracao_266_1396.yml scripts/inspect_nova_geracao_prefixes.py .github/workflows/inspect_nova_geracao_prefixes.yml
+          git commit -m 'Remove ajustes temporários da Nova Geração'
+          git push
