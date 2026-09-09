@@ -39,6 +39,7 @@ def _renderizar_lucrativite_841():
         conferir_extrato_modelo,
         ler_modelo_para_conferencia,
         processar_extrato_inter_841,
+        processar_extrato_inter_conferencia_841,
     )
 
     empresa_841 = "841 - LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME"
@@ -121,8 +122,7 @@ def _renderizar_lucrativite_841():
         st.markdown("---")
         st.markdown("#### Conferência com Extrato")
         st.caption(
-            "Banco Inter · conta 506. Compare o extrato com a planilha final organizada, "
-            "mantendo entradas e saídas separadas."
+            "Banco Inter · conta 506. O extrato pode ser Excel ou o PDF detalhado emitido pelo Banco Inter."
         )
 
         col_planilha_841, col_extrato_841 = st.columns(2)
@@ -135,13 +135,17 @@ def _renderizar_lucrativite_841():
         with col_extrato_841:
             extrato_conf_841 = st.file_uploader(
                 "Extrato Banco Inter para conferência",
-                type=["xlsx", "xls"],
+                type=["xlsx", "xls", "pdf"],
                 key="lucrativite_841_extrato_conferencia",
+                help="Aceita Excel ou PDF detalhado do Banco Inter com data, descrição, valor e saldo por transação.",
             )
 
         try:
             if extrato_conf_841 is not None:
-                extrato_df_841 = processar_extrato_inter_841(extrato_conf_841.getvalue())
+                extrato_df_841 = processar_extrato_inter_conferencia_841(
+                    extrato_conf_841.getvalue(),
+                    extrato_conf_841.name,
+                )
             else:
                 extrato_df_841 = st.session_state.get("lucrativite_841_extrato")
 
