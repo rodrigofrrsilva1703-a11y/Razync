@@ -165,11 +165,10 @@ def test_empresa_1402_tem_btg_510_base_e_conferencia():
     assert "processar_extrato_btg_vgv" in texto
 
 
-def test_pesquisa_usa_filtro_nativo_instantaneo_sem_rerun_por_tecla():
+def test_pesquisa_preserva_visual_original_e_cache_otimizado():
     texto = APP.read_text(encoding="utf-8")
     assert "components.declare_component" not in texto
     assert "streamlit.components" not in texto
-    assert "return st.selectbox(" in texto
-    assert "options=list(options or [])" in texto
-    assert "for empresa in empresas_catalogo_completo" in texto
+    assert "return st.text_input(" in texto
+    assert "@st.cache_data(show_spinner=False, ttl=900, max_entries=12)\ndef carregar_tarefas_competencia" in texto
     assert not (ROOT / 'components' / 'company_search' / 'index.html').exists()
