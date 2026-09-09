@@ -64,6 +64,15 @@ from razync.hw_88 import (
     COLUNAS_MODELO as COLUNAS_MODELO_HW88,
     processar_extrato_hw88,
 )
+from razync.lucrativite_841 import (
+    COLUNAS_MODELO as COLUNAS_MODELO_841,
+    CONTA_INTER_841,
+    processar_extrato_inter_841,
+)
+
+_lucrativite841_processar = st.cache_data(
+    show_spinner=False, ttl=3600, max_entries=8
+)(processar_extrato_inter_841)
 
 
 # Cache dos processamentos pesados da empresa 242. O Streamlit executa o script
@@ -5180,6 +5189,8 @@ def identificar_chave_banco_empresa(valor):
         return 'btg'
     if 'itau' in texto or any(conta in digitos for conta in ['995495', '980026']):
         return 'itau'
+    if 'inter' in texto:
+        return 'inter'
     if 'bradesco' in texto or any(conta in digitos for conta in ['4519906', '30848']):
         return 'bradesco'
     if 'fibra' in texto or '6739471' in digitos:
@@ -5197,6 +5208,7 @@ def identificar_chave_banco_empresa(valor):
 def nome_banco_por_chave(chave):
     return {
         'btg': 'BTG',
+        'inter': 'Banco Inter',
         'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra',
         'daycoval': 'Daycoval', 'sicredi': 'Sicredi',
         'santander': 'Santander', 'banco_brasil': 'Banco do Brasil'
@@ -5276,6 +5288,7 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)
             if not descricao:
                 descricao = {
                     'btg': 'BANCO BTG',
+                    'inter': 'BANCO INTER',
                     'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO',
                     'fibra': 'BANCO FIBRA', 'daycoval': 'BANCO DAYCOVAL',
                     'sicredi': 'SICREDI', 'santander': 'BANCO SANTANDER',
@@ -5584,7 +5597,9 @@ def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=No
         'saldo do dia', 'saldo total', 'saldo disponivel', 'saldo em conta',
     ]
     filtrados = []
-    if banco_forcado == 'itau_hw88' and str(filename).lower().endswith('.pdf'):
+    if banco_forcado == 'inter_841' and str(filename).lower().endswith(('.xlsx', '.xls')):
+        origem_extrato = processar_extrato_inter_841(file_bytes).to_dict('records')
+    elif banco_forcado == 'itau_hw88' and str(filename).lower().endswith('.pdf'):
         origem_extrato = processar_extrato_hw88(file_bytes).to_dict('records')
     elif banco_forcado == 'btg' and str(filename).lower().endswith('.pdf'):
         origem_extrato = processar_extrato_btg_vgv(file_bytes).to_dict('records')
@@ -8817,6 +8832,96 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             "Empresa cadastrada no Razync. As ferramentas específicas desta empresa "
             "ainda não foram configuradas."
         )
+
+    if st.session_state['empresa_organizador'] == 'lucrativite_841':
+        empresa_841 = (
+            '841 - LUCRATIVITE SERVIÇOS ESPECIALIZADOS DE APOIO '
+            'ADMINISTRATIVO LTDA - ME'
+        )
+        contas_841 = {'inter': CONTA_INTER_841}
+        aba_operacoes_841, aba_base_841 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente'
+        ])
+
+        with aba_base_841:
+            renderizar_base_inteligente_empresa(
+                'lucrativite_841', empresa_841, {'inter'}, contas_841
+            )
+
+        with aba_operacoes_841:
+            st.markdown('#### Extrato Banco Inter → Modelo Domínio')
+            st.caption(
+                'Banco Inter = conta 506. Valores negativos recebem Pago: e valores '
+                'positivos recebem Recebido: no histórico.'
+            )
+            col_inicio_841, col_fim_841 = st.columns(2)
+            inicio_841_texto = col_inicio_841.text_input(
+                'Data inicial', placeholder='DD/MM/AAAA', key='lucrativite841_inicio'
+            )
+            fim_841_texto = col_fim_841.text_input(
+                'Data final', placeholder='DD/MM/AAAA', key='lucrativite841_fim'
+            )
+            extrato_841 = st.file_uploader(
+                'Extrato Banco Inter em Excel', type=['xlsx', 'xls'],
+                key='lucrativite841_extrato'
+            )
+            if extrato_841 is not None:
+                try:
+                    inicio_841 = datetime.strptime(
+                        inicio_841_texto.strip(), '%d/%m/%Y'
+                    ).date()
+                    fim_841 = datetime.strptime(
+                        fim_841_texto.strip(), '%d/%m/%Y'
+                    ).date()
+                    if inicio_841 > fim_841:
+                        raise ValueError('A data inicial não pode ser posterior à data final.')
+                    modelo_841 = executar_com_loading(
+                        'Lendo o Banco Inter e montando o Modelo Domínio...',
+                        _lucrativite841_processar,
+                        extrato_841.getvalue(), inicio_841, fim_841,
+                    )
+                    renderizar_previa_bancos_padrao(
+                        {'Banco Inter · Conta 506': modelo_841},
+                        titulo='Pré-visualização do Modelo Domínio',
+                    )
+                    excel_841 = gerar_excel_modelo_dominio(
+                        modelo_841[COLUNAS_MODELO_841]
+                    )
+                    col_excel_841, col_txt_841 = st.columns(2)
+                    col_excel_841.download_button(
+                        'Baixar Modelo Domínio (.XLSX)', data=excel_841,
+                        file_name=(
+                            'LUCRATIVITE_841_MODELO_DOMINIO_'
+                            f'{inicio_841.strftime("%d%m%Y")}_A_'
+                            f'{fim_841.strftime("%d%m%Y")}.xlsx'
+                        ),
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True, key='lucrativite841_download_xlsx',
+                    )
+                    col_txt_841.download_button(
+                        'Baixar TXT para Domínio',
+                        data=gerar_txt_dominio(modelo_841),
+                        file_name=(
+                            'LUCRATIVITE_841_MODELO_DOMINIO_'
+                            f'{inicio_841.strftime("%d%m%Y")}_A_'
+                            f'{fim_841.strftime("%d%m%Y")}.txt'
+                        ),
+                        mime='text/plain', use_container_width=True,
+                        key='lucrativite841_download_txt',
+                    )
+                except ValueError as erro_841:
+                    st.warning(str(erro_841))
+                except Exception as erro_841:
+                    st.error(f'Não foi possível processar a empresa 841: {erro_841}')
+
+            st.markdown('#### Conferência — Lucrativite 841')
+            renderizar_conferencia_autokraft(
+                'lucrativite_841',
+                bancos_config=[{
+                    'nome': 'Banco Inter · Conta 506', 'slug': 'inter',
+                    'banco': 'inter_841', 'conta': '506',
+                }],
+            )
 
     if st.session_state['empresa_organizador'] == 'hw_88':
         empresa_hw88 = '88 - H & W SERVIÇOS MÉDICOS S/S LTDA'
