@@ -5206,6 +5206,8 @@ def nome_banco_por_chave(chave):
 def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None):
     """Lê a planilha final e retorna somente o banco escolhido para conferência."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    # Aceita aliases de banco (como itau_hw88), comparando pelo banco real.
+    banco_alvo = 'itau' if str(banco_alvo).lower().startswith('itau') else banco_alvo
     colunas_base = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
     principais, retirados, bancos_encontrados = [], [], set()
 
@@ -5262,8 +5264,8 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)
                 continue
 
             data_raw = linha[col_data]
-            if isinstance(data_raw, (int, float)) and not pd.isna(data_raw):
-                data = pd.to_datetime(data_raw, unit='D', origin='1899-12-30', errors='coerce')
+            if pd.api.types.is_number(data_raw) and not pd.isna(data_raw):
+                data = pd.to_datetime(float(data_raw), unit='D', origin='1899-12-30', errors='coerce')
             else:
                 data = pd.to_datetime(data_raw, dayfirst=True, errors='coerce')
             valor = limpar_valor_monetario(linha[col_valor])
