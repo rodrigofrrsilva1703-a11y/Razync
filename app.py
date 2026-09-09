@@ -43,8 +43,6 @@ def _renderizar_lucrativite_841():
 
     empresa_841 = "841 - LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME"
 
-    # Mesmo padrão das demais empresas: operações e conferência juntas,
-    # com Base Inteligente em uma segunda aba.
     aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
 
     with aba_operacoes:
@@ -127,16 +125,19 @@ def _renderizar_lucrativite_841():
             "mantendo entradas e saídas separadas."
         )
 
-        planilha_final_841 = st.file_uploader(
-            "Planilha final organizada",
-            type=["xlsx", "xls"],
-            key="lucrativite_841_modelo_conferencia",
-        )
-        extrato_conf_841 = st.file_uploader(
-            "Extrato Banco Inter para conferência",
-            type=["xlsx", "xls"],
-            key="lucrativite_841_extrato_conferencia",
-        )
+        col_planilha_841, col_extrato_841 = st.columns(2)
+        with col_planilha_841:
+            planilha_final_841 = st.file_uploader(
+                "Planilha final organizada",
+                type=["xlsx", "xls"],
+                key="lucrativite_841_modelo_conferencia",
+            )
+        with col_extrato_841:
+            extrato_conf_841 = st.file_uploader(
+                "Extrato Banco Inter para conferência",
+                type=["xlsx", "xls"],
+                key="lucrativite_841_extrato_conferencia",
+            )
 
         try:
             if extrato_conf_841 is not None:
@@ -162,14 +163,8 @@ def _renderizar_lucrativite_841():
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Extrato", resumo_841["qtd_extrato"])
                 c2.metric("Planilha", resumo_841["qtd_modelo"])
-                c3.metric(
-                    "Dif. entradas",
-                    formatar_moeda(resumo_841["diferenca_entradas"]),
-                )
-                c4.metric(
-                    "Dif. saídas",
-                    formatar_moeda(resumo_841["diferenca_saidas"]),
-                )
+                c3.metric("Dif. entradas", formatar_moeda(resumo_841["diferenca_entradas"]))
+                c4.metric("Dif. saídas", formatar_moeda(resumo_841["diferenca_saidas"]))
 
                 if resumo_841["dias_divergentes"] == 0:
                     st.success(
@@ -182,9 +177,7 @@ def _renderizar_lucrativite_841():
                     )
 
                 exibicao_841 = diario_841.copy()
-                exibicao_841["DATA"] = pd.to_datetime(exibicao_841["DATA"]).dt.strftime(
-                    "%d/%m/%Y"
-                )
+                exibicao_841["DATA"] = pd.to_datetime(exibicao_841["DATA"]).dt.strftime("%d/%m/%Y")
                 st.dataframe(
                     exibicao_841,
                     use_container_width=True,
