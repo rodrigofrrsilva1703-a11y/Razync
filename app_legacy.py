@@ -4871,19 +4871,19 @@ def processar_nova_geracao_banco(file_bytes, nome_aba, conta_esperada, descricao
         historico_origem = texto_celula_seguro(historico_valor_original)
         documento = texto_celula_seguro(linha[col_doc])
 
-        # Empresas 266 e 1396 (Nova Geração): o status do lançamento já vem no
-        # campo LACTO e não deve poluir o histórico do Modelo Domínio. Mantemos
-        # somente a informação útil da origem + documento e removemos também
-        # eventual prefixo já gravado no próprio histórico de origem.
-        historico_final = re.sub(r'\s+', ' ', " ".join(
-            parte for parte in [historico_origem, documento] if parte
-        )).strip()
-        historico_final = re.sub(
-            r'^(?:(?:Pago|Recebido)\s*:\s*|(?:PAGO|RECEBIDO)\s+)+',
+        # Empresas 266 e 1396 (Nova Geração): preserva o PAGO/RECEBIDO que já
+        # vem do campo LACTO, mas não adiciona o prefixo extra "Pago:"/"Recebido:".
+        # Se o histórico de origem já vier com esse prefixo com dois-pontos,
+        # removemos apenas ele para evitar duplicidade como "PAGO Pago: ...".
+        historico_origem_limpo = re.sub(
+            r'^(?:Pago|Recebido)\s*:\s*',
             '',
-            historico_final,
+            historico_origem,
             flags=re.IGNORECASE,
         ).strip()
+        historico_final = re.sub(r'\s+', ' ', " ".join(
+            parte for parte in [lacto, historico_origem_limpo, documento] if parte
+        )).strip()
 
         registro = {
             'DESCRIÇÃO': descricao_banco,
