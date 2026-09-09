@@ -3,6 +3,11 @@ import ast
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
+LEGACY_APP = ROOT / "app_legacy.py"
+
+
+def app_source():
+    return APP.read_text(encoding="utf-8") + "\n" + LEGACY_APP.read_text(encoding="utf-8")
 
 
 def test_app_tem_sintaxe_valida():
@@ -10,7 +15,7 @@ def test_app_tem_sintaxe_valida():
 
 
 def test_funcoes_criticas_permanecem():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     obrigatorias = [
         "def processar_pdf_daycoval_detalhado",
         "def processar_pdf_itau_detalhado",
@@ -28,7 +33,7 @@ def test_funcoes_criticas_permanecem():
 
 
 def test_empresas_e_bancos_permanecem():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     empresas = [
         "266 - Nova Geração",
         "1396 - Nova Geração Filial",
@@ -45,7 +50,7 @@ def test_empresas_e_bancos_permanecem():
 
 
 def test_ocr_bradesco_preserva_caminho_real():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "reader._razync_source_path = caminho_pdf" in texto
     assert "getattr(reader, '_razync_source_path', None)" in texto
     assert "fitz.Matrix(4.0, 4.0)" in texto
@@ -65,13 +70,13 @@ def test_nao_existem_aplicadores_temporarios():
 
 
 def test_erros_nao_expoem_traceback():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "traceback.format_exc()" not in texto
     assert "st.exception(" not in texto
 
 
 def test_empresa_242_usa_periodo_em_vez_de_ano_manual():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "Período dos lançamentos" in texto
     assert "key=f'{prefixo_ef}_data_inicial'" in texto
     assert "key=f'{prefixo_ef}_data_final'" in texto
@@ -82,7 +87,7 @@ def test_empresa_242_usa_periodo_em_vez_de_ano_manual():
 
 
 def test_conferencia_242_usa_consolidado_separado_por_conta():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "rotulo_planilha='Planilha consolidada'" in texto
     assert "'slug': 'bb_8'" in texto
     assert "'slug': 'itau_508'" in texto
@@ -91,7 +96,7 @@ def test_conferencia_242_usa_consolidado_separado_por_conta():
 
 
 def test_empresa_242_reutiliza_processamentos_pesados_entre_interacoes():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     caches_242 = [
         "_ef242_processar_despesas",
         "_ef242_processar_fornecedores",
@@ -116,7 +121,7 @@ def test_empresa_242_reutiliza_processamentos_pesados_entre_interacoes():
 
 
 def test_detector_prioriza_bb_e_contas_itau_da_242():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "['105318', '181537']" in texto
     assert "EXTRATO DE CONTA CORRENTE - AUTORIZAVEL" in texto
     assert "CLIENTE - CONTA ATUAL" in texto
@@ -124,7 +129,7 @@ def test_detector_prioriza_bb_e_contas_itau_da_242():
 
 
 def test_base_242_classifica_planilha_consolidada_em_uma_etapa():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "'Consolidada', 'Despesa', 'Fornecedor', 'Recebido', 'Francesinhas'" in texto
     assert "modo_consolidado_eletro_forte=False" in texto
     assert "if modo_consolidado_eletro_forte:" in texto
@@ -133,7 +138,7 @@ def test_base_242_classifica_planilha_consolidada_em_uma_etapa():
 
 
 def test_empresa_1408_reutiliza_fluxo_242_com_itau_512_e_base_isolada():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     catalogo = (ROOT / "razync" / "company_catalog.py").read_text(encoding="utf-8")
     assert '"codigo": 1408' in catalogo
     assert '"chave_sistema": "eletro_forte_filial"' in catalogo
@@ -141,7 +146,7 @@ def test_empresa_1408_reutiliza_fluxo_242_com_itau_512_e_base_isolada():
 
 
 def test_base_1408_tem_perfil_consolidado_e_regras_proprias():
-    texto = Path('app.py').read_text(encoding='utf-8')
+    texto = app_source()
     assert "perfil_1408 = empresa == 'eletro_forte_filial_1408'" in texto
     assert "abas = st.tabs(['Modelo Domínio consolidado'])" in texto
     assert "{'itau_512'} if empresa == 'eletro_forte_filial_1408'" in texto
@@ -155,7 +160,7 @@ def test_base_1408_tem_perfil_consolidado_e_regras_proprias():
 
 
 def test_empresa_1402_tem_btg_510_base_e_conferencia():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     catalogo = (ROOT / "razync" / "company_catalog.py").read_text(encoding="utf-8")
     assert '"codigo": 1402' in catalogo
     assert '"chave_sistema": "vgv_1402"' in catalogo
@@ -167,7 +172,7 @@ def test_empresa_1402_tem_btg_510_base_e_conferencia():
 
 
 def test_empresa_88_tem_itau_508_modelo_base_e_conferencia():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     catalogo = (ROOT / "razync" / "company_catalog.py").read_text(encoding="utf-8")
     assert '"codigo": 88' in catalogo
     assert '"chave_sistema": "hw_88"' in catalogo
@@ -177,7 +182,7 @@ def test_empresa_88_tem_itau_508_modelo_base_e_conferencia():
     assert "'banco': 'itau_hw88', 'conta': '508'" in texto
 
 def test_pesquisa_preserva_visual_original_e_cache_otimizado():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "components.declare_component" not in texto
     assert "streamlit.components" not in texto
     assert "return st.text_input(" in texto
@@ -186,7 +191,7 @@ def test_pesquisa_preserva_visual_original_e_cache_otimizado():
 
 
 def test_base_inteligente_1000_aplica_regras_fixas_antes_do_aprendizado():
-    texto = APP.read_text(encoding="utf-8")
+    texto = app_source()
     assert "empresa_classificacao == 'accede_automacao'" in texto
     assert "identificar_conta_folha_accede_1000(historico)" in texto
     assert "resumo['regras_fixas_1000'] += 1" in texto

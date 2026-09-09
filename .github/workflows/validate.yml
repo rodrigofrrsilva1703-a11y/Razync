@@ -35,7 +35,10 @@ jobs:
           from pathlib import Path
           from razync.companies import CONFIGURACOES_ACCEDE
 
-          app = Path('app.py').read_text(encoding='utf-8')
+          app = (
+              Path('app.py').read_text(encoding='utf-8') + '\n' +
+              Path('app_legacy.py').read_text(encoding='utf-8')
+          )
           requirements = Path('requirements.txt').read_text(encoding='utf-8')
           checks_app = [
               'def processar_pdf_daycoval_detalhado',

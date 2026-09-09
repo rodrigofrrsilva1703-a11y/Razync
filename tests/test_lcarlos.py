@@ -107,7 +107,8 @@ def test_funciona_em_outro_periodo_sem_regra_fixa_de_julho():
 
 
 def test_app_integra_base_inteligente_e_conferencia_santander():
-    app = Path('app.py').read_text(encoding='utf-8')
+    app = (Path('app.py').read_text(encoding='utf-8') + '\n' +
+           Path('app_legacy.py').read_text(encoding='utf-8'))
 
     assert "if 'santander' in texto:" in app
     assert "return 'santander'" in app
