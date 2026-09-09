@@ -179,3 +179,4 @@ def test_base_inteligente_1000_aplica_regras_fixas_antes_do_aprendizado():
     assert "empresa_classificacao == 'accede_automacao'" in texto
     assert "identificar_conta_folha_accede_1000(historico)" in texto
     assert "resumo['regras_fixas_1000'] += 1" in texto
+    assert "                        contas_bancarias,\n                        empresa,\n" in texto
