@@ -25,6 +25,11 @@ def test_identifica_codigos_e_erros_claros_da_accede_1000():
         "REEN VIAGEM": "668",
         "REMEBOLSO FUNCIONARIO": "668",
         "REEMBOLSO": "668",
+        "Pago: FUNCIONARIO PGTO2026-06": "187",
+        "Pago: FUNCIONARIO PAGTO2026-07": "187",
+        "Pago: FUNCIONARIO ADTO26-07": "25",
+        "Pago: FUNCIONARIO REEM2026-07": "668",
+        "Pago: FUNCIONARIO REEMB2026-06": "668",
     }
     for historico, conta in casos.items():
         assert identificar_conta_folha_accede_1000(historico) == conta
@@ -55,3 +60,14 @@ def test_regra_tambem_usa_conta_sicredi_da_empresa_1000():
     resultado = aplicar_regras_accede_1000(df, "505")
     assert resultado.iloc[0]["DÉBITO"] == "187"
     assert resultado.iloc[0]["CRÉDITO"] == "505"
+
+
+def test_aplica_formatos_reais_da_planilha_accede():
+    df = pd.DataFrame([
+        {"VALOR": -108.20, "DÉBITO": "", "CRÉDITO": "508", "HISTÓRICO": "Pago: DAVID BENNER VIEIRA DA SILVA PGTO2026-06"},
+        {"VALOR": -4666.08, "DÉBITO": "", "CRÉDITO": "508", "HISTÓRICO": "Pago: GABRIEL PEREIRA RUSIG REEM2026-06"},
+        {"VALOR": -525.00, "DÉBITO": "", "CRÉDITO": "508", "HISTÓRICO": "Pago: JOSE LUCAS DA SILVA SOARES ADTO26-07"},
+    ])
+    resultado = aplicar_regras_accede_1000(df, "508")
+    assert resultado["DÉBITO"].tolist() == ["187", "668", "25"]
+    assert resultado["CRÉDITO"].tolist() == ["508", "508", "508"]
