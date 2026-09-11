@@ -1,0 +1,37 @@
+name: Corrigir saldo falso positivo BB 625
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/fix_625_bb_saldo_false_positive.py
+      - .github/workflows/fix_625_bb_saldo_false_positive.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/fix_625_bb_saldo_false_positive.py
+      - run: python -m py_compile razync/valean_625.py
+      - name: Testar caso real de 75,77
+        run: |
+          python - <<'PY'
+          import razync.valean_625 as v
+          v._texto_pdf=lambda _: '''02/03/2026 0000 13601 118 Cobrança de I.O.F. 391.100.702 75,77 D 8.905,98 D\nIOF Saldo Devedor Conta\n'''
+          df=v.processar_bb_625(b'x')
+          assert len(df)==1, df
+          assert df.iloc[0]['VALOR']==-75.77, df
+          assert 'IOF' in df.iloc[0]['HISTÓRICO'].upper(), df
+          print(df.to_dict('records'))
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/valean_625.py
+          git commit -m 'Corrige falso positivo de saldo no BB da empresa 625'
+          git rm scripts/fix_625_bb_saldo_false_positive.py .github/workflows/fix_625_bb_saldo_false_positive.yml
+          git commit -m 'Remove patch temporário saldo BB 625'
+          git push
