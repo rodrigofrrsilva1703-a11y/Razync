@@ -1,0 +1,45 @@
+name: Corrigir historicos reais 625
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/fix_625_history_real_formats.py
+      - .github/workflows/fix_625_history_real_formats.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar correção
+        run: python scripts/fix_625_history_real_formats.py
+      - name: Validar sintaxe e exemplos reais
+        run: |
+          python -m py_compile razync/valean_625.py app.py
+          python - <<'PY'
+          from razync.valean_625 import _limpar_cpf_cnpj_historico as limpar
+          casos = {
+              'PAGAMENTO PIX 14940090809 ENI FATIMA PAIXAO MOTA PIX_DEB': 'PAGAMENTO PIX ENI FATIMA PAIXAO MOTA PIX_DEB',
+              'RECEBIMENTO PIX 14833184000185 VALEAN SEGURANCA PIX_CRED': 'RECEBIMENTO PIX VALEAN SEGURANCA PIX_CRED',
+              '341 0440 67706853000114 IMC SASTE CONS': 'IMC SASTE CONS',
+              '03/03 19:11 00028715189805 VERONICA AP': 'VERONICA AP',
+              'PAGAMENTO PIX 63006516000163 63.006.516 EDIMARCO PIX_DEB': 'PAGAMENTO PIX 63.006.516 EDIMARCO PIX_DEB',
+          }
+          for origem, esperado in casos.items():
+              obtido = limpar(origem)
+              assert obtido == esperado, (origem, obtido, esperado)
+          print('OK: formatos reais BB/Sicredi sanitizados')
+          PY
+      - name: Commit e limpar temporários
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/valean_625.py
+          git commit -m 'Ajusta limpeza de CPF CNPJ pelos formatos reais da 625'
+          git rm scripts/fix_625_history_real_formats.py .github/workflows/fix_625_history_real_formats.yml
+          git commit -m 'Remove patch temporário dos históricos 625'
+          git push
