@@ -35,10 +35,23 @@ def _valor_br(token: str, natureza: str = "") -> float:
     return round(sinal * float(texto), 2)
 
 
+def _limpar_cpf_cnpj_historico(texto: str) -> str:
+    texto = str(texto or "")
+    padroes = [
+        r"\b(?:CPF|CNPJ)\s*[:\-]?\s*(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{11}|\d{14})\b",
+        r"(?<!\d)(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{11}|\d{14})(?!\d)",
+    ]
+    for padrao in padroes:
+        texto = re.sub(padrao, " ", texto, flags=re.I)
+    texto = re.sub(r"\b(?:CPF|CNPJ)\b\s*[:\-]?", " ", texto, flags=re.I)
+    return re.sub(r"\s+", " ", texto).strip(" -|;,:.")
+
+
 def _registro(banco: str, data, valor: float, historico: str) -> dict:
     conta = CONTAS_VALEAN_625[banco]
     historico = re.sub(r"\s+", " ", str(historico or "MOVIMENTO BANCÁRIO")).strip()
     historico = re.sub(r"^(?:recebido|pago):\s*", "", historico, flags=re.I)
+    historico = _limpar_cpf_cnpj_historico(historico) or "MOVIMENTO BANCÁRIO"
     historico = ("Recebido: " if valor > 0 else "Pago: ") + historico
     return {
         "DESCRIÇÃO": NOMES_BANCOS[banco],
@@ -117,7 +130,6 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
         valor = _valor_br(movimento.group(1), movimento.group(2))
         antes = primeira[10:movimento.start()]
         antes = re.sub(r"^\s*\d{4}\s+\d{5,8}\s*", "", antes)
-        # Documento bancário numérico ao final não faz parte da descrição.
         antes = re.sub(r"\s+\d[\d.]{2,}$", "", antes).strip()
         complementos = [x for x in bloco[1:] if not _normalizar(x).startswith(
             ("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt.")
