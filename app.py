@@ -217,7 +217,25 @@ def _renderizar_valean_625():
             alvo = next((n for n in xls.sheet_names if termo in normalizar_texto(n)), None)
         if alvo is None:
             return pd.DataFrame(), pd.DataFrame(), set()
-        df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=alvo)
+        # O Modelo Domínio pode ter linhas de apresentação antes do cabeçalho.
+        # Detecta DATA/VALOR nas primeiras 30 linhas em vez de assumir header=0.
+        bruto = pd.read_excel(io.BytesIO(file_bytes), sheet_name=alvo, header=None)
+        linha_cabecalho = None
+        for idx in range(min(len(bruto), 30)):
+            nomes_linha = {
+                normalizar_texto(texto_celula_seguro(valor)).strip()
+                for valor in bruto.iloc[idx].tolist()
+                if texto_celula_seguro(valor)
+            }
+            if {"data", "valor"}.issubset(nomes_linha):
+                linha_cabecalho = idx
+                break
+        if linha_cabecalho is None:
+            return pd.DataFrame(), pd.DataFrame(), set()
+
+        df = pd.read_excel(
+            io.BytesIO(file_bytes), sheet_name=alvo, header=linha_cabecalho
+        )
         df.columns = [str(c).strip().upper() for c in df.columns]
         if "DATA" not in df.columns or "VALOR" not in df.columns:
             return pd.DataFrame(), pd.DataFrame(), set()
