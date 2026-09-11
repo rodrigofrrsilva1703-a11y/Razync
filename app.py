@@ -188,7 +188,7 @@ def _renderizar_valean_625():
     empresa_625 = "625 - VALEAN SEGURANÇA E MEDICINA DO TRABALHO EIRELI ME"
     configs = [
         {"nome": "Banco do Brasil · Conta 8", "slug": "banco_brasil", "banco": "banco_brasil_625", "conta": "8"},
-        {"nome": "Caixa · Conta 508", "slug": "caixa", "banco": "caixa_625", "conta": "508"},
+        {"nome": "Caixa · Conta 504", "slug": "caixa", "banco": "caixa_625", "conta": "504"},
         {"nome": "Sicredi · Conta 3999", "slug": "sicredi", "banco": "sicredi_625", "conta": "3999"},
     ]
     aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
@@ -203,7 +203,7 @@ def _renderizar_valean_625():
             return _ler_planilha_conf_legado_625(file_bytes, banco_slug)
         nomes = {
             "banco_brasil": ["Banco do Brasil", "Banco do Brasil · Conta 8"],
-            "caixa": ["Caixa", "Caixa · Conta 508"],
+            "caixa": ["Caixa", "Caixa · Conta 504"],
             "sicredi": ["Sicredi", "Sicredi · Conta 3999"],
         }
         xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -236,7 +236,7 @@ def _renderizar_valean_625():
             )
         with col_caixa:
             arquivo_caixa = st.file_uploader(
-                "Caixa · conta 508", type=["pdf"], key="valean_625_caixa"
+                "Caixa · conta 504", type=["pdf"], key="valean_625_caixa"
             )
         with col_sicredi:
             arquivo_sicredi = st.file_uploader(
