@@ -14,7 +14,7 @@ import pandas as pd
 from pypdf import PdfReader
 
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
-CONTAS_VALEAN_625 = {"banco_brasil": "8", "caixa": "508", "sicredi": "3999"}
+CONTAS_VALEAN_625 = {"banco_brasil": "8", "caixa": "504", "sicredi": "3999"}
 NOMES_BANCOS = {
     "banco_brasil": "BANCO DO BRASIL",
     "caixa": "CAIXA ECONÔMICA FEDERAL",
