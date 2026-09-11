@@ -1,0 +1,35 @@
+name: Ajustar Caixa 504 empresa 625
+on:
+  push:
+    paths:
+      - 'scripts/fix_625_caixa_504_app.py'
+      - '.github/workflows/fix_625_caixa_504_app.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fix_625_caixa_504_app.py
+      - run: python -m py_compile app.py razync/valean_625.py
+      - run: |
+          python - <<'PY'
+          from pathlib import Path
+          a=Path('app.py').read_text(encoding='utf-8')
+          v=Path('razync/valean_625.py').read_text(encoding='utf-8')
+          assert 'Caixa · Conta 504' in a
+          assert 'Caixa · conta 504' in a
+          assert '"caixa": "504"' in v
+          print('Validação OK: empresa 625 Caixa conta 504')
+          PY
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f scripts/fix_625_caixa_504_app.py .github/workflows/fix_625_caixa_504_app.yml
+          git add app.py scripts/fix_625_caixa_504_app.py .github/workflows/fix_625_caixa_504_app.yml
+          git commit -m 'Atualiza Caixa da empresa 625 para conta 504'
+          git push
