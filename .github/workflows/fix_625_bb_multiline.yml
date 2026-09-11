@@ -1,0 +1,37 @@
+name: Corrigir BB multilinha 625
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/fix_625_bb_multiline.py
+      - .github/workflows/fix_625_bb_multiline.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/fix_625_bb_multiline.py
+      - run: python -m py_compile razync/valean_625.py
+      - name: Testar lançamento quebrado de 77,77
+        run: |
+          python - <<'PY'
+          import razync.valean_625 as v
+          v._texto_pdf=lambda _: '02/03/2026 PIX ENVIADO\nDocumento 123456\n77,77 D\n'
+          df=v.processar_bb_625(b'x')
+          assert len(df)==1
+          assert df.iloc[0]['VALOR']==-77.77
+          assert df.iloc[0]['DATA'].strftime('%d/%m/%Y')=='02/03/2026'
+          print(df.to_dict('records'))
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/valean_625.py
+          git commit -m 'Preserva lançamentos BB quebrados em múltiplas linhas na 625'
+          git rm scripts/fix_625_bb_multiline.py .github/workflows/fix_625_bb_multiline.yml
+          git commit -m 'Remove patch temporário BB multilinha 625'
+          git push
