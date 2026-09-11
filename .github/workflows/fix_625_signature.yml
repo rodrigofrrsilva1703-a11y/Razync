@@ -1,0 +1,35 @@
+name: Corrigir assinatura conferencia 625
+on:
+  push:
+    paths:
+      - 'scripts/fix_625_signature.py'
+      - '.github/workflows/fix_625_signature.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fix_625_signature.py
+      - run: python -m py_compile app.py
+      - name: Validate 625 signature
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('app.py').read_text(encoding='utf-8')
+          assert 'def _ler_planilha_conferencia_625(file_bytes, banco_slug, conta_alvo=None):' in s
+          assert '_ler_planilha_conf_legado_625(file_bytes, banco_slug, conta_alvo)' in s
+          print('Validação OK')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f scripts/fix_625_signature.py .github/workflows/fix_625_signature.yml
+          git add app.py scripts/fix_625_signature.py .github/workflows/fix_625_signature.yml
+          git commit -m 'Corrige assinatura do leitor de conferência da 625'
+          git push
