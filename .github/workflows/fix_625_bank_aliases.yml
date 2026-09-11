@@ -1,0 +1,33 @@
+name: Corrigir aliases conferencia 625
+on:
+  push:
+    paths:
+      - 'scripts/fix_625_bank_aliases.py'
+      - '.github/workflows/fix_625_bank_aliases.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fix_625_bank_aliases.py
+      - run: python -m py_compile app.py razync/valean_625.py
+      - run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('app.py').read_text(encoding='utf-8')
+          assert 'banco_slug = banco_slug.removesuffix("_625")' in s
+          assert '"caixa": ["Caixa", "Caixa · Conta 504"]' in s
+          print('Validação OK: aliases *_625 e Caixa 504')
+          PY
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f scripts/fix_625_bank_aliases.py .github/workflows/fix_625_bank_aliases.yml
+          git add app.py scripts/fix_625_bank_aliases.py .github/workflows/fix_625_bank_aliases.yml
+          git commit -m 'Corrige leitura das abas bancárias na conferência da 625'
+          git push
