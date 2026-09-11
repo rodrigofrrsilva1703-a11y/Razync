@@ -193,6 +193,36 @@ def _renderizar_valean_625():
     ]
     aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
 
+    # A conferência genérica espera identificar o banco pelo conteúdo/estrutura da
+    # planilha. O arquivo da 625 é gerado em abas por banco; por isso, lemos a aba
+    # correspondente diretamente e devolvemos o quadro normalizado ao motor legado.
+    _ler_planilha_conf_legado_625 = globals().get("ler_planilha_organizada_conferencia")
+
+    def _ler_planilha_conferencia_625(file_bytes, banco_slug):
+        if banco_slug not in {"banco_brasil", "caixa", "sicredi"}:
+            return _ler_planilha_conf_legado_625(file_bytes, banco_slug)
+        nomes = {
+            "banco_brasil": ["Banco do Brasil", "Banco do Brasil · Conta 8"],
+            "caixa": ["Caixa", "Caixa · Conta 508"],
+            "sicredi": ["Sicredi", "Sicredi · Conta 3999"],
+        }
+        xls = pd.ExcelFile(io.BytesIO(file_bytes))
+        alvo = next((n for n in nomes[banco_slug] if n in xls.sheet_names), None)
+        if alvo is None:
+            # Compatibilidade com nomes de abas sanitizados/truncados.
+            termo = {"banco_brasil": "brasil", "caixa": "caixa", "sicredi": "sicredi"}[banco_slug]
+            alvo = next((n for n in xls.sheet_names if termo in normalizar_texto(n)), None)
+        if alvo is None:
+            return pd.DataFrame(), pd.DataFrame(), set()
+        df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=alvo)
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        if "DATA" not in df.columns or "VALOR" not in df.columns:
+            return pd.DataFrame(), pd.DataFrame(), set()
+        df["DATA"] = pd.to_datetime(df["DATA"], dayfirst=True, errors="coerce")
+        df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce")
+        df = df.dropna(subset=["DATA", "VALOR"]).reset_index(drop=True)
+        return df, pd.DataFrame(), {banco_slug}
+
     with aba_operacoes:
         st.markdown("#### Extratos bancários → Modelo Domínio")
         st.caption(
@@ -265,10 +295,15 @@ def _renderizar_valean_625():
                 key="valean_625_download",
             )
 
-        renderizar_conferencia_autokraft(
-            "valean_625", bancos_config=configs,
-            rotulo_planilha="Planilha final organizada da empresa 625",
-        )
+        _ler_planilha_conf_original_625 = globals().get("ler_planilha_organizada_conferencia")
+        try:
+            globals()["ler_planilha_organizada_conferencia"] = _ler_planilha_conferencia_625
+            renderizar_conferencia_autokraft(
+                "valean_625", bancos_config=configs,
+                rotulo_planilha="Planilha final organizada da empresa 625",
+            )
+        finally:
+            globals()["ler_planilha_organizada_conferencia"] = _ler_planilha_conf_original_625
 
     with aba_base:
         renderizar_base_inteligente_empresa(
