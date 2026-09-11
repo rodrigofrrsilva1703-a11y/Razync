@@ -1,0 +1,28 @@
+name: Remover Documento BB 625
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/fix_625_bb_documento.py
+      - .github/workflows/fix_625_bb_documento.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fix_625_bb_documento.py
+      - run: python -m py_compile razync/valean_625.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/valean_625.py
+          git commit -m 'Ignora coluna Documento do extrato BB na empresa 625'
+          git rm scripts/fix_625_bb_documento.py .github/workflows/fix_625_bb_documento.yml
+          git commit -m 'Remove patch temporário Documento BB 625'
+          git push
