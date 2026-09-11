@@ -151,8 +151,12 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
         movimento = valores[0]
         valor = _valor_br(movimento.group(1), movimento.group(2))
         antes = primeira[10:movimento.start()]
+        # BB Autorizável: após a data vêm Nº do documento e lote antes do histórico.
+        # Esses campos são estruturais do extrato e nunca devem compor o HISTÓRICO.
         antes = re.sub(r"^\s*\d{4}\s+\d{5,8}\s*", "", antes)
-        antes = re.sub(r"\s+\d[\d.]{2,}$", "", antes).strip()
+        # Remove também a coluna Documento quando ela aparece no fim do trecho
+        # anterior ao valor (numérica, com pontos ou barras), preservando o texto.
+        antes = re.sub(r"\s+(?:\d[\d./-]{2,})\s*$", "", antes).strip()
         complementos = [x for x in bloco[1:] if not _normalizar(x).startswith(
             ("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt.")
         )]
