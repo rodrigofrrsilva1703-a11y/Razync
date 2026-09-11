@@ -161,10 +161,17 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
             ("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt.")
         )]
         historico = " ".join([antes] + complementos).strip()
-        # Só descarta linhas que são efetivamente saldo. Complementos como
-        # "IOF Saldo Devedor Conta" pertencem a lançamentos válidos e devem ficar.
+        # Descarta os saldos contábeis exibidos pelo BB (saldo anterior e saldos
+        # diários), mas preserva lançamentos reais cujo complemento menciona saldo,
+        # como "Cobrança de I.O.F. ... IOF Saldo Devedor Conta".
         hist_norm = _normalizar(historico)
-        if re.fullmatch(r"(?:s ?a ?l ?d ?o|saldo anterior)(?:\s+.*)?", hist_norm):
+        antes_norm = _normalizar(antes)
+        eh_saldo_bb = (
+            re.fullmatch(r"s ?a ?l ?d ?o(?: anterior)?", antes_norm or "") is not None
+            or re.fullmatch(r"saldo anterior", antes_norm or "") is not None
+            or (not antes_norm and re.fullmatch(r"s ?a ?l ?d ?o(?: anterior)?", hist_norm or "") is not None)
+        )
+        if eh_saldo_bb:
             continue
         registros.append(_registro("banco_brasil", data, valor, historico))
     return _finalizar(registros, "Banco do Brasil")
