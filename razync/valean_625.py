@@ -36,34 +36,15 @@ def _valor_br(token: str, natureza: str = "") -> float:
 
 
 def _limpar_cpf_cnpj_historico(texto: str) -> str:
-    """Remove CPF/CNPJ dos históricos da empresa 625.
-
-    Trata os formatos reais observados nos extratos BB e Sicredi, inclusive
-    documentos sem máscara no meio da descrição. Preserva números que não têm
-    11 ou 14 dígitos, como nomes empresariais do tipo ``63.006.516 EDIMARCO``.
-    """
     texto = str(texto or "")
     doc = (
         r"(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}"
         r"|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"
         r"|\d{11}|\d{14})"
     )
-
-    # Banco do Brasil: algumas linhas trazem banco/agência antes do CNPJ.
-    texto = re.sub(
-        rf"(?<!\d)\d{{3}}\s+\d{{4}}\s+(?={doc}(?!\d))",
-        " ", texto, flags=re.I,
-    )
-    # Banco do Brasil: PIX pode trazer data/hora auxiliar antes do CPF/CNPJ.
-    texto = re.sub(
-        rf"(?<!\d)\d{{2}}/\d{{2}}\s+\d{{2}}:\d{{2}}\s+(?={doc}(?!\d))",
-        " ", texto, flags=re.I,
-    )
-    # Remove rótulos e documentos com/sem máscara.
-    texto = re.sub(
-        rf"\b(?:CPF|CNPJ)\b\s*[:\-]?\s*(?={doc}(?!\d))",
-        " ", texto, flags=re.I,
-    )
+    texto = re.sub(rf"(?<!\d)\d{{3}}\s+\d{{4}}\s+(?={doc}(?!\d))", " ", texto, flags=re.I)
+    texto = re.sub(rf"(?<!\d)\d{{2}}/\d{{2}}\s+\d{{2}}:\d{{2}}\s+(?={doc}(?!\d))", " ", texto, flags=re.I)
+    texto = re.sub(rf"\b(?:CPF|CNPJ)\b\s*[:\-]?\s*(?={doc}(?!\d))", " ", texto, flags=re.I)
     texto = re.sub(rf"(?<!\d){doc}(?!\d)", " ", texto, flags=re.I)
     texto = re.sub(r"\b(?:CPF|CNPJ)\b\s*[:\-]?", " ", texto, flags=re.I)
     return re.sub(r"\s+", " ", texto).strip(" -|;,:.")
@@ -103,7 +84,6 @@ def _texto_ocr_caixa(conteudo: bytes) -> str:
         from PIL import Image, ImageOps
     except ImportError as erro:
         raise ValueError("O leitor OCR necessário para o extrato Caixa não está instalado.") from erro
-
     documento = fitz.open(stream=conteudo, filetype="pdf")
     paginas = []
     try:
@@ -112,13 +92,9 @@ def _texto_ocr_caixa(conteudo: bytes) -> str:
             imagem = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             imagem = ImageOps.autocontrast(ImageOps.grayscale(imagem))
             try:
-                texto = pytesseract.image_to_string(
-                    imagem, lang="por", config="--psm 6 -c preserve_interword_spaces=1"
-                )
+                texto = pytesseract.image_to_string(imagem, lang="por", config="--psm 6 -c preserve_interword_spaces=1")
             except pytesseract.TesseractError:
-                texto = pytesseract.image_to_string(
-                    imagem, config="--psm 6 -c preserve_interword_spaces=1"
-                )
+                texto = pytesseract.image_to_string(imagem, config="--psm 6 -c preserve_interword_spaces=1")
             paginas.append(texto or "")
     finally:
         documento.close()
@@ -139,7 +115,6 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
             atual.append(linha)
     if atual:
         blocos.append(atual)
-
     registros = []
     moeda = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])", re.I)
     for bloco in blocos:
@@ -152,23 +127,13 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
         valor = _valor_br(movimento.group(1), movimento.group(2))
         antes_bruto = primeira[10:movimento.start()]
         antes_bruto_norm = _normalizar(antes_bruto)
-        # Filtra saldo anterior e saldos diarios diretamente no trecho bruto do BB,
-        # antes de remover codigos/documento. Isso evita falsos negativos causados
-        # pelos codigos 0000/00000/000 ou 999 antes de SALDO/S A L D O.
         if re.search(r"\bsaldo anterior\b", antes_bruto_norm):
             continue
         if re.search(r"(?:^|\s)s\s*a\s*l\s*d\s*o\s*$", antes_bruto_norm):
             continue
-        antes = antes_bruto
-        # BB Autorizável: após a data vêm Nº do documento e lote antes do histórico.
-        # Esses campos são estruturais do extrato e nunca devem compor o HISTÓRICO.
-        antes = re.sub(r"^\s*\d{4}\s+\d{5,8}\s*", "", antes)
-        # Remove também a coluna Documento quando ela aparece no fim do trecho
-        # anterior ao valor (numérica, com pontos ou barras), preservando o texto.
+        antes = re.sub(r"^\s*\d{4}\s+\d{5,8}\s*", "", antes_bruto)
         antes = re.sub(r"\s+(?:\d[\d./-]{2,})\s*$", "", antes).strip()
-        complementos = [x for x in bloco[1:] if not _normalizar(x).startswith(
-            ("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt.")
-        )]
+        complementos = [x for x in bloco[1:] if not _normalizar(x).startswith(("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt."))]
         historico = " ".join([antes] + complementos).strip()
         registros.append(_registro("banco_brasil", data, valor, historico))
     return _finalizar(registros, "Banco do Brasil")
@@ -196,26 +161,43 @@ def processar_sicredi_625(conteudo: bytes) -> pd.DataFrame:
 
 
 def processar_caixa_625(conteudo: bytes) -> pd.DataFrame:
+    """Lê o extrato SIATR da Caixa usado pela Valean 625.
+
+    Formato real: ``_ DD/MM/AA NR.DOC DESCRICAO VALOR C/D SALDO C/D``.
+    O segundo valor é saldo e nunca vira lançamento. ``SALDO DIA`` também é
+    sempre ignorado. O NR.DOC é estrutural e não entra no histórico.
+    """
     texto = _texto_pdf(conteudo)
     if not texto.strip():
         texto = _texto_ocr_caixa(conteudo)
 
+    # Aceita tanto DD/MM/AA (SIATR antigo) quanto DD/MM/AAAA e o '_' inicial.
     padrao = re.compile(
-        r"^(\d{2}/\d{2}/\d{4})\s+(?:\d{2}/\d{2}\s+\d{2}:\d{2}\s+)?"
-        r"(?:\d{6,}\s+)?(.+?)\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])"
-        r"(?:\s+\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD])?\s*$",
+        r"^_?\s*(\d{2}/\d{2}/(?:\d{2}|\d{4}))\s+"
+        r"(\d{6,})\s+(.+?)\s+"
+        r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])"
+        r"(?:\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD]))?\s*$",
         flags=re.I,
     )
     registros = []
+    vistos = set()
     for linha in texto.splitlines():
         linha = re.sub(r"\s+", " ", linha).strip()
         achado = padrao.match(linha)
         if not achado:
             continue
-        data = pd.to_datetime(achado.group(1), dayfirst=True, errors="coerce")
-        historico = achado.group(2).strip(" -|")
-        valor = _valor_br(achado.group(3), achado.group(4))
-        if pd.isna(data) or abs(valor) < 0.005 or "saldo" in _normalizar(historico):
+        data_txt, _documento, historico, mov_txt, natureza = achado.group(1, 2, 3, 4, 5)
+        hist_norm = _normalizar(historico)
+        # O extrato repete a página inteira em alguns PDFs; deduplicamos pela linha.
+        chave = (data_txt, _documento, hist_norm, mov_txt, natureza.upper())
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        if "saldo dia" in hist_norm or re.fullmatch(r"saldo(?: do)? dia", hist_norm):
+            continue
+        data = pd.to_datetime(data_txt, dayfirst=True, errors="coerce")
+        valor = _valor_br(mov_txt, natureza)
+        if pd.isna(data) or abs(valor) < 0.005:
             continue
         registros.append(_registro("caixa", data, valor, historico))
     return _finalizar(registros, "Caixa")
@@ -224,17 +206,11 @@ def processar_caixa_625(conteudo: bytes) -> pd.DataFrame:
 def _finalizar(registros: list[dict], banco: str) -> pd.DataFrame:
     if not registros:
         raise ValueError(f"Nenhum lançamento válido foi encontrado no extrato {banco}.")
-    return pd.DataFrame(registros, columns=COLUNAS_MODELO).sort_values(
-        "DATA", kind="stable"
-    ).reset_index(drop=True)
+    return pd.DataFrame(registros, columns=COLUNAS_MODELO).sort_values("DATA", kind="stable").reset_index(drop=True)
 
 
 def processar_extrato_625(conteudo: bytes, banco: str) -> pd.DataFrame:
-    leitores = {
-        "banco_brasil": processar_bb_625,
-        "caixa": processar_caixa_625,
-        "sicredi": processar_sicredi_625,
-    }
+    leitores = {"banco_brasil": processar_bb_625, "caixa": processar_caixa_625, "sicredi": processar_sicredi_625}
     if banco not in leitores:
         raise ValueError(f"Banco não configurado para a empresa 625: {banco}")
     return leitores[banco](conteudo)
