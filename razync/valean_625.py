@@ -150,7 +150,16 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
             continue
         movimento = valores[0]
         valor = _valor_br(movimento.group(1), movimento.group(2))
-        antes = primeira[10:movimento.start()]
+        antes_bruto = primeira[10:movimento.start()]
+        antes_bruto_norm = _normalizar(antes_bruto)
+        # Filtra saldo anterior e saldos diarios diretamente no trecho bruto do BB,
+        # antes de remover codigos/documento. Isso evita falsos negativos causados
+        # pelos codigos 0000/00000/000 ou 999 antes de SALDO/S A L D O.
+        if re.search(r"\bsaldo anterior\b", antes_bruto_norm):
+            continue
+        if re.search(r"(?:^|\s)s\s*a\s*l\s*d\s*o\s*$", antes_bruto_norm):
+            continue
+        antes = antes_bruto
         # BB Autorizável: após a data vêm Nº do documento e lote antes do histórico.
         # Esses campos são estruturais do extrato e nunca devem compor o HISTÓRICO.
         antes = re.sub(r"^\s*\d{4}\s+\d{5,8}\s*", "", antes)
@@ -161,18 +170,6 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
             ("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt.")
         )]
         historico = " ".join([antes] + complementos).strip()
-        # Descarta os saldos contábeis exibidos pelo BB (saldo anterior e saldos
-        # diários), mas preserva lançamentos reais cujo complemento menciona saldo,
-        # como "Cobrança de I.O.F. ... IOF Saldo Devedor Conta".
-        hist_norm = _normalizar(historico)
-        antes_norm = _normalizar(antes)
-        eh_saldo_bb = (
-            re.fullmatch(r"s ?a ?l ?d ?o(?: anterior)?", antes_norm or "") is not None
-            or re.fullmatch(r"saldo anterior", antes_norm or "") is not None
-            or (not antes_norm and re.fullmatch(r"s ?a ?l ?d ?o(?: anterior)?", hist_norm or "") is not None)
-        )
-        if eh_saldo_bb:
-            continue
         registros.append(_registro("banco_brasil", data, valor, historico))
     return _finalizar(registros, "Banco do Brasil")
 
