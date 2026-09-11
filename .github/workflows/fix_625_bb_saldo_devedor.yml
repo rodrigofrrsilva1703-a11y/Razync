@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
+      - run: python -m pip install pandas pypdf
       - run: python scripts/fix_625_bb_saldo_devedor.py
       - run: python -m py_compile razync/valean_625.py
       - name: Testar IOF Saldo Devedor
@@ -24,6 +25,7 @@ jobs:
           assert len(df)==1
           assert df.iloc[0]['VALOR']==-75.77
           assert 'IOF Saldo Devedor Conta' in df.iloc[0]['HISTÓRICO']
+          assert '391.100.702' not in df.iloc[0]['HISTÓRICO']
           print(df.to_dict('records'))
           PY
       - name: Commit
