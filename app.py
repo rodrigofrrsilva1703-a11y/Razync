@@ -199,8 +199,11 @@ def _renderizar_valean_625():
     _ler_planilha_conf_legado_625 = globals().get("ler_planilha_organizada_conferencia")
 
     def _ler_planilha_conferencia_625(file_bytes, banco_slug, conta_alvo=None):
+        banco_original = banco_slug
+        if isinstance(banco_slug, str) and banco_slug.endswith("_625"):
+            banco_slug = banco_slug.removesuffix("_625")
         if banco_slug not in {"banco_brasil", "caixa", "sicredi"}:
-            return _ler_planilha_conf_legado_625(file_bytes, banco_slug, conta_alvo)
+            return _ler_planilha_conf_legado_625(file_bytes, banco_original, conta_alvo)
         nomes = {
             "banco_brasil": ["Banco do Brasil", "Banco do Brasil · Conta 8"],
             "caixa": ["Caixa", "Caixa · Conta 504"],
