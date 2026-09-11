@@ -1,0 +1,41 @@
+name: Corrigir saldos brutos BB 625
+on:
+  push:
+    branches: [main]
+    paths: [scripts/fix_625_bb_saldos_brutos.py, .github/workflows/fix_625_bb_saldos_brutos.yml]
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/fix_625_bb_saldos_brutos.py
+      - run: python -m py_compile razync/valean_625.py
+      - name: Validar padrões do extrato real
+        run: |
+          python - <<'PY'
+          import re
+          def norm(s): return ' '.join(s.lower().split())
+          casos_saldo = [
+              '0000 00000 000 Saldo Anterior ',
+              '0000 00000 999 S A L D O ',
+          ]
+          for x in casos_saldo:
+              n=norm(x)
+              assert re.search(r'\bsaldo anterior\b', n) or re.search(r'(?:^|\s)s\s*a\s*l\s*d\s*o\s*$', n)
+          n=norm('0000 13601 118 Cobrança de I.O.F. 391.100.702 ')
+          assert not re.search(r'\bsaldo anterior\b', n)
+          assert not re.search(r'(?:^|\s)s\s*a\s*l\s*d\s*o\s*$', n)
+          print('OK')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/valean_625.py
+          git commit -m 'Filtra saldo anterior e saldos diarios pelo trecho bruto do BB 625'
+          git rm scripts/fix_625_bb_saldos_brutos.py .github/workflows/fix_625_bb_saldos_brutos.yml
+          git commit -m 'Remove patch temporario filtro saldos BB 625'
+          git push
