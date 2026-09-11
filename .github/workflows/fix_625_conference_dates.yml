@@ -1,0 +1,30 @@
+name: Corrigir conferencia 625
+on:
+  push:
+    paths:
+      - 'scripts/fix_625_conference_dates.py'
+      - '.github/workflows/fix_625_conference_dates.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fix_625_conference_dates.py
+      - run: python -m py_compile app.py app_legacy.py
+      - name: Validate
+        run: |
+          grep -q '_ler_planilha_conferencia_625' app.py
+          grep -q 'sheet_name=alvo' app.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f scripts/fix_625_conference_dates.py .github/workflows/fix_625_conference_dates.yml
+          git add app.py scripts/fix_625_conference_dates.py .github/workflows/fix_625_conference_dates.yml
+          git commit -m 'Corrige leitura da planilha na conferência da empresa 625'
+          git push
