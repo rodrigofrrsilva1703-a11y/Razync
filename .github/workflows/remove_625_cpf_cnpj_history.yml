@@ -1,0 +1,44 @@
+name: Limpar CPF CNPJ historico 625
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/remove_625_cpf_cnpj_history.py
+      - .github/workflows/remove_625_cpf_cnpj_history.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/remove_625_cpf_cnpj_history.py
+      - run: python -m py_compile razync/valean_625.py app.py
+      - name: Validar limpeza
+        run: |
+          python - <<'PY'
+          import importlib.util
+          spec = importlib.util.spec_from_file_location('v625', 'razync/valean_625.py')
+          m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          casos = [
+              ('PIX CNPJ 12.345.678/0001-90 FORNECEDOR', 'PIX FORNECEDOR'),
+              ('TRANSFERENCIA CPF: 123.456.789-01 JOAO', 'TRANSFERENCIA JOAO'),
+              ('PAGAMENTO 12345678901 MARIA', 'PAGAMENTO MARIA'),
+              ('RECEBIMENTO 12345678000190 EMPRESA', 'RECEBIMENTO EMPRESA'),
+          ]
+          for entrada, esperado in casos:
+              saida = m._limpar_cpf_cnpj_historico(entrada)
+              assert saida == esperado, (entrada, saida, esperado)
+          print('Validação OK')
+          PY
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add razync/valean_625.py
+          git commit -m "Remove CPF e CNPJ dos históricos da empresa 625"
+          git rm scripts/remove_625_cpf_cnpj_history.py .github/workflows/remove_625_cpf_cnpj_history.yml
+          git commit -m "Remove correção temporária de CPF CNPJ da 625"
+          git push
