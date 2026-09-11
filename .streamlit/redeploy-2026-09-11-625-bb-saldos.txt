@@ -1,0 +1,1 @@
+Redeploy 2026-09-11: empresa 625 Banco do Brasil. Ignorar saldo anterior e saldos diários, preservar lançamentos válidos como IOF Saldo Devedor e manter Documento fora do histórico.
