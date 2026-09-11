@@ -186,10 +186,14 @@ def _renderizar_valean_625():
     from razync.valean_625 import CONTAS_VALEAN_625, processar_extrato_625
 
     empresa_625 = "625 - VALEAN SEGURANÇA E MEDICINA DO TRABALHO EIRELI ME"
+    # O motor genérico de conferência identifica/destina os arquivos pela chave
+    # bancária normal (banco_brasil/caixa/sicredi). O sufixo _625 é interno ao
+    # parser e impedia BB/Sicredi de serem associados quando os 3 bancos eram
+    # enviados juntos. O wrapper abaixo roteia as chaves normais ao parser 625.
     configs = [
-        {"nome": "Banco do Brasil · Conta 8", "slug": "banco_brasil", "banco": "banco_brasil_625", "conta": "8"},
-        {"nome": "Caixa · Conta 504", "slug": "caixa", "banco": "caixa_625", "conta": "504"},
-        {"nome": "Sicredi · Conta 3999", "slug": "sicredi", "banco": "sicredi_625", "conta": "3999"},
+        {"nome": "Banco do Brasil · Conta 8", "slug": "banco_brasil", "banco": "banco_brasil", "conta": "8"},
+        {"nome": "Caixa · Conta 504", "slug": "caixa", "banco": "caixa", "conta": "504"},
+        {"nome": "Sicredi · Conta 3999", "slug": "sicredi", "banco": "sicredi", "conta": "3999"},
     ]
     aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
 
@@ -317,14 +321,26 @@ def _renderizar_valean_625():
             )
 
         _ler_planilha_conf_original_625 = globals().get("ler_planilha_organizada_conferencia")
+        _processar_extrato_conf_original_625 = globals().get("processar_extrato_conferencia_empresa")
+
+        def _processar_extrato_conferencia_625(file_bytes, filename, banco_forcado=None):
+            # Quando apenas um banco está selecionado, o motor informa a chave
+            # normal. Encaminha-a ao leitor dedicado da 625. Com vários bancos,
+            # mantém a leitura genérica para identificar pelo próprio arquivo.
+            if banco_forcado in {"banco_brasil", "caixa", "sicredi"}:
+                return processar_extrato_625(file_bytes, banco_forcado).to_dict("records")
+            return _processar_extrato_conf_original_625(file_bytes, filename, banco_forcado)
+
         try:
             globals()["ler_planilha_organizada_conferencia"] = _ler_planilha_conferencia_625
+            globals()["processar_extrato_conferencia_empresa"] = _processar_extrato_conferencia_625
             renderizar_conferencia_autokraft(
                 "valean_625", bancos_config=configs,
                 rotulo_planilha="Planilha final organizada da empresa 625",
             )
         finally:
             globals()["ler_planilha_organizada_conferencia"] = _ler_planilha_conf_original_625
+            globals()["processar_extrato_conferencia_empresa"] = _processar_extrato_conf_original_625
 
     with aba_base:
         renderizar_base_inteligente_empresa(
