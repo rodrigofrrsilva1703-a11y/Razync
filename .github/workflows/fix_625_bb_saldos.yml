@@ -1,0 +1,34 @@
+name: Corrigir saldos BB 625
+on:
+  push:
+    branches: [main]
+    paths: [scripts/fix_625_bb_saldos.py, .github/workflows/fix_625_bb_saldos.yml]
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/fix_625_bb_saldos.py
+      - run: python -m py_compile razync/valean_625.py
+      - name: Validar regras de saldo sem dependências
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('razync/valean_625.py').read_text()
+          assert 'eh_saldo_bb' in s
+          assert 'antes_norm' in s
+          assert 'IOF Saldo Devedor Conta' in s
+          print('regras BB 625 presentes')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add razync/valean_625.py
+          git commit -m 'Ignora saldo anterior e saldos diarios do BB na 625'
+          git rm scripts/fix_625_bb_saldos.py .github/workflows/fix_625_bb_saldos.yml
+          git commit -m 'Remove patch temporario saldos BB 625'
+          git push
