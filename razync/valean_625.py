@@ -36,13 +36,35 @@ def _valor_br(token: str, natureza: str = "") -> float:
 
 
 def _limpar_cpf_cnpj_historico(texto: str) -> str:
+    """Remove CPF/CNPJ dos históricos da empresa 625.
+
+    Trata os formatos reais observados nos extratos BB e Sicredi, inclusive
+    documentos sem máscara no meio da descrição. Preserva números que não têm
+    11 ou 14 dígitos, como nomes empresariais do tipo ``63.006.516 EDIMARCO``.
+    """
     texto = str(texto or "")
-    padroes = [
-        r"\b(?:CPF|CNPJ)\s*[:\-]?\s*(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{11}|\d{14})\b",
-        r"(?<!\d)(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{11}|\d{14})(?!\d)",
-    ]
-    for padrao in padroes:
-        texto = re.sub(padrao, " ", texto, flags=re.I)
+    doc = (
+        r"(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}"
+        r"|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"
+        r"|\d{11}|\d{14})"
+    )
+
+    # Banco do Brasil: algumas linhas trazem banco/agência antes do CNPJ.
+    texto = re.sub(
+        rf"(?<!\d)\d{{3}}\s+\d{{4}}\s+(?={doc}(?!\d))",
+        " ", texto, flags=re.I,
+    )
+    # Banco do Brasil: PIX pode trazer data/hora auxiliar antes do CPF/CNPJ.
+    texto = re.sub(
+        rf"(?<!\d)\d{{2}}/\d{{2}}\s+\d{{2}}:\d{{2}}\s+(?={doc}(?!\d))",
+        " ", texto, flags=re.I,
+    )
+    # Remove rótulos e documentos com/sem máscara.
+    texto = re.sub(
+        rf"\b(?:CPF|CNPJ)\b\s*[:\-]?\s*(?={doc}(?!\d))",
+        " ", texto, flags=re.I,
+    )
+    texto = re.sub(rf"(?<!\d){doc}(?!\d)", " ", texto, flags=re.I)
     texto = re.sub(r"\b(?:CPF|CNPJ)\b\s*[:\-]?", " ", texto, flags=re.I)
     return re.sub(r"\s+", " ", texto).strip(" -|;,:.")
 
