@@ -4013,10 +4013,13 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
                     identificar_chave_banco_empresa(descricao_linha)
                     if col_descricao is not None else ''
                 ) or banco_aba or banco_arquivo
-                bancos_validos = {
-                    'itau', 'bradesco', 'fibra', 'daycoval', 'sicredi',
-                    'santander', 'btg'
-                }
+                if empresa == 'valean_625':
+                    bancos_validos = {'banco_brasil', 'caixa', 'sicredi'}
+                else:
+                    bancos_validos = {
+                        'itau', 'bradesco', 'fibra', 'daycoval', 'sicredi',
+                        'santander', 'btg'
+                    }
             assinatura = criar_assinatura_classificacao(historico)
             if banco_linha not in bancos_validos or not assinatura:
                 continue
