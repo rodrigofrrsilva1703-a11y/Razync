@@ -1,0 +1,31 @@
+name: Redeploy 625 Caixa PESSOAL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/redeploy_625_caixa_pessoal.py'
+      - '.github/workflows/redeploy_625_caixa_pessoal.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Atualiza app.py
+        run: python scripts/redeploy_625_caixa_pessoal.py
+      - name: Valida sintaxe
+        run: python -m py_compile app.py razync/valean_625.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git commit -m 'Força deploy parser Caixa PESSOAL 625' || exit 0
+          git push
