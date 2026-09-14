@@ -1,0 +1,27 @@
+name: Fix 626 BB saldo 999
+on:
+  push:
+    paths:
+      - 'scripts/fix_626_bb_999_saldo.py'
+      - '.github/workflows/fix_626_bb_999_saldo.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply patch
+        run: python scripts/fix_626_bb_999_saldo.py
+      - name: Validate syntax
+        run: python -m py_compile razync/valean_626.py
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add razync/valean_626.py
+          git commit -m "Ignora saldo final 999 no BB da empresa 626" || exit 0
+          git push
