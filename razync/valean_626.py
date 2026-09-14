@@ -146,6 +146,8 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
 
     moeda = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])", re.I)
     registros = []
+    saldo_extrato = None
+    data_saldo_extrato = pd.NaT
     for bloco in blocos:
         primeira = bloco[0]
         data = pd.to_datetime(primeira[:10], dayfirst=True, errors="coerce")
@@ -156,6 +158,17 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
         movimento = valores[0]
         valor = _valor_br(movimento.group(1), movimento.group(2))
         antes_bruto = primeira[10:movimento.start()]
+
+        # O BB imprime o saldo da conta como um valor adicional na mesma linha
+        # de alguns movimentos (especialmente no fechamento do dia/período).
+        # Guardamos sempre o saldo da data mais recente para exibir o saldo real
+        # do extrato, sem transformar esse valor em lançamento contábil.
+        if len(valores) >= 2:
+            saldo_match = valores[-1]
+            saldo_candidato = _valor_br(saldo_match.group(1), saldo_match.group(2))
+            if pd.isna(data_saldo_extrato) or data >= data_saldo_extrato:
+                saldo_extrato = saldo_candidato
+                data_saldo_extrato = data
         antes_norm = _normalizar(antes_bruto)
         # O BB usa o código estrutural 999 para a linha de saldo final.
         # Essa linha nunca representa movimento e não pode ir ao Modelo Domínio.
@@ -167,6 +180,14 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
             or re.search(r"(?:^|\s)999\s+saldo(?:\s|$)", antes_saldo) is not None
         )
         if tem_saldo:
+            # Em alguns layouts a linha 999/SALDO contém apenas o saldo final.
+            # Capturamos esse valor, mas a linha continua fora do Modelo Domínio.
+            if valores:
+                saldo_match = valores[-1]
+                saldo_candidato = _valor_br(saldo_match.group(1), saldo_match.group(2))
+                if pd.isna(data_saldo_extrato) or data >= data_saldo_extrato:
+                    saldo_extrato = saldo_candidato
+                    data_saldo_extrato = data
             continue
 
         # Remove agência/lote e Documento, mantendo apenas o histórico textual.
@@ -202,7 +223,11 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
             historico = "MOVIMENTO BANCÁRIO"
         registros.append(_registro("banco_brasil", data, valor, historico))
 
-    return _finalizar(registros, "Banco do Brasil")
+    resultado = _finalizar(registros, "Banco do Brasil")
+    if saldo_extrato is not None:
+        resultado.attrs["saldo_extrato"] = round(float(saldo_extrato), 2)
+        resultado.attrs["data_saldo_extrato"] = pd.Timestamp(data_saldo_extrato)
+    return resultado
 
 
 def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
@@ -266,6 +291,20 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
     if not quadros:
         detalhe = "; ".join(erros) if erros else "nenhum arquivo recebido"
         raise ValueError(f"Nenhum período pôde ser processado para {banco}: {detalhe}")
+    # Preserva o saldo real do extrato mais recente quando vários períodos são
+    # processados juntos. Esse saldo é apenas informativo e não vira lançamento.
+    saldos = []
+    for quadro in quadros:
+        saldo = quadro.attrs.get("saldo_extrato")
+        data_saldo = quadro.attrs.get("data_saldo_extrato")
+        if saldo is not None and data_saldo is not None:
+            saldos.append((pd.Timestamp(data_saldo), float(saldo)))
+
     resultado = pd.concat(quadros, ignore_index=True)
     resultado = resultado.drop_duplicates(subset=["DATA", "VALOR", "HISTÓRICO"], keep="first")
-    return resultado.sort_values("DATA", kind="stable").reset_index(drop=True)
+    resultado = resultado.sort_values("DATA", kind="stable").reset_index(drop=True)
+    if saldos:
+        data_saldo, saldo = max(saldos, key=lambda item: item[0])
+        resultado.attrs["saldo_extrato"] = round(saldo, 2)
+        resultado.attrs["data_saldo_extrato"] = data_saldo
+    return resultado
