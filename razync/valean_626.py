@@ -157,7 +157,16 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
         valor = _valor_br(movimento.group(1), movimento.group(2))
         antes_bruto = primeira[10:movimento.start()]
         antes_norm = _normalizar(antes_bruto)
-        if "saldo anterior" in antes_norm or re.search(r"(?:^|\s)s\s*a\s*l\s*d\s*o\s*$", antes_norm):
+        # O BB usa o código estrutural 999 para a linha de saldo final.
+        # Essa linha nunca representa movimento e não pode ir ao Modelo Domínio.
+        antes_saldo = re.sub(r"\s+", " ", antes_norm).strip()
+        tem_saldo = (
+            "saldo anterior" in antes_saldo
+            or re.search(r"(?:^|\s)s\s*a\s*l\s*d\s*o\s*$", antes_saldo) is not None
+            or re.search(r"(?:^|\s)999(?:\s+|.*?\s+)s\s*a\s*l\s*d\s*o(?:\s|$)", antes_saldo) is not None
+            or re.search(r"(?:^|\s)999\s+saldo(?:\s|$)", antes_saldo) is not None
+        )
+        if tem_saldo:
             continue
 
         # Remove agência/lote e Documento, mantendo apenas o histórico textual.
