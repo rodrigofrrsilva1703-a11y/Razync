@@ -170,8 +170,17 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
             continue
 
         # Remove agência/lote e Documento, mantendo apenas o histórico textual.
-        antes = re.sub(r"^\s*(?:[=\d]+\s+){2,5}", "", antes_bruto).strip()
+        antes = re.sub(r"^\s*(?:[=\d]+\s+){2,8}", "", antes_bruto).strip()
         antes = re.sub(r"\s+\d[\d./-]{2,}\s*$", "", antes).strip()
+
+        # Segunda barreira contra o saldo final do BB. O OCR pode distorcer o
+        # código 999 ou inserir espaços/pontuação em S A L D O; por isso, depois
+        # de retirar os campos estruturais, reduzimos o texto a letras e testamos
+        # o conteúdo sem depender do código numérico reconhecido.
+        antes_so_letras = re.sub(r"[^a-z]", "", _normalizar(antes))
+        bruto_so_letras = re.sub(r"[^a-z]", "", _normalizar(antes_bruto))
+        if antes_so_letras in {"saldo", "saldoanterior"} or bruto_so_letras.endswith("saldo"):
+            continue
 
         complementos = []
         for comp in bloco[1:]:
