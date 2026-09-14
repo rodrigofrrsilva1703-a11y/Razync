@@ -42,11 +42,31 @@ def _limpar_cpf_cnpj_historico(texto: str) -> str:
     return re.sub(r"\s+", " ", texto).strip(" -|;,:.")
 
 
+def _limpar_rodape_url_bb_historico(texto: str) -> str:
+    """Remove qualquer resíduo de URL/cabeçalho do BB já colado ao histórico."""
+    texto = str(texto or "")
+    # URL normal ou com espaços introduzidos pela extração do PDF.
+    texto = re.sub(r"https?\s*:\s*//\S+", " ", texto, flags=re.I)
+    texto = re.sub(r"(?:www\.)?autoatendimento2\.bb\.com\.br\S*", " ", texto, flags=re.I)
+    # Cabeçalho/rodapé impresso pode acabar concatenado ao lançamento.
+    texto = re.sub(
+        r"\b\d{2}/\d{2}/\d{4},\s*\d{2}:\d{2}\s+banco\s+do\s+brasil\b.*$",
+        " ",
+        texto,
+        flags=re.I,
+    )
+    return re.sub(r"\s+", " ", texto).strip(" -|;,:.")
+
+
 def _registro(banco: str, data, valor: float, historico: str) -> dict:
     conta = CONTAS_VALEAN_625[banco]
     historico = re.sub(r"\s+", " ", str(historico or "MOVIMENTO BANCÁRIO")).strip()
     historico = re.sub(r"^(?:recebido|pago):\s*", "", historico, flags=re.I)
+    if banco == "banco_brasil":
+        historico = _limpar_rodape_url_bb_historico(historico)
     historico = _limpar_cpf_cnpj_historico(historico) or "MOVIMENTO BANCÁRIO"
+    if banco == "banco_brasil":
+        historico = _limpar_rodape_url_bb_historico(historico) or "MOVIMENTO BANCÁRIO"
     historico = ("Recebido: " if valor > 0 else "Pago: ") + historico
     return {"DESCRIÇÃO": NOMES_BANCOS[banco], "DATA": pd.Timestamp(data).normalize(), "VALOR": round(float(valor), 2), "DÉBITO": conta if valor > 0 else "", "CRÉDITO": conta if valor < 0 else "", "HISTÓRICO": historico}
 
@@ -92,9 +112,6 @@ def _eh_rodape_bb(linha: str) -> bool:
     return (
         norm.startswith(("http://", "https://", "pagina ", "banco do brasil", "consultas - extrato"))
         or "autoatendimento2.bb.com.br" in norm
-        # Cabeçalho/rodapé impresso pelo BB: data, vírgula e hora. O nome do banco
-        # pode sair quebrado no PDF (ex.: "Banc o do Bras il"), então a vírgula
-        # após a data é o sinal confiável para nunca abrir um novo lançamento.
         or re.match(r"^\d{2}/\d{2}/\d{4},\s*\d{2}:\d{2}\b", norm) is not None
         or re.fullmatch(r"\d+/\d+", norm) is not None
     )
@@ -115,8 +132,6 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
                 blocos.append(atual)
             atual = [linha]
         elif atual:
-            # Complementos legítimos do BB ficam em linha separada: favorecido,
-            # pagador, data/hora de PIX/TED, tarifa e descrições de boleto.
             atual.append(linha)
     if atual:
         blocos.append(atual)
@@ -147,13 +162,14 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
             norm = _normalizar(comp)
             if norm.startswith(("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt.")):
                 continue
-            # Remove apenas data/hora e CPF/CNPJ estruturais, mantendo o nome que
-            # vem depois (ex.: 01/04 08:31 CNPJ IGUACU SANE -> IGUACU SANE).
-            comp_limpo = _limpar_cpf_cnpj_historico(comp)
+            comp_limpo = _limpar_rodape_url_bb_historico(comp)
+            comp_limpo = _limpar_cpf_cnpj_historico(comp_limpo)
             comp_limpo = re.sub(r"^\d{2}/\d{2}\s+\d{2}:\d{2}\s*", "", comp_limpo).strip()
+            comp_limpo = _limpar_rodape_url_bb_historico(comp_limpo)
             if comp_limpo:
                 complementos.append(comp_limpo)
         historico = " ".join([antes] + complementos).strip()
+        historico = _limpar_rodape_url_bb_historico(historico)
         registros.append(_registro("banco_brasil", data, valor, historico))
     return _finalizar(registros, "Banco do Brasil")
 
