@@ -166,10 +166,17 @@ def renderizar_previa_bancos_padrao(dados_bancos, titulo='Pré-visualização po
             df_banco['VALOR'] = pd.to_numeric(df_banco['VALOR'], errors='coerce').fillna(0.0)
             entradas = float(df_banco.loc[df_banco['VALOR'] > 0, 'VALOR'].sum())
             saidas = float(abs(df_banco.loc[df_banco['VALOR'] < 0, 'VALOR'].sum()))
-            # Neste resumo, "Saldo" representa o movimento líquido do período:
-            # total de entradas menos total de saídas. O saldo bancário final do
-            # PDF inclui o saldo inicial e não deve substituir esta diferença.
+            # Neste resumo, "Saldo" representa o movimento líquido do período.
+            # Quando o extrato informa os saldos inicial e final, a diferença
+            # entre eles também protege o fechamento contra pequenas oscilações
+            # de centavos do OCR em PDFs escaneados.
             saldo = entradas - saidas
+            try:
+                saldo_inicial = float(df_banco.attrs['saldo_inicial_extrato'])
+                saldo_final = float(df_banco.attrs['saldo_extrato'])
+                saldo = saldo_final - saldo_inicial
+            except (KeyError, TypeError, ValueError):
+                pass
 
             card_ent, card_sai, card_saldo = st.columns(3)
             card_ent.metric('Entradas', formatar_moeda(entradas))

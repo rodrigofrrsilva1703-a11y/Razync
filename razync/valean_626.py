@@ -147,6 +147,8 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
 
     moeda = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])", re.I)
     registros = []
+    saldo_inicial_extrato = None
+    data_saldo_inicial = pd.NaT
     saldo_extrato = None
     data_saldo_extrato = pd.NaT
     for bloco in blocos:
@@ -181,6 +183,12 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
             or re.search(r"(?:^|\s)999\s+saldo(?:\s|$)", antes_saldo) is not None
         )
         if tem_saldo:
+            if "saldo anterior" in antes_saldo and valores:
+                saldo_match = valores[-1]
+                saldo_inicial_extrato = _valor_br(
+                    saldo_match.group(1), saldo_match.group(2)
+                )
+                data_saldo_inicial = data
             # Em alguns layouts a linha 999/SALDO contém apenas o saldo final.
             # Capturamos esse valor, mas a linha continua fora do Modelo Domínio.
             if valores:
@@ -225,6 +233,13 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
         registros.append(_registro("banco_brasil", data, valor, historico))
 
     resultado = _finalizar(registros, "Banco do Brasil")
+    if saldo_inicial_extrato is not None:
+        resultado.attrs["saldo_inicial_extrato"] = round(
+            float(saldo_inicial_extrato), 2
+        )
+        resultado.attrs["data_saldo_inicial_extrato"] = pd.Timestamp(
+            data_saldo_inicial
+        )
     if saldo_extrato is not None:
         resultado.attrs["saldo_extrato"] = round(float(saldo_extrato), 2)
         resultado.attrs["data_saldo_extrato"] = pd.Timestamp(data_saldo_extrato)
@@ -301,7 +316,14 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
     # Preserva o saldo real do extrato mais recente quando vários períodos são
     # processados juntos. Esse saldo é apenas informativo e não vira lançamento.
     saldos = []
+    saldos_iniciais = []
     for quadro in quadros:
+        saldo_inicial = quadro.attrs.get("saldo_inicial_extrato")
+        data_saldo_inicial = quadro.attrs.get("data_saldo_inicial_extrato")
+        if saldo_inicial is not None and data_saldo_inicial is not None:
+            saldos_iniciais.append(
+                (pd.Timestamp(data_saldo_inicial), float(saldo_inicial))
+            )
         saldo = quadro.attrs.get("saldo_extrato")
         data_saldo = quadro.attrs.get("data_saldo_extrato")
         if saldo is not None and data_saldo is not None:
@@ -309,6 +331,12 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
 
     resultado = pd.concat(quadros, ignore_index=True)
     resultado = resultado.sort_values("DATA", kind="stable").reset_index(drop=True)
+    if saldos_iniciais:
+        data_saldo_inicial, saldo_inicial = min(
+            saldos_iniciais, key=lambda item: item[0]
+        )
+        resultado.attrs["saldo_inicial_extrato"] = round(saldo_inicial, 2)
+        resultado.attrs["data_saldo_inicial_extrato"] = data_saldo_inicial
     if saldos:
         data_saldo, saldo = max(saldos, key=lambda item: item[0])
         resultado.attrs["saldo_extrato"] = round(saldo, 2)
