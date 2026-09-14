@@ -92,7 +92,10 @@ def _eh_rodape_bb(linha: str) -> bool:
     return (
         norm.startswith(("http://", "https://", "pagina ", "banco do brasil", "consultas - extrato"))
         or "autoatendimento2.bb.com.br" in norm
-        or re.match(r"^\d{2}/\d{2}/\d{4},?\s+\d{2}:\d{2}\s+banco do brasil", norm) is not None
+        # Cabeçalho/rodapé impresso pelo BB: data, vírgula e hora. O nome do banco
+        # pode sair quebrado no PDF (ex.: "Banc o do Bras il"), então a vírgula
+        # após a data é o sinal confiável para nunca abrir um novo lançamento.
+        or re.match(r"^\d{2}/\d{2}/\d{4},\s*\d{2}:\d{2}\b", norm) is not None
         or re.fullmatch(r"\d+/\d+", norm) is not None
     )
 
