@@ -4,7 +4,7 @@ Mantém a aplicação histórica intacta em app_legacy.py e acrescenta a integra
 da empresa 841 (Lucrativite) com Banco Inter / conta 506.
 """
 
-# Deploy sync 2026-09-09: históricos Nova Geração 266/1396 preservam PAGO/RECEBIDO original sem prefixo extra.
+# Deploy sync 2026-09-14: Caixa 625 suporta extrato #PESSOAL multilinha e SIATR antigo.
 from pathlib import Path
 
 import razync.company_catalog as _catalogo
