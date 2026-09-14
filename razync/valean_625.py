@@ -43,18 +43,30 @@ def _limpar_cpf_cnpj_historico(texto: str) -> str:
 
 
 def _limpar_rodape_url_bb_historico(texto: str) -> str:
-    """Remove qualquer resíduo de URL/cabeçalho do BB já colado ao histórico."""
-    texto = str(texto or "")
-    # URL normal ou com espaços introduzidos pela extração do PDF.
-    texto = re.sub(r"https?\s*:\s*//\S+", " ", texto, flags=re.I)
-    texto = re.sub(r"(?:www\.)?autoatendimento2\.bb\.com\.br\S*", " ", texto, flags=re.I)
-    # Cabeçalho/rodapé impresso pode acabar concatenado ao lançamento.
-    texto = re.sub(
-        r"\b\d{2}/\d{2}/\d{4},\s*\d{2}:\d{2}\s+banco\s+do\s+brasil\b.*$",
-        " ",
-        texto,
-        flags=re.I,
-    )
+    """Remove qualquer resíduo de URL/cabeçalho/rodapé do BB do histórico."""
+    texto = re.sub(r"\s+", " ", str(texto or "")).strip()
+    if not texto:
+        return ""
+
+    # Se qualquer marcador de rodapé aparecer colado ao lançamento, tudo a partir
+    # dele é descartado. Isso é mais seguro do que tentar remover só o token da URL,
+    # pois o PDF pode concatenar contador de página e outros textos depois dela.
+    marcadores = [
+        r"https?\s*:\s*//",
+        r"\bwww\.",
+        r"\bautoatendimento2\.bb\.com\.br",
+        r"\b\d{2}/\d{2}/\d{4},\s*\d{2}:\d{2}\s+banco\s+do\s+brasil\b",
+    ]
+    cortes = []
+    for padrao in marcadores:
+        achado = re.search(padrao, texto, flags=re.I)
+        if achado:
+            cortes.append(achado.start())
+    if cortes:
+        texto = texto[:min(cortes)]
+
+    # Remove contador de página se ainda tiver sido concatenado ao final.
+    texto = re.sub(r"\s+\d+\s*/\s*\d+\s*$", " ", texto)
     return re.sub(r"\s+", " ", texto).strip(" -|;,:.")
 
 
@@ -154,6 +166,7 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
             continue
         antes = re.sub(r"^\s*\d{4}\s+\d{5,8}\s*", "", antes_bruto)
         antes = re.sub(r"\s+(?:\d[\d./-]{2,})\s*$", "", antes).strip()
+        antes = _limpar_rodape_url_bb_historico(antes)
 
         complementos = []
         for comp in bloco[1:]:
