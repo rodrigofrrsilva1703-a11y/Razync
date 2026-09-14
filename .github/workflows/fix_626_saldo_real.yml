@@ -1,0 +1,28 @@
+name: Fix 626 saldo real
+on:
+  push:
+    paths:
+      - 'scripts/fix_626_saldo_real.py'
+      - '.github/workflows/fix_626_saldo_real.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Aplicar patch
+        run: python scripts/fix_626_saldo_real.py
+      - name: Validar sintaxe
+        run: |
+          python -m py_compile razync/valean_626.py app_legacy.py
+      - name: Commit
+        run: |
+          git config user.name 'Razync Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add razync/valean_626.py app_legacy.py
+          git commit -m 'Usa saldo final real do BB na empresa 626' || exit 0
+          git push
