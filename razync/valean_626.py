@@ -11,6 +11,7 @@ extrato vier escaneado. Também consolida vários períodos em um único quadro.
 from __future__ import annotations
 
 import io
+import hashlib
 import re
 import unicodedata
 from typing import Iterable
@@ -269,7 +270,8 @@ def _finalizar(registros: list[dict], banco: str) -> pd.DataFrame:
     if not registros:
         raise ValueError(f"Nenhum lançamento válido foi encontrado no extrato {banco}.")
     df = pd.DataFrame(registros, columns=COLUNAS_MODELO)
-    df = df.drop_duplicates(subset=["DATA", "VALOR", "HISTÓRICO"], keep="first")
+    # Não elimina linhas iguais: um extrato pode conter duas transações legítimas
+    # com a mesma data, valor e favorecido (por exemplo, PIX repetidos).
     return df.sort_values("DATA", kind="stable").reset_index(drop=True)
 
 
@@ -283,7 +285,12 @@ def processar_extrato_626(conteudo: bytes, banco: str) -> pd.DataFrame:
 def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFrame:
     quadros = []
     erros = []
+    arquivos_vistos = set()
     for indice, conteudo in enumerate(arquivos, start=1):
+        assinatura = hashlib.sha256(conteudo).hexdigest()
+        if assinatura in arquivos_vistos:
+            continue
+        arquivos_vistos.add(assinatura)
         try:
             quadros.append(processar_extrato_626(conteudo, banco))
         except Exception as erro:
@@ -301,7 +308,6 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
             saldos.append((pd.Timestamp(data_saldo), float(saldo)))
 
     resultado = pd.concat(quadros, ignore_index=True)
-    resultado = resultado.drop_duplicates(subset=["DATA", "VALOR", "HISTÓRICO"], keep="first")
     resultado = resultado.sort_values("DATA", kind="stable").reset_index(drop=True)
     if saldos:
         data_saldo, saldo = max(saldos, key=lambda item: item[0])
