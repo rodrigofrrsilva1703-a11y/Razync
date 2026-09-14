@@ -4013,7 +4013,7 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
                     identificar_chave_banco_empresa(descricao_linha)
                     if col_descricao is not None else ''
                 ) or banco_aba or banco_arquivo
-                if empresa == 'valean_625':
+                if empresa in {'valean_625', 'valean_626'}:
                     bancos_validos = {'banco_brasil', 'caixa', 'sicredi'}
                 else:
                     bancos_validos = {
