@@ -15,11 +15,7 @@ from pypdf import PdfReader
 
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 CONTAS_VALEAN_625 = {"banco_brasil": "8", "caixa": "504", "sicredi": "3999"}
-NOMES_BANCOS = {
-    "banco_brasil": "BANCO DO BRASIL",
-    "caixa": "CAIXA ECONÔMICA FEDERAL",
-    "sicredi": "SICREDI",
-}
+NOMES_BANCOS = {"banco_brasil": "BANCO DO BRASIL", "caixa": "CAIXA ECONÔMICA FEDERAL", "sicredi": "SICREDI"}
 
 
 def _normalizar(valor) -> str:
@@ -37,11 +33,7 @@ def _valor_br(token: str, natureza: str = "") -> float:
 
 def _limpar_cpf_cnpj_historico(texto: str) -> str:
     texto = str(texto or "")
-    doc = (
-        r"(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}"
-        r"|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"
-        r"|\d{11}|\d{14})"
-    )
+    doc = r"(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{11}|\d{14})"
     texto = re.sub(rf"(?<!\d)\d{{3}}\s+\d{{4}}\s+(?={doc}(?!\d))", " ", texto, flags=re.I)
     texto = re.sub(rf"(?<!\d)\d{{2}}/\d{{2}}\s+\d{{2}}:\d{{2}}\s+(?={doc}(?!\d))", " ", texto, flags=re.I)
     texto = re.sub(rf"\b(?:CPF|CNPJ)\b\s*[:\-]?\s*(?={doc}(?!\d))", " ", texto, flags=re.I)
@@ -56,14 +48,7 @@ def _registro(banco: str, data, valor: float, historico: str) -> dict:
     historico = re.sub(r"^(?:recebido|pago):\s*", "", historico, flags=re.I)
     historico = _limpar_cpf_cnpj_historico(historico) or "MOVIMENTO BANCÁRIO"
     historico = ("Recebido: " if valor > 0 else "Pago: ") + historico
-    return {
-        "DESCRIÇÃO": NOMES_BANCOS[banco],
-        "DATA": pd.Timestamp(data).normalize(),
-        "VALOR": round(float(valor), 2),
-        "DÉBITO": conta if valor > 0 else "",
-        "CRÉDITO": conta if valor < 0 else "",
-        "HISTÓRICO": historico,
-    }
+    return {"DESCRIÇÃO": NOMES_BANCOS[banco], "DATA": pd.Timestamp(data).normalize(), "VALOR": round(float(valor), 2), "DÉBITO": conta if valor > 0 else "", "CRÉDITO": conta if valor < 0 else "", "HISTÓRICO": historico}
 
 
 def _texto_pdf(conteudo: bytes) -> str:
@@ -101,20 +86,38 @@ def _texto_ocr_caixa(conteudo: bytes) -> str:
     return "\n".join(paginas)
 
 
+def _eh_rodape_bb(linha: str) -> bool:
+    """Impede que cabeçalho/rodapé do Internet Banking seja anexado ao movimento."""
+    norm = _normalizar(linha)
+    return (
+        norm.startswith(("http://", "https://", "pagina ", "banco do brasil", "consultas - extrato"))
+        or "autoatendimento2.bb.com.br" in norm
+        or re.match(r"^\d{2}/\d{2}/\d{4},?\s+\d{2}:\d{2}\s+banco do brasil", norm) is not None
+        or re.fullmatch(r"\d+/\d+", norm) is not None
+    )
+
+
 def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
     texto = _texto_pdf(conteudo)
     blocos = []
     atual = []
     for linha in texto.splitlines():
         linha = re.sub(r"\s+", " ", linha).strip()
-        if re.match(r"^\d{2}/\d{2}/\d{4}", linha):
+        if not linha:
+            continue
+        if _eh_rodape_bb(linha):
+            continue
+        if re.match(r"^\d{2}/\d{2}/\d{4}\b", linha):
             if atual:
                 blocos.append(atual)
             atual = [linha]
-        elif atual and linha and not linha.lower().startswith(("https://", "pagina ")):
+        elif atual:
+            # Complementos legítimos do BB ficam em linha separada: favorecido,
+            # pagador, data/hora de PIX/TED, tarifa e descrições de boleto.
             atual.append(linha)
     if atual:
         blocos.append(atual)
+
     registros = []
     moeda = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])", re.I)
     for bloco in blocos:
@@ -133,7 +136,20 @@ def processar_bb_625(conteudo: bytes) -> pd.DataFrame:
             continue
         antes = re.sub(r"^\s*\d{4}\s+\d{5,8}\s*", "", antes_bruto)
         antes = re.sub(r"\s+(?:\d[\d./-]{2,})\s*$", "", antes).strip()
-        complementos = [x for x in bloco[1:] if not _normalizar(x).startswith(("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt."))]
+
+        complementos = []
+        for comp in bloco[1:]:
+            if _eh_rodape_bb(comp):
+                continue
+            norm = _normalizar(comp)
+            if norm.startswith(("cliente", "agencia", "conta corrente", "periodo", "lancamentos", "dt.")):
+                continue
+            # Remove apenas data/hora e CPF/CNPJ estruturais, mantendo o nome que
+            # vem depois (ex.: 01/04 08:31 CNPJ IGUACU SANE -> IGUACU SANE).
+            comp_limpo = _limpar_cpf_cnpj_historico(comp)
+            comp_limpo = re.sub(r"^\d{2}/\d{2}\s+\d{2}:\d{2}\s*", "", comp_limpo).strip()
+            if comp_limpo:
+                complementos.append(comp_limpo)
         historico = " ".join([antes] + complementos).strip()
         registros.append(_registro("banco_brasil", data, valor, historico))
     return _finalizar(registros, "Banco do Brasil")
@@ -161,24 +177,10 @@ def processar_sicredi_625(conteudo: bytes) -> pd.DataFrame:
 
 
 def processar_caixa_625(conteudo: bytes) -> pd.DataFrame:
-    """Lê o extrato SIATR da Caixa usado pela Valean 625.
-
-    Formato real: ``_ DD/MM/AA NR.DOC DESCRICAO VALOR C/D SALDO C/D``.
-    O segundo valor é saldo e nunca vira lançamento. ``SALDO DIA`` também é
-    sempre ignorado. O NR.DOC é estrutural e não entra no histórico.
-    """
     texto = _texto_pdf(conteudo)
     if not texto.strip():
         texto = _texto_ocr_caixa(conteudo)
-
-    # Aceita tanto DD/MM/AA (SIATR antigo) quanto DD/MM/AAAA e o '_' inicial.
-    padrao = re.compile(
-        r"^_?\s*(\d{2}/\d{2}/(?:\d{2}|\d{4}))\s+"
-        r"(\d{6,})\s+(.+?)\s+"
-        r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])"
-        r"(?:\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD]))?\s*$",
-        flags=re.I,
-    )
+    padrao = re.compile(r"^_?\s*(\d{2}/\d{2}/(?:\d{2}|\d{4}))\s+(\d{6,})\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])(?:\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD]))?\s*$", flags=re.I)
     registros = []
     vistos = set()
     for linha in texto.splitlines():
@@ -188,7 +190,6 @@ def processar_caixa_625(conteudo: bytes) -> pd.DataFrame:
             continue
         data_txt, _documento, historico, mov_txt, natureza = achado.group(1, 2, 3, 4, 5)
         hist_norm = _normalizar(historico)
-        # O extrato repete a página inteira em alguns PDFs; deduplicamos pela linha.
         chave = (data_txt, _documento, hist_norm, mov_txt, natureza.upper())
         if chave in vistos:
             continue
