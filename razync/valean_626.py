@@ -22,7 +22,7 @@ from pypdf import PdfReader
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 CONTAS_VALEAN_626 = {"banco_brasil": "8", "sicredi": "1155"}
 NOMES_BANCOS = {"banco_brasil": "BANCO DO BRASIL", "sicredi": "SICREDI"}
-PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-totais-completos-v7"
+PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-movimentos-v8"
 
 
 def _normalizar(valor) -> str:
@@ -351,10 +351,13 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
         diferenca = round(movimento_lido - movimento_saldos, 2)
         resultado.attrs["diferenca_validacao_saldo"] = diferenca
         if abs(diferenca) > 0.02:
-            raise ValueError(
-                "A leitura do extrato Sicredi não fechou com os saldos impressos "
-                f"(diferença de R$ {abs(diferenca):,.2f}). Gere o PDF novamente "
-                "ou envie um arquivo com melhor resolução."
+            # O saldo acumulado é apenas uma conferência auxiliar. Em PDFs
+            # escaneados o OCR pode perder o sinal desse campo, mesmo lendo
+            # corretamente o valor do movimento. Os cards e a planilha usam os
+            # movimentos; por isso a divergência vira aviso e não elimina o mês.
+            resultado.attrs["aviso_saldo_impresso"] = (
+                "O saldo acumulado impresso teve leitura divergente em "
+                f"R$ {abs(diferenca):,.2f}; os lançamentos foram mantidos."
             )
     return resultado
 
@@ -441,7 +444,11 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
     # processados juntos. Esse saldo é apenas informativo e não vira lançamento.
     saldos = []
     saldos_iniciais = []
+    avisos_saldo = []
     for quadro in quadros:
+        aviso_saldo = quadro.attrs.get("aviso_saldo_impresso")
+        if aviso_saldo:
+            avisos_saldo.append(str(aviso_saldo))
         saldo_inicial = quadro.attrs.get("saldo_inicial_extrato")
         data_saldo_inicial = quadro.attrs.get("data_saldo_inicial_extrato")
         if saldo_inicial is not None and data_saldo_inicial is not None:
@@ -467,4 +474,5 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
         resultado.attrs["data_saldo_extrato"] = data_saldo
     resultado.attrs["linhas_sobrepostas_ignoradas"] = linhas_sobrepostas
     resultado.attrs["arquivos_processados"] = len(quadros)
+    resultado.attrs["avisos_saldo_impresso"] = avisos_saldo
     return resultado

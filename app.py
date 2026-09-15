@@ -483,6 +483,13 @@ def _renderizar_valean_626():
                 for nome, quadro in quadros_626.items()
             ]
             st.caption("Processados: " + " · ".join(quantidades_626))
+            for nome_banco_626, quadro_626 in quadros_626.items():
+                if quadro_626.attrs.get("avisos_saldo_impresso"):
+                    st.info(
+                        f"{nome_banco_626}: os saldos corridos do PDF tiveram "
+                        "divergência de OCR. Entradas, saídas e saldo abaixo "
+                        "foram calculados somente pelos lançamentos."
+                    )
             dados_excel_626 = {
                 nome: {"principal": quadro, "retirados": pd.DataFrame()}
                 for nome, quadro in quadros_626.items()

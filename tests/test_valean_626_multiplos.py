@@ -64,3 +64,16 @@ def test_multiplos_nao_entrega_resultado_parcial(monkeypatch):
         valean_626.processar_multiplos_626(
             [b"janeiro", b"marco_ilegivel"], "sicredi"
         )
+
+
+def test_sicredi_mantem_movimentos_quando_saldo_impresso_diverge(monkeypatch):
+    texto = """
+SALDO -1.000,00
+02/04/2026 PAGAMENTO PIX CLIENTE COM HISTORICO SUFICIENTE PARA LEITURA PIX_DEB -100,00 15.302,44
+"""
+    monkeypatch.setattr(valean_626, "_texto_pdf", lambda _: texto)
+
+    resultado = valean_626.processar_sicredi_626(b"pdf")
+
+    assert resultado["VALOR"].tolist() == [-100.0]
+    assert "aviso_saldo_impresso" in resultado.attrs
