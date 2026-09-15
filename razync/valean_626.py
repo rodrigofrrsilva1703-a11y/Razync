@@ -151,6 +151,7 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
     data_saldo_inicial = pd.NaT
     saldo_extrato = None
     data_saldo_extrato = pd.NaT
+    saldo_corrente = None
     for bloco in blocos:
         primeira = bloco[0]
         data = pd.to_datetime(primeira[:10], dayfirst=True, errors="coerce")
@@ -189,6 +190,7 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
                     saldo_match.group(1), saldo_match.group(2)
                 )
                 data_saldo_inicial = data
+                saldo_corrente = saldo_inicial_extrato
             # Em alguns layouts a linha 999/SALDO contém apenas o saldo final.
             # Capturamos esse valor, mas a linha continua fora do Modelo Domínio.
             if valores:
@@ -230,6 +232,23 @@ def processar_bb_626(conteudo: bytes) -> pd.DataFrame:
         historico = " ".join([antes] + complementos).strip()
         if not historico:
             historico = "MOVIMENTO BANCÁRIO"
+
+        # Confere os centavos pelo saldo acumulado impresso pelo BB. O saldo não
+        # aparece em todas as linhas, mas, quando aparece, permite corrigir uma
+        # pequena oscilação do OCR sem criar ou excluir qualquer lançamento.
+        saldo_linha = None
+        if len(valores) >= 2:
+            ultimo = valores[-1]
+            saldo_linha = _valor_br(ultimo.group(1), ultimo.group(2))
+        if saldo_corrente is not None:
+            saldo_previsto = round(float(saldo_corrente) + float(valor), 2)
+            if saldo_linha is not None:
+                ajuste_ocr = round(float(saldo_linha) - saldo_previsto, 2)
+                if 0 < abs(ajuste_ocr) <= 1.00:
+                    valor = round(float(valor) + ajuste_ocr, 2)
+                saldo_corrente = float(saldo_linha)
+            else:
+                saldo_corrente = round(float(saldo_corrente) + float(valor), 2)
         registros.append(_registro("banco_brasil", data, valor, historico))
 
     resultado = _finalizar(registros, "Banco do Brasil")
@@ -262,6 +281,7 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
     registros = []
     saldo_extrato = None
     data_saldo_extrato = pd.NaT
+    saldo_corrente = saldo_inicial_extrato
     for bruto in texto.splitlines():
         linha = re.sub(r"\s+", " ", bruto).strip()
         data_match = re.match(r"^(\d{2}/\d{2}/\d{4})\s+", linha)
@@ -274,7 +294,14 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
         data = pd.to_datetime(data_match.group(1), dayfirst=True, errors="coerce")
         movimento = valores[-2]
         valor = _valor_br(movimento.group())
-        saldo_extrato = _valor_br(valores[-1].group())
+        saldo_linha = _valor_br(valores[-1].group())
+        # No Sicredi cada movimento traz o saldo resultante. A diferença entre
+        # saldos consecutivos é a fonte mais estável para PDFs escaneados e evita
+        # que o OCR confunda a coluna Valor com a coluna Saldo.
+        if saldo_corrente is not None:
+            valor = round(float(saldo_linha) - float(saldo_corrente), 2)
+        saldo_corrente = saldo_linha
+        saldo_extrato = saldo_linha
         data_saldo_extrato = data
         historico = linha[data_match.end():movimento.start()].strip()
         hist_norm = _normalizar(historico)
