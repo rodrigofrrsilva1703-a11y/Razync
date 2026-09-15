@@ -391,6 +391,7 @@ if st.session_state.get("empresa_organizador") == "valean_625":
 def _renderizar_valean_626():
     from razync.valean_626 import (
         CONTAS_VALEAN_626,
+        PROCESSADOR_VALEAN_626_VERSAO,
         processar_extrato_626,
         processar_multiplos_626,
     )
@@ -400,6 +401,15 @@ def _renderizar_valean_626():
         {"nome": "Banco do Brasil · Conta 8", "slug": "banco_brasil", "banco": "banco_brasil", "conta": "8"},
         {"nome": "Sicredi · Conta 1155", "slug": "sicredi", "banco": "sicredi", "conta": "1155"},
     ]
+
+    # Resultados processados ficam na sessão do Streamlit. Ao mudar qualquer
+    # regra de leitura/conciliação da 626, invalida automaticamente a planilha
+    # antiga para impedir que o usuário baixe dados gerados pela versão anterior.
+    if st.session_state.get("valean_626_processador_versao") != PROCESSADOR_VALEAN_626_VERSAO:
+        st.session_state.pop("valean_626_quadros", None)
+        st.session_state.pop("valean_626_erro", None)
+        st.session_state["valean_626_processador_versao"] = PROCESSADOR_VALEAN_626_VERSAO
+
     aba_operacoes_626, aba_base_626 = st.tabs(["Organizar arquivos", "Base Inteligente"])
 
     with aba_operacoes_626:
