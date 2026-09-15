@@ -4,7 +4,7 @@ Mantém a aplicação histórica intacta em app_legacy.py e acrescenta a integra
 da empresa 841 (Lucrativite) com Banco Inter / conta 506.
 """
 
-# Deploy sync 2026-09-14: Caixa 625 suporta extrato #PESSOAL multilinha e SIATR antigo.
+# Deploy sync 2026-09-15: força o leitor Sicredi março v4 da empresa 626.
 from pathlib import Path
 
 import razync.company_catalog as _catalogo
@@ -414,6 +414,7 @@ def _renderizar_valean_626():
 
     with aba_operacoes_626:
         st.markdown("#### Extratos bancários → Modelo Domínio")
+        st.caption(f"Versão do processador 626: {PROCESSADOR_VALEAN_626_VERSAO}")
         st.caption(
             "Envie vários PDFs de cada banco. Os períodos serão consolidados em ordem "
             "e o download terá uma aba para Banco do Brasil e outra para Sicredi."
