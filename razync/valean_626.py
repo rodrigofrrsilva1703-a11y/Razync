@@ -22,7 +22,7 @@ from pypdf import PdfReader
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 CONTAS_VALEAN_626 = {"banco_brasil": "8", "sicredi": "1155"}
 NOMES_BANCOS = {"banco_brasil": "BANCO DO BRASIL", "sicredi": "SICREDI"}
-PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-saldos-v3"
+PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-marco-v4"
 
 
 def _normalizar(valor) -> str:
@@ -296,11 +296,22 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
         movimento = valores[-2]
         valor = _valor_br(movimento.group())
         saldo_linha = _valor_br(valores[-1].group())
-        # No Sicredi cada movimento traz o saldo resultante. A diferença entre
-        # saldos consecutivos é a fonte mais estável para PDFs escaneados e evita
-        # que o OCR confunda a coluna Valor com a coluna Saldo.
+        # No Sicredi cada movimento traz o saldo resultante. Porém o OCR pode
+        # perder somente o sinal negativo do saldo; nesse caso uma substituição
+        # cega criaria lançamentos enormes. O valor impresso continua sendo a
+        # fonte principal. A variação do saldo só corrige valor ausente ou uma
+        # pequena diferença coerente de mesmo sinal e magnitude.
         if saldo_corrente is not None:
-            valor = round(float(saldo_linha) - float(saldo_corrente), 2)
+            variacao_saldo = round(float(saldo_linha) - float(saldo_corrente), 2)
+            mesmo_sinal = (
+                valor == 0
+                or (valor > 0 and variacao_saldo > 0)
+                or (valor < 0 and variacao_saldo < 0)
+            )
+            tolerancia = max(1.00, abs(float(valor)) * 0.01)
+            magnitude_coerente = abs(variacao_saldo - float(valor)) <= tolerancia
+            if abs(float(valor)) < 0.005 or (mesmo_sinal and magnitude_coerente):
+                valor = variacao_saldo
         saldo_corrente = saldo_linha
         saldo_extrato = saldo_linha
         data_saldo_extrato = data

@@ -32,3 +32,16 @@ def test_multiplos_remove_somente_sobreposicao_entre_periodos(monkeypatch):
 
     assert resultado["VALOR"].tolist() == [10.0, -20.0, -20.0]
     assert resultado.attrs["linhas_sobrepostas_ignoradas"] == 1
+
+
+def test_sicredi_nao_transforma_saldo_sem_sinal_em_movimento(monkeypatch):
+    texto = """
+SALDO -12.534,21
+13/03/2026 PAGAMENTO PIX WILSON PIX_DEB -2.377,31 14.911,52
+13/03/2026 PAGAMENTO PIX BRUNO PIX_DEB -2.240,00 -17.151,52
+"""
+    monkeypatch.setattr(valean_626, "_texto_pdf", lambda _: texto)
+
+    resultado = valean_626.processar_sicredi_626(b"pdf")
+
+    assert resultado["VALOR"].tolist() == [-2377.31, -2240.0]
