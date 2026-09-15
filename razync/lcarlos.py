@@ -37,6 +37,7 @@ def _historico_lcarlos(historico, valor):
 def _linha_modelo(data, valor, historico):
     valor = round(float(valor), 2)
     return {
+        'DESCRIÇÃO': 'BANCO SANTANDER',
         'DATA': data.strftime('%d/%m/%Y'),
         'DÉBITO': CONTA_SANTANDER_LCARLOS if valor > 0 else '',
         'CRÉDITO': CONTA_SANTANDER_LCARLOS if valor < 0 else '',

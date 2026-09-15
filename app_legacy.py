@@ -2774,7 +2774,7 @@ def processar_extrato_unificado(file_bytes, filename):
         if caminho_temporario and os.path.exists(caminho_temporario):
             os.remove(caminho_temporario)
 
-def gerar_excel_modelo_dominio(df):
+def gerar_excel_modelo_dominio(df, formato_data=None):
     """Preenche uma cópia fiel do Modelo Domínio, preservando sua estrutura e estilos."""
     from copy import copy
     from openpyxl import load_workbook
@@ -2853,6 +2853,8 @@ def gerar_excel_modelo_dominio(df):
                 celula.alignment = copy(estilo['alignment'])
                 celula.number_format = estilo['number_format']
                 celula.protection = copy(estilo['protection'])
+            if nome_normalizado == 'data' and formato_data:
+                celula.number_format = formato_data
 
     saida = io.BytesIO()
     wb.save(saida)
@@ -9792,7 +9794,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         )
 
                     arquivo_excel_lcarlos = gerar_excel_modelo_dominio(
-                        df_modelo_lcarlos
+                        df_modelo_lcarlos,
+                        formato_data='dd/mm/yyyy',
                     )
                     try:
                         if registrar_conclusao_automatica_empresa(

@@ -117,3 +117,12 @@ def test_app_integra_base_inteligente_e_conferencia_santander():
     assert "'Base Inteligente'" in app
     assert "renderizar_base_inteligente_empresa(\n                'lcarlos'" in app
     assert "bancos_config=[{'nome': 'Santander', 'slug': 'santander'}]" in app
+
+
+def test_modelo_285_preenche_descricao_e_configura_data_br():
+    app = Path('app_legacy.py').read_text(encoding='utf-8')
+
+    assert "'DESCRIÇÃO': 'BANCO SANTANDER'" in Path(
+        'razync/lcarlos.py'
+    ).read_text(encoding='utf-8')
+    assert "formato_data='dd/mm/yyyy'" in app
