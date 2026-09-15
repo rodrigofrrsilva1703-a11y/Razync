@@ -22,7 +22,7 @@ from pypdf import PdfReader
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 CONTAS_VALEAN_626 = {"banco_brasil": "8", "sicredi": "1155"}
 NOMES_BANCOS = {"banco_brasil": "BANCO DO BRASIL", "sicredi": "SICREDI"}
-PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-marco-v4"
+PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-auditoria-v5"
 
 
 def _normalizar(valor) -> str:
@@ -34,8 +34,13 @@ def _normalizar(valor) -> str:
 def _valor_br(token: str, natureza: str = "") -> float:
     texto = str(token or "").replace("R$", "").replace(" ", "").strip()
     sinal = -1 if texto.startswith("-") or str(natureza).upper() == "D" else 1
-    texto = texto.lstrip("+-").replace(".", "").replace(",", ".")
-    return round(sinal * float(texto), 2)
+    # O OCR pode trocar o separador de milhar de ponto para vírgula
+    # (ex.: -2,000,00). Como os extratos sempre trazem duas casas decimais,
+    # usa os dois últimos dígitos como centavos e ignora os separadores.
+    digitos = re.sub(r"\D", "", texto.lstrip("+-"))
+    if len(digitos) < 3:
+        raise ValueError(f"Valor monetário inválido: {token}")
+    return round(sinal * (int(digitos) / 100), 2)
 
 
 def _limpar_documentos_pessoais(texto: str) -> str:
@@ -271,7 +276,7 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
     if len(re.sub(r"\s+", "", texto)) < 80:
         texto = _texto_ocr(conteudo)
 
-    moeda = re.compile(r"-?\d{1,3}(?:\.\d{3})*,\d{2}")
+    moeda = re.compile(r"-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2}")
     saldo_inicial_extrato = None
     for linha_saldo in texto.splitlines():
         if _normalizar(linha_saldo).startswith("saldo"):
@@ -338,6 +343,19 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
     if saldo_extrato is not None and not pd.isna(data_saldo_extrato):
         resultado.attrs["saldo_extrato"] = round(float(saldo_extrato), 2)
         resultado.attrs["data_saldo_extrato"] = pd.Timestamp(data_saldo_extrato)
+    if saldo_inicial_extrato is not None and saldo_extrato is not None:
+        movimento_lido = round(float(resultado["VALOR"].sum()), 2)
+        movimento_saldos = round(
+            float(saldo_extrato) - float(saldo_inicial_extrato), 2
+        )
+        diferenca = round(movimento_lido - movimento_saldos, 2)
+        resultado.attrs["diferenca_validacao_saldo"] = diferenca
+        if abs(diferenca) > 0.02:
+            raise ValueError(
+                "A leitura do extrato Sicredi não fechou com os saldos impressos "
+                f"(diferença de R$ {abs(diferenca):,.2f}). Gere o PDF novamente "
+                "ou envie um arquivo com melhor resolução."
+            )
     return resultado
 
 
