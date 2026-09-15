@@ -465,20 +465,24 @@ def _renderizar_valean_626():
 
         quadros_626 = st.session_state.get("valean_626_quadros", {})
         if quadros_626:
-            # A prévia padrão calcula saldo como variação do período. Na 626 o
-            # usuário precisa conferir o saldo bancário final do último PDF.
-            # Usa cópias apenas para a apresentação, sem alterar lançamentos,
-            # atributos ou o arquivo Modelo Domínio que será baixado.
+            # Na empresa 626, o card Saldo deve ser estritamente a diferença
+            # entre os mesmos lançamentos mostrados nos cards de entradas e
+            # saídas. Remove saldos bancários apenas das cópias de apresentação.
             quadros_previa_626 = {}
             for nome_banco_626, quadro_626 in quadros_626.items():
                 quadro_previa_626 = quadro_626.copy()
                 quadro_previa_626.attrs.update(quadro_626.attrs)
-                if quadro_previa_626.attrs.get("saldo_extrato") is not None:
-                    quadro_previa_626.attrs["saldo_inicial_extrato"] = 0.0
+                quadro_previa_626.attrs.pop("saldo_inicial_extrato", None)
+                quadro_previa_626.attrs.pop("saldo_extrato", None)
                 quadros_previa_626[nome_banco_626] = quadro_previa_626
             renderizar_previa_bancos_padrao(
                 quadros_previa_626, ordem=["Banco do Brasil", "Sicredi"]
             )
+            quantidades_626 = [
+                f"{nome}: {quadro.attrs.get('arquivos_processados', 1)} arquivo(s)"
+                for nome, quadro in quadros_626.items()
+            ]
+            st.caption("Processados: " + " · ".join(quantidades_626))
             dados_excel_626 = {
                 nome: {"principal": quadro, "retirados": pd.DataFrame()}
                 for nome, quadro in quadros_626.items()

@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from razync import valean_626
 
@@ -45,3 +46,21 @@ SALDO -12.534,21
     resultado = valean_626.processar_sicredi_626(b"pdf")
 
     assert resultado["VALOR"].tolist() == [-2377.31, -2240.0]
+
+
+def test_multiplos_nao_entrega_resultado_parcial(monkeypatch):
+    valido = _quadro([
+        ["SICREDI", pd.Timestamp("2026-01-02"), 100.0, "1155", "", "PIX"],
+    ], "2026-01-01", "2026-01-31")
+
+    def processar(conteudo, banco):
+        if conteudo == b"marco_ilegivel":
+            raise ValueError("OCR indisponível")
+        return valido
+
+    monkeypatch.setattr(valean_626, "processar_extrato_626", processar)
+
+    with pytest.raises(ValueError, match="nem todos os extratos foram lidos"):
+        valean_626.processar_multiplos_626(
+            [b"janeiro", b"marco_ilegivel"], "sicredi"
+        )

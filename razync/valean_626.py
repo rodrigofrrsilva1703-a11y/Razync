@@ -22,7 +22,7 @@ from pypdf import PdfReader
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 CONTAS_VALEAN_626 = {"banco_brasil": "8", "sicredi": "1155"}
 NOMES_BANCOS = {"banco_brasil": "BANCO DO BRASIL", "sicredi": "SICREDI"}
-PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-saldo-final-v6"
+PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-totais-completos-v7"
 
 
 def _normalizar(valor) -> str:
@@ -388,6 +388,15 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
             quadros.append(processar_extrato_626(conteudo, banco))
         except Exception as erro:
             erros.append(f"arquivo {indice}: {erro}")
+    # Nunca entrega uma consolidação parcial. Antes, se um PDF (como o Sicredi
+    # escaneado de março) falhasse, os demais eram somados e os cards pareciam
+    # válidos, porém entradas e saídas ficavam incompletas.
+    if erros:
+        detalhe = "; ".join(erros)
+        raise ValueError(
+            f"A consolidação de {banco} foi interrompida porque nem todos os "
+            f"extratos foram lidos: {detalhe}"
+        )
     if not quadros:
         detalhe = "; ".join(erros) if erros else "nenhum arquivo recebido"
         raise ValueError(f"Nenhum período pôde ser processado para {banco}: {detalhe}")
@@ -457,4 +466,5 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
         resultado.attrs["saldo_extrato"] = round(saldo, 2)
         resultado.attrs["data_saldo_extrato"] = data_saldo
     resultado.attrs["linhas_sobrepostas_ignoradas"] = linhas_sobrepostas
+    resultado.attrs["arquivos_processados"] = len(quadros)
     return resultado
