@@ -22,7 +22,7 @@ from pypdf import PdfReader
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 CONTAS_VALEAN_626 = {"banco_brasil": "8", "sicredi": "1155"}
 NOMES_BANCOS = {"banco_brasil": "BANCO DO BRASIL", "sicredi": "SICREDI"}
-PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-movimentos-v8"
+PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-sinais-v9"
 
 
 def _normalizar(valor) -> str:
@@ -301,27 +301,58 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
         movimento = valores[-2]
         valor = _valor_br(movimento.group())
         saldo_linha = _valor_br(valores[-1].group())
-        # No Sicredi cada movimento traz o saldo resultante. Porém o OCR pode
-        # perder somente o sinal negativo do saldo; nesse caso uma substituição
-        # cega criaria lançamentos enormes. O valor impresso continua sendo a
-        # fonte principal. A variação do saldo só corrige valor ausente ou uma
-        # pequena diferença coerente de mesmo sinal e magnitude.
-        if saldo_corrente is not None:
-            variacao_saldo = round(float(saldo_linha) - float(saldo_corrente), 2)
-            mesmo_sinal = (
-                valor == 0
-                or (valor > 0 and variacao_saldo > 0)
-                or (valor < 0 and variacao_saldo < 0)
-            )
-            tolerancia = max(1.00, abs(float(valor)) * 0.01)
-            magnitude_coerente = abs(variacao_saldo - float(valor)) <= tolerancia
-            if abs(float(valor)) < 0.005 or (mesmo_sinal and magnitude_coerente):
-                valor = variacao_saldo
-        saldo_corrente = saldo_linha
-        saldo_extrato = saldo_linha
-        data_saldo_extrato = data
         historico = linha[data_match.end():movimento.start()].strip()
         hist_norm = _normalizar(historico)
+
+        # Define a natureza pelo próprio histórico/documento do Sicredi. Isso
+        # evita que o OCR transforme um pagamento em recebimento ao perder o
+        # sinal negativo na coluna Valor.
+        sinais_saida = (
+            "pagamento", "pix_deb", "debito", "iof", "juros", "tarifa",
+            "cesta de relacionamento",
+        )
+        sinais_entrada = ("recebimento", "pix_cred", "credito", "rendimento")
+        sinal_esperado = 0
+        if any(marcador in hist_norm for marcador in sinais_saida):
+            sinal_esperado = -1
+        elif any(marcador in hist_norm for marcador in sinais_entrada):
+            sinal_esperado = 1
+        if sinal_esperado:
+            valor = sinal_esperado * abs(float(valor))
+
+        # O saldo corrido também pode perder o sinal. Testa as duas naturezas
+        # possíveis do saldo e escolhe a variação compatível com o histórico.
+        # Assim, inclusive uma coluna monetária confundida pelo OCR é corrigida
+        # pela equação saldo anterior + movimento = saldo atual.
+        if saldo_corrente is not None:
+            saldo_abs = abs(float(saldo_linha))
+            candidatos_saldo = {round(saldo_abs, 2), round(-saldo_abs, 2)}
+            candidatos = [
+                (round(candidato - float(saldo_corrente), 2), candidato)
+                for candidato in candidatos_saldo
+            ]
+            if sinal_esperado:
+                compativeis = [
+                    item for item in candidatos
+                    if item[0] * sinal_esperado > 0 or abs(item[0]) < 0.005
+                ]
+                if compativeis:
+                    variacao_saldo, saldo_linha = min(
+                        compativeis,
+                        key=lambda item: abs(abs(item[0]) - abs(float(valor))),
+                    )
+                    valor = variacao_saldo
+            else:
+                variacao_saldo, saldo_escolhido = min(
+                    candidatos, key=lambda item: abs(item[0] - float(valor))
+                )
+                tolerancia = max(1.00, abs(float(valor)) * 0.01)
+                if abs(variacao_saldo - float(valor)) <= tolerancia:
+                    valor = variacao_saldo
+                    saldo_linha = saldo_escolhido
+        saldo_corrente = float(saldo_linha)
+        saldo_extrato = float(saldo_linha)
+        data_saldo_extrato = data
         if pd.isna(data) or abs(valor) < 0.005 or hist_norm == "saldo" or "saldo dia" in hist_norm:
             continue
 

@@ -475,9 +475,33 @@ def _renderizar_valean_626():
                 quadro_previa_626.attrs.pop("saldo_inicial_extrato", None)
                 quadro_previa_626.attrs.pop("saldo_extrato", None)
                 quadros_previa_626[nome_banco_626] = quadro_previa_626
-            renderizar_previa_bancos_padrao(
-                quadros_previa_626, ordem=["Banco do Brasil", "Sicredi"]
-            )
+            st.markdown("#### Pré-visualização por banco")
+            nomes_previa_626 = [
+                nome for nome in ["Banco do Brasil", "Sicredi"]
+                if nome in quadros_previa_626
+            ]
+            abas_previa_626 = st.tabs(nomes_previa_626)
+            for aba_626, nome_banco_626 in zip(abas_previa_626, nomes_previa_626):
+                with aba_626:
+                    df_previa_626 = quadros_previa_626[nome_banco_626]
+                    valores_626 = pd.to_numeric(
+                        df_previa_626["VALOR"], errors="coerce"
+                    ).fillna(0.0)
+                    entradas_626 = float(valores_626[valores_626 > 0].sum())
+                    saidas_626 = float(abs(valores_626[valores_626 < 0].sum()))
+                    saldo_626 = entradas_626 - saidas_626
+                    col_ent_626, col_sai_626, col_saldo_626 = st.columns(3)
+                    col_ent_626.metric("Entradas", formatar_moeda(entradas_626))
+                    col_sai_626.metric("Saídas", formatar_moeda(saidas_626))
+                    col_saldo_626.metric("Saldo", formatar_moeda(saldo_626))
+                    tabela_626 = df_previa_626[["DATA", "HISTÓRICO", "VALOR"]].copy()
+                    tabela_626["DATA"] = pd.to_datetime(
+                        tabela_626["DATA"], errors="coerce"
+                    ).dt.strftime("%d/%m/%Y")
+                    st.dataframe(
+                        tabela_626, use_container_width=True, hide_index=True,
+                        height=min(360, 38 + max(1, min(len(tabela_626), 8)) * 35),
+                    )
             quantidades_626 = [
                 f"{nome}: {quadro.attrs.get('arquivos_processados', 1)} arquivo(s)"
                 for nome, quadro in quadros_626.items()

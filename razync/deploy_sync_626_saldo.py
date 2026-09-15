@@ -4,4 +4,4 @@ Força o Streamlit Cloud a carregar a versão que remove linhas de saldo final d
 Banco do Brasil mesmo quando o OCR distorce o código 999 ou espaça S A L D O.
 """
 
-DEPLOY_626_BB_SALDO = "2026-09-15T12:20-03:00-sicredi-movimentos-v8"
+DEPLOY_626_BB_SALDO = "2026-09-15T12:55-03:00-sicredi-sinais-v9"

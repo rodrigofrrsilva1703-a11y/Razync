@@ -77,3 +77,15 @@ SALDO -1.000,00
 
     assert resultado["VALOR"].tolist() == [-100.0]
     assert "aviso_saldo_impresso" in resultado.attrs
+
+
+def test_sicredi_corrige_pagamento_quando_ocr_perde_sinal(monkeypatch):
+    texto = """
+SALDO 60.000,00
+06/01/2026 PAGAMENTO PIX ALTAIR COM HISTORICO COMPLETO PIX_DEB 50.000,00 10.000,00
+"""
+    monkeypatch.setattr(valean_626, "_texto_pdf", lambda _: texto)
+
+    resultado = valean_626.processar_sicredi_626(b"pdf")
+
+    assert resultado["VALOR"].tolist() == [-50000.0]
