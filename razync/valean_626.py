@@ -252,7 +252,16 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
         texto = _texto_ocr(conteudo)
 
     moeda = re.compile(r"-?\d{1,3}(?:\.\d{3})*,\d{2}")
+    saldo_inicial_extrato = None
+    for linha_saldo in texto.splitlines():
+        if _normalizar(linha_saldo).startswith("saldo"):
+            valores_saldo = moeda.findall(linha_saldo)
+            if valores_saldo:
+                saldo_inicial_extrato = _valor_br(valores_saldo[-1])
+                break
     registros = []
+    saldo_extrato = None
+    data_saldo_extrato = pd.NaT
     for bruto in texto.splitlines():
         linha = re.sub(r"\s+", " ", bruto).strip()
         data_match = re.match(r"^(\d{2}/\d{2}/\d{4})\s+", linha)
@@ -265,6 +274,8 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
         data = pd.to_datetime(data_match.group(1), dayfirst=True, errors="coerce")
         movimento = valores[-2]
         valor = _valor_br(movimento.group())
+        saldo_extrato = _valor_br(valores[-1].group())
+        data_saldo_extrato = data
         historico = linha[data_match.end():movimento.start()].strip()
         hist_norm = _normalizar(historico)
         if pd.isna(data) or abs(valor) < 0.005 or hist_norm == "saldo" or "saldo dia" in hist_norm:
@@ -278,7 +289,17 @@ def processar_sicredi_626(conteudo: bytes) -> pd.DataFrame:
         historico = _limpar_documentos_pessoais(historico)
         registros.append(_registro("sicredi", data, valor, historico))
 
-    return _finalizar(registros, "Sicredi")
+    resultado = _finalizar(registros, "Sicredi")
+    if saldo_inicial_extrato is not None:
+        primeira_data = pd.to_datetime(resultado["DATA"], errors="coerce").min()
+        resultado.attrs["saldo_inicial_extrato"] = round(
+            float(saldo_inicial_extrato), 2
+        )
+        resultado.attrs["data_saldo_inicial_extrato"] = primeira_data - pd.Timedelta(days=1)
+    if saldo_extrato is not None and not pd.isna(data_saldo_extrato):
+        resultado.attrs["saldo_extrato"] = round(float(saldo_extrato), 2)
+        resultado.attrs["data_saldo_extrato"] = pd.Timestamp(data_saldo_extrato)
+    return resultado
 
 
 def _finalizar(registros: list[dict], banco: str) -> pd.DataFrame:
@@ -313,6 +334,43 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
     if not quadros:
         detalhe = "; ".join(erros) if erros else "nenhum arquivo recebido"
         raise ValueError(f"Nenhum período pôde ser processado para {banco}: {detalhe}")
+
+    # Alguns extratos mensais do BB repetem no início do arquivo seguinte
+    # movimentos que já participaram do fechamento anterior (principalmente
+    # devoluções de juros registradas na data de corte). Ordena os períodos e
+    # mantém, em cada novo arquivo, somente datas posteriores ao último saldo
+    # final já coberto. A limpeza ocorre entre arquivos, nunca dentro do mesmo
+    # extrato, preservando PIX e outros lançamentos legítimos repetidos.
+    def chave_periodo(quadro):
+        data_inicial = quadro.attrs.get("data_saldo_inicial_extrato")
+        if data_inicial is not None:
+            return pd.Timestamp(data_inicial)
+        datas = pd.to_datetime(quadro.get("DATA"), errors="coerce").dropna()
+        return datas.min() if not datas.empty else pd.Timestamp.max
+
+    quadros = sorted(quadros, key=chave_periodo)
+    quadros_sem_sobreposicao = []
+    ultima_data_coberta = None
+    linhas_sobrepostas = 0
+    for quadro in quadros:
+        atual = quadro.copy()
+        atributos = dict(quadro.attrs)
+        if ultima_data_coberta is not None:
+            datas = pd.to_datetime(atual["DATA"], errors="coerce")
+            mascara_sobreposta = datas <= ultima_data_coberta
+            linhas_sobrepostas += int(mascara_sobreposta.sum())
+            atual = atual.loc[~mascara_sobreposta].copy()
+        atual.attrs.update(atributos)
+        if not atual.empty:
+            quadros_sem_sobreposicao.append(atual)
+        data_final = atributos.get("data_saldo_extrato")
+        if data_final is not None:
+            data_final = pd.Timestamp(data_final)
+            if ultima_data_coberta is None or data_final > ultima_data_coberta:
+                ultima_data_coberta = data_final
+
+    if quadros_sem_sobreposicao:
+        quadros = quadros_sem_sobreposicao
     # Preserva o saldo real do extrato mais recente quando vários períodos são
     # processados juntos. Esse saldo é apenas informativo e não vira lançamento.
     saldos = []
@@ -341,4 +399,5 @@ def processar_multiplos_626(arquivos: Iterable[bytes], banco: str) -> pd.DataFra
         data_saldo, saldo = max(saldos, key=lambda item: item[0])
         resultado.attrs["saldo_extrato"] = round(saldo, 2)
         resultado.attrs["data_saldo_extrato"] = data_saldo
+    resultado.attrs["linhas_sobrepostas_ignoradas"] = linhas_sobrepostas
     return resultado
