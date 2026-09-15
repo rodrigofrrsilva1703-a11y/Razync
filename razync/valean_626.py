@@ -22,7 +22,7 @@ from pypdf import PdfReader
 COLUNAS_MODELO = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
 CONTAS_VALEAN_626 = {"banco_brasil": "8", "sicredi": "1155"}
 NOMES_BANCOS = {"banco_brasil": "BANCO DO BRASIL", "sicredi": "SICREDI"}
-PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-auditoria-v5"
+PROCESSADOR_VALEAN_626_VERSAO = "2026-09-15-sicredi-saldo-final-v6"
 
 
 def _normalizar(valor) -> str:
