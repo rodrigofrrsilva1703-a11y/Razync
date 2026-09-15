@@ -3186,11 +3186,14 @@ def renderizar_base_inteligente_empresa(
         )
 
         arquivos_base = st.file_uploader(
-            "Planilhas já classificadas",
+            "Planilhas classificadas ou Razão do Domínio",
             type=['xlsx', 'xls', 'zip'],
             accept_multiple_files=True,
             key=f"base_upload_{empresa}",
-            help="Use somente arquivos revisados desta empresa."
+            help=(
+                "Use planilhas revisadas ou o Razão do Domínio. No Razão, a Base "
+                "usa a conta bancária e a coluna Cta.C.Part. para aprender."
+            )
         )
         senha_digitada = st.text_input(
             "Senha administrativa para gravar aprendizado",
@@ -3211,7 +3214,9 @@ def renderizar_base_inteligente_empresa(
             use_container_width=True
         ):
             try:
-                registros = importar_arquivos_classificados(arquivos_base, empresa)
+                registros = importar_arquivos_classificados(
+                    arquivos_base, empresa, contas_bancarias
+                )
                 registros = [r for r in registros if r.get('banco') in bancos_permitidos]
                 if not registros:
                     st.warning("Nenhum padrão válido foi encontrado para os bancos desta empresa.")
@@ -4057,9 +4062,45 @@ def ler_planilha_classificada(file_bytes, filename, empresa='nova_geracao'):
             })
     return registros
 
-def importar_arquivos_classificados(arquivos, empresa='nova_geracao'):
+def importar_arquivos_classificados(
+    arquivos, empresa='nova_geracao', contas_bancarias=None
+):
     """Aceita XLSX/ZIP e mantém o aprendizado isolado por empresa."""
+    from razync.dominio_ledger import ler_razao_dominio_base
+
     registros = []
+
+    def ler_arquivo(conteudo, nome):
+        if contas_bancarias:
+            lancamentos_razao = ler_razao_dominio_base(
+                conteudo, nome, contas_bancarias
+            )
+            if lancamentos_razao:
+                aprendizados = []
+                for item in lancamentos_razao:
+                    assinatura = criar_assinatura_classificacao(item['historico'])
+                    if not assinatura:
+                        continue
+                    periodo = item['data'].strftime('%Y-%m')
+                    debito = texto_celula_seguro(item['debito'])
+                    credito = texto_celula_seguro(item['credito'])
+                    identificador = hashlib.sha256(
+                        f"{empresa}|{item['banco']}|{assinatura}|{debito}|{credito}".encode('utf-8')
+                    ).hexdigest()
+                    aprendizados.append({
+                        'id': identificador,
+                        'empresa': empresa,
+                        'banco': item['banco'],
+                        'assinatura': assinatura,
+                        'debito': debito,
+                        'credito': credito,
+                        'ocorrencias': 1,
+                        'periodos': [periodo],
+                        'exemplo_historico': item['historico'][:500],
+                    })
+                return aprendizados
+        return ler_planilha_classificada(conteudo, nome, empresa)
+
     for arquivo in arquivos:
         conteudo = arquivo.getvalue()
         nome = arquivo.name
@@ -4074,11 +4115,11 @@ def importar_arquivos_classificados(arquivos, empresa='nova_geracao'):
                 for membro in membros:
                     if membro.file_size > 20 * 1024 * 1024:
                         raise ValueError(f'A planilha {membro.filename} ultrapassa 20 MB.')
-                    registros.extend(ler_planilha_classificada(
-                        pacote.read(membro), os.path.basename(membro.filename), empresa
+                    registros.extend(ler_arquivo(
+                        pacote.read(membro), os.path.basename(membro.filename)
                     ))
         else:
-            registros.extend(ler_planilha_classificada(conteudo, nome, empresa))
+            registros.extend(ler_arquivo(conteudo, nome))
 
     agrupados = {}
     for registro in registros:
