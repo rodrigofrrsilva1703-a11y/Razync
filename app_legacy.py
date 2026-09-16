@@ -5370,6 +5370,27 @@ def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)
             else:
                 principais.append(registro)
 
+    # A conferência das empresas Autokraft/I.S.A também aceita o próprio mapa
+    # bancário com abas diárias DD-MM ou DD.MM. Se ele não tiver o cabeçalho do
+    # Modelo Domínio, reutiliza o mesmo leitor já usado pelo organizador.
+    if not principais and banco_alvo in {'itau', 'daycoval'}:
+        try:
+            dados_mapa, _ = processar_mapa_autokraft(file_bytes)
+            nome_mapa = 'Itaú' if banco_alvo == 'itau' else 'Daycoval'
+            bloco_mapa = dados_mapa.get(nome_mapa, {})
+            principal_mapa = bloco_mapa.get('principal', pd.DataFrame()).copy()
+            retirados_mapa = bloco_mapa.get('retirados', pd.DataFrame()).copy()
+            bancos_mapa = [
+                nome for nome, dados in dados_mapa.items()
+                if not dados.get('principal', pd.DataFrame()).empty
+            ]
+            if not principal_mapa.empty:
+                return principal_mapa, retirados_mapa, bancos_mapa
+        except Exception:
+            # Não era um mapa diário: mantém o resultado normal do leitor do
+            # Modelo Domínio e deixa a interface informar a ausência de dados.
+            pass
+
     return (
         pd.DataFrame(principais, columns=colunas_base),
         pd.DataFrame(retirados, columns=colunas_base + ['MOTIVO']),

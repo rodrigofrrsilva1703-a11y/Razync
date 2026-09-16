@@ -95,6 +95,14 @@ def test_conferencia_242_usa_consolidado_separado_por_conta():
     assert "ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None)" in texto
 
 
+def test_conferencia_isa_aceita_mapa_com_abas_diarias():
+    texto = app_source()
+
+    assert "if not principais and banco_alvo in {'itau', 'daycoval'}:" in texto
+    assert "dados_mapa, _ = processar_mapa_autokraft(file_bytes)" in texto
+    assert "principal_mapa, retirados_mapa, bancos_mapa" in texto
+
+
 def test_empresa_242_reutiliza_processamentos_pesados_entre_interacoes():
     texto = app_source()
     caches_242 = [
