@@ -14,7 +14,7 @@ import razync.company_catalog as _catalogo
 for _empresa in _catalogo.EMPRESAS:
     _chaves_novas = {
         "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
-        "1530": "dias_pereira_1530",
+        "1208": "kairos_1208", "1530": "dias_pereira_1530",
     }
     _codigo_empresa = str(_empresa.get("codigo"))
     if _codigo_empresa in _chaves_novas:
@@ -50,6 +50,8 @@ def identificar_chave_banco_empresa(valor):
         return "caixa"
     if "inter" in texto:
         return "inter"
+    if "safra" in texto:
+        return "safra"
     return _identificar_chave_banco_legado(valor)
 
 
@@ -58,11 +60,27 @@ def nome_banco_por_chave(chave):
         return "Caixa"
     if chave == "inter":
         return "Banco Inter"
+    if chave == "safra":
+        return "Safra"
     return _nome_banco_por_chave_legado(chave)
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
+    if st.session_state.get("empresa_organizador") == "kairos_1208":
+        from razync.kairos_1208 import processar_extrato_1208
+
+        banco_1208 = banco_forcado
+        if banco_1208 not in {"itau", "safra", "bradesco"}:
+            banco_1208 = identificar_chave_banco_empresa(filename)
+        if banco_1208 in {"itau", "safra", "bradesco"}:
+            return processar_extrato_1208(file_bytes, banco_1208).to_dict("records")
+    if banco_forcado in {"itau_1208", "safra_1208", "bradesco_1208"}:
+        from razync.kairos_1208 import processar_extrato_1208
+
+        return processar_extrato_1208(
+            file_bytes, banco_forcado.removesuffix("_1208")
+        ).to_dict("records")
     if banco_forcado == "itau_1530":
         from razync.dias_pereira_1530 import (
             normalizar_modelo_itau_1530,
@@ -690,3 +708,110 @@ def _renderizar_dias_pereira_1530():
 
 if st.session_state.get("empresa_organizador") == "dias_pereira_1530":
     _renderizar_dias_pereira_1530()
+
+
+def _renderizar_kairos_1208():
+    from razync.kairos_1208 import (
+        COLUNAS_MODELO, CONTAS, detalhar_com_contas_pagas, ler_contas_pagas,
+        processar_extrato_1208,
+    )
+
+    empresa = "1208 - KAIROS DESMONTE INDUSTRIAIS EIRELI - ME"
+    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
+
+    with aba_operacoes:
+        st.markdown("#### Extratos bancários → Modelo Domínio")
+        st.caption(
+            "Envie os extratos de janeiro a agosto de 2026. Os valores vêm dos PDFs. "
+            "A planilha de contas pagas somente detalha débitos quando data e total fecham exatamente."
+        )
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            itau = st.file_uploader("Itaú · conta 508", type=["pdf"], accept_multiple_files=True, key="kairos_1208_itau")
+        with col2:
+            safra = st.file_uploader("Safra · conta 512", type=["pdf"], accept_multiple_files=True, key="kairos_1208_safra")
+        with col3:
+            bradesco = st.file_uploader("Bradesco · conta 9", type=["pdf"], accept_multiple_files=True, key="kairos_1208_bradesco")
+        contas_pagas = st.file_uploader(
+            "Planilha de contas pagas (opcional, usada apenas para detalhamento)",
+            type=["xlsx", "xls"], key="kairos_1208_contas_pagas",
+        )
+
+        if st.button("Processar extratos da empresa 1208", type="primary", use_container_width=True, key="kairos_1208_processar"):
+            try:
+                modelos = {}
+                for banco, arquivos in (("itau", itau), ("safra", safra), ("bradesco", bradesco)):
+                    quadros, vistos = [], set()
+                    for arquivo in arquivos or []:
+                        conteudo = arquivo.getvalue()
+                        assinatura = hashlib.sha256(conteudo).hexdigest()
+                        if assinatura in vistos:
+                            continue
+                        vistos.add(assinatura)
+                        quadros.append(processar_extrato_1208(conteudo, banco))
+                    if quadros:
+                        modelos[banco] = pd.concat(quadros, ignore_index=True).sort_values("DATA", kind="stable").reset_index(drop=True)
+                if not modelos:
+                    raise ValueError("Envie pelo menos um extrato bancário em PDF.")
+                aplicados = []
+                if contas_pagas is not None:
+                    detalhes = ler_contas_pagas(contas_pagas.getvalue())
+                    modelos, aplicados = detalhar_com_contas_pagas(modelos, detalhes)
+                st.session_state["kairos_1208_modelos"] = modelos
+                st.session_state["kairos_1208_detalhes_aplicados"] = aplicados
+                st.session_state.pop("kairos_1208_erro", None)
+            except Exception as erro:
+                st.session_state["kairos_1208_erro"] = str(erro)
+                st.session_state.pop("kairos_1208_modelos", None)
+
+        if st.session_state.get("kairos_1208_erro"):
+            st.error("Não foi possível processar os arquivos da empresa 1208: " + st.session_state["kairos_1208_erro"])
+
+        modelos = st.session_state.get("kairos_1208_modelos")
+        if isinstance(modelos, dict) and modelos:
+            for banco, modelo in modelos.items():
+                nome = {"itau": "Itaú", "safra": "Safra", "bradesco": "Bradesco"}[banco]
+                entradas = float(modelo.loc[modelo["VALOR"] > 0, "VALOR"].sum())
+                saidas = float(-modelo.loc[modelo["VALOR"] < 0, "VALOR"].sum())
+                st.markdown(f"##### {nome} · conta {CONTAS[banco]}")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Lançamentos", len(modelo))
+                m2.metric("Entradas", formatar_moeda(entradas))
+                m3.metric("Saídas", formatar_moeda(saidas))
+                m4.metric("Saldo (entradas - saídas)", formatar_moeda(entradas - saidas))
+                previa = modelo.copy()
+                previa["DATA"] = pd.to_datetime(previa["DATA"]).dt.strftime("%d/%m/%Y")
+                st.dataframe(previa, use_container_width=True, hide_index=True, height=280)
+            aplicados = st.session_state.get("kairos_1208_detalhes_aplicados", [])
+            if aplicados:
+                st.success(f"{len(aplicados)} lançamento(s) foram detalhados pela planilha de contas pagas sem alterar os totais bancários.")
+            dados_excel = {
+                f"{ {'itau':'Itaú','safra':'Safra','bradesco':'Bradesco'}[b] } {CONTAS[b]}": {"principal": df[COLUNAS_MODELO], "retirados": pd.DataFrame()}
+                for b, df in modelos.items()
+            }
+            st.download_button(
+                "Baixar Modelo Domínio · empresa 1208",
+                data=gerar_excel_nova_geracao(dados_excel, prefixar_historicos=False),
+                file_name="KAIROS_1208_MODELO_DOMINIO_01_A_08_2026.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key="kairos_1208_download",
+            )
+
+        renderizar_conferencia_autokraft(
+            "kairos_1208",
+            bancos_config=[
+                {"nome": "Itaú · Conta 508", "slug": "itau_1208", "banco": "itau", "conta": "508"},
+                {"nome": "Safra · Conta 512", "slug": "safra_1208", "banco": "safra", "conta": "512"},
+                {"nome": "Bradesco · Conta 9", "slug": "bradesco_1208", "banco": "bradesco", "conta": "9"},
+            ],
+            rotulo_planilha="Modelo Domínio final da empresa 1208",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "kairos_1208", empresa, {"itau", "safra", "bradesco"}, CONTAS
+        )
+
+
+if st.session_state.get("empresa_organizador") == "kairos_1208":
+    _renderizar_kairos_1208()
