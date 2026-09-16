@@ -12,7 +12,10 @@ import razync.company_catalog as _catalogo
 
 # Ativa as empresas acrescentadas ao Organizador antes de carregar a aplicação histórica.
 for _empresa in _catalogo.EMPRESAS:
-    _chaves_novas = {"625": "valean_625", "626": "valean_626", "841": "lucrativite_841"}
+    _chaves_novas = {
+        "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
+        "1530": "dias_pereira_1530",
+    }
     _codigo_empresa = str(_empresa.get("codigo"))
     if _codigo_empresa in _chaves_novas:
         _empresa["chave_sistema"] = _chaves_novas[_codigo_empresa]
@@ -60,6 +63,19 @@ def nome_banco_por_chave(chave):
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
+    if banco_forcado == "itau_1530":
+        from razync.dias_pereira_1530 import (
+            normalizar_modelo_itau_1530,
+            processar_extrato_itau_xls_1530,
+        )
+
+        extensao = Path(str(filename or "")).suffix.lower()
+        if extensao in {".xls", ".xlsx"}:
+            return processar_extrato_itau_xls_1530(file_bytes).to_dict("records")
+        registros = _processar_extrato_conferencia_legado(
+            file_bytes, filename, "itau"
+        )
+        return normalizar_modelo_itau_1530(registros).to_dict("records")
     if banco_forcado in {"banco_brasil_625", "caixa_625", "sicredi_625"}:
         from razync.valean_625 import processar_extrato_625
 
@@ -569,3 +585,108 @@ def _renderizar_valean_626():
 
 if st.session_state.get("empresa_organizador") == "valean_626":
     _renderizar_valean_626()
+
+
+def _renderizar_dias_pereira_1530():
+    from razync.dias_pereira_1530 import (
+        COLUNAS_MODELO,
+        CONTA_ITAU_1530,
+        normalizar_modelo_itau_1530,
+        processar_extrato_itau_xls_1530,
+    )
+
+    empresa = "1530 - DIAS PEREIRA SOCIEDADE INDIVIDUAL DE ADVOCACIA"
+    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
+
+    with aba_operacoes:
+        st.markdown("#### Extrato Itaú → Modelo Domínio")
+        st.caption(
+            "Envie extratos Itaú em XLS, XLSX ou PDF. Entradas recebem débito 508 "
+            "e saídas recebem crédito 508. Linhas de saldo não são importadas."
+        )
+        arquivos = st.file_uploader(
+            "Extrato(s) Itaú · conta Domínio 508",
+            type=["xls", "xlsx", "pdf"], accept_multiple_files=True,
+            key="dias_pereira_1530_extratos_itau",
+        )
+        if arquivos:
+            try:
+                quadros = []
+                assinaturas = set()
+                for arquivo in arquivos:
+                    conteudo = arquivo.getvalue()
+                    assinatura = hashlib.sha256(conteudo).hexdigest()
+                    if assinatura in assinaturas:
+                        continue
+                    assinaturas.add(assinatura)
+                    extensao = Path(arquivo.name).suffix.lower()
+                    if extensao in {".xls", ".xlsx"}:
+                        quadro = processar_extrato_itau_xls_1530(conteudo)
+                    else:
+                        registros = _processar_extrato_conferencia_legado(
+                            conteudo, arquivo.name, "itau"
+                        )
+                        quadro = normalizar_modelo_itau_1530(registros)
+                    quadros.append(quadro)
+                if not quadros:
+                    raise ValueError("Nenhum extrato válido foi processado.")
+                modelo = pd.concat(quadros, ignore_index=True).sort_values(
+                    "DATA", kind="stable"
+                ).reset_index(drop=True)
+                st.session_state["dias_pereira_1530_modelo"] = modelo
+                st.session_state.pop("dias_pereira_1530_erro", None)
+            except Exception as erro:
+                st.session_state["dias_pereira_1530_erro"] = str(erro)
+                st.session_state.pop("dias_pereira_1530_modelo", None)
+
+        if st.session_state.get("dias_pereira_1530_erro"):
+            st.error(
+                "Não foi possível processar o extrato Itaú da empresa 1530: "
+                + st.session_state["dias_pereira_1530_erro"]
+            )
+
+        modelo = st.session_state.get("dias_pereira_1530_modelo")
+        if isinstance(modelo, pd.DataFrame) and not modelo.empty:
+            entradas = float(modelo.loc[modelo["VALOR"] > 0, "VALOR"].sum())
+            saidas = float(-modelo.loc[modelo["VALOR"] < 0, "VALOR"].sum())
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Lançamentos", len(modelo))
+            m2.metric("Entradas", formatar_moeda(entradas))
+            m3.metric("Saídas", formatar_moeda(saidas))
+            m4.metric("Conta bancária", f"{CONTA_ITAU_1530} · Itaú")
+
+            previa = modelo.copy()
+            previa["DATA"] = pd.to_datetime(previa["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(previa, use_container_width=True, hide_index=True, height=430)
+            datas = pd.to_datetime(modelo["DATA"])
+            st.download_button(
+                "Baixar Modelo Domínio · Itaú 508",
+                data=gerar_excel_modelo_dominio(
+                    modelo[COLUNAS_MODELO], formato_data="dd/mm/yyyy"
+                ),
+                file_name=(
+                    "DIAS_PEREIRA_1530_ITAU_508_MODELO_DOMINIO_"
+                    f"{datas.min().strftime('%d%m%Y')}_A_{datas.max().strftime('%d%m%Y')}.xlsx"
+                ),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="dias_pereira_1530_download",
+            )
+
+        renderizar_conferencia_autokraft(
+            "dias_pereira_1530",
+            bancos_config=[{
+                "nome": "Itaú · Conta 508", "slug": "itau_1530",
+                "banco": "itau_1530", "conta": "508",
+            }],
+            rotulo_planilha="Modelo Domínio final da empresa 1530",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "dias_pereira_1530", empresa, {"itau"}, {"itau": "508"}
+        )
+
+
+if st.session_state.get("empresa_organizador") == "dias_pereira_1530":
+    _renderizar_dias_pereira_1530()
