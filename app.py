@@ -815,3 +815,91 @@ def _renderizar_kairos_1208():
 
 if st.session_state.get("empresa_organizador") == "kairos_1208":
     _renderizar_kairos_1208()
+
+
+def _renderizar_conferencia_fiscal_autokraft():
+    from razync.conferencia_fiscal import processar_conferencia
+
+    st.markdown("---")
+    st.markdown("### Conferência Fiscal × Contábil")
+    st.caption(
+        "Envie o Resumo por Acumulador e o Razão do mesmo período. Somente acumuladores "
+        "com conta preenchida são conferidos. Pagamentos, recebimentos e outros movimentos "
+        "não fiscais são separados como alertas, sem distorcer a conferência principal."
+    )
+    col_fiscal, col_razao = st.columns(2)
+    with col_fiscal:
+        arquivo_acumuladores = st.file_uploader(
+            "Relatório de acumuladores do Domínio", type=["xls", "xlsx"],
+            key="autokraft_3_acumuladores_fiscais",
+        )
+    with col_razao:
+        arquivo_razao = st.file_uploader(
+            "Razão com todas as contas", type=["xls", "xlsx"],
+            key="autokraft_3_razao_fiscal",
+        )
+    if st.button(
+        "Analisar conferência fiscal", type="primary", use_container_width=True,
+        key="autokraft_3_processar_conferencia_fiscal",
+        disabled=arquivo_acumuladores is None or arquivo_razao is None,
+    ):
+        try:
+            resultado = executar_com_loading(
+                "Cruzando acumuladores, contas e lançamentos do razão...",
+                processar_conferencia,
+                arquivo_acumuladores.getvalue(), arquivo_acumuladores.name,
+                arquivo_razao.getvalue(), arquivo_razao.name,
+            )
+            st.session_state["autokraft_3_resultado_fiscal"] = resultado
+            st.session_state.pop("autokraft_3_erro_fiscal", None)
+        except Exception as erro:
+            st.session_state["autokraft_3_erro_fiscal"] = str(erro)
+            st.session_state.pop("autokraft_3_resultado_fiscal", None)
+
+    if st.session_state.get("autokraft_3_erro_fiscal"):
+        st.error("Não foi possível concluir a conferência: " + st.session_state["autokraft_3_erro_fiscal"])
+
+    resultado = st.session_state.get("autokraft_3_resultado_fiscal")
+    if not isinstance(resultado, dict):
+        return
+    resumo = resultado.get("resumo", pd.DataFrame())
+    detalhes = resultado.get("detalhes", pd.DataFrame())
+    if resumo.empty:
+        st.warning("Nenhuma conta pôde ser comparada.")
+        return
+    conferidas = int(resumo["SITUAÇÃO"].astype(str).str.startswith("CONFERE").sum())
+    alertas = int(resumo["LANÇAMENTOS EXTRAS"].sum())
+    revisar = int((resumo["SITUAÇÃO"] == "REVISAR").sum())
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Contas analisadas", len(resumo))
+    m2.metric("Fiscal conferido", conferidas)
+    m3.metric("Lançamentos em alerta", alertas)
+    m4.metric("Contas para revisar", revisar)
+    st.markdown("#### Resultado por conta")
+    st.dataframe(
+        resumo, use_container_width=True, hide_index=True,
+        column_config={
+            "VALOR FISCAL": st.column_config.NumberColumn(format="R$ %.2f"),
+            "CONTÁBIL COMPATÍVEL": st.column_config.NumberColumn(format="R$ %.2f"),
+            "TOTAL DA CONTA": st.column_config.NumberColumn(format="R$ %.2f"),
+            "DIFERENÇA FISCAL": st.column_config.NumberColumn(format="R$ %.2f"),
+        },
+    )
+    if not detalhes.empty:
+        st.markdown("#### Lançamentos analisados")
+        filtro = st.selectbox(
+            "Exibir", ["Somente alertas", "Todos os lançamentos"],
+            key="autokraft_3_filtro_detalhes_fiscais",
+        )
+        exibicao = detalhes.copy()
+        if filtro == "Somente alertas":
+            exibicao = exibicao[exibicao["CLASSIFICAÇÃO"].eq("ALERTA - NÃO FISCAL")]
+        exibicao["DATA"] = pd.to_datetime(exibicao["DATA"]).dt.strftime("%d/%m/%Y")
+        st.dataframe(
+            exibicao, use_container_width=True, hide_index=True,
+            column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")},
+        )
+
+
+if st.session_state.get("empresa_organizador") == "autokraft_industrial":
+    _renderizar_conferencia_fiscal_autokraft()
