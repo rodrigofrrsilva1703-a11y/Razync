@@ -7,8 +7,10 @@ echo  ==========================================
 echo       CONECTOR RAZYNC PARA WINDOWS
 echo  ==========================================
 echo.
-set "RAZYNC_SOURCE=%~dp0"
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%RAZYNC_SOURCE%install.ps1"
+echo  Baixando os componentes necessarios...
+set "RAZYNC_TEMP=%TEMP%\RazyncConnectorInstall"
+if not exist "%RAZYNC_TEMP%" mkdir "%RAZYNC_TEMP%"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $base='https://raw.githubusercontent.com/rodrigofrrsilva1703-a11y/Razync/main/connector_windows/'; $dest=$env:RAZYNC_TEMP; foreach($file in @('connector.py','list_certificates.ps1','sign_challenge.ps1','install.ps1')) { Invoke-WebRequest -UseBasicParsing -Uri ($base+$file) -OutFile (Join-Path $dest $file) }; & (Join-Path $dest 'install.ps1')"
 if errorlevel 1 (
   echo.
   echo  A instalacao nao foi concluida.
