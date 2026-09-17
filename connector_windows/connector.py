@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.3.0"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -50,6 +50,12 @@ def _load_config() -> dict:
 
 
 CONFIG = _load_config()
+
+
+def _console(*values) -> None:
+    """Escreve somente quando o conector está no modo visível."""
+    if sys.stdout is not None:
+        print(*values)
 
 
 def _powershell(script: str, *args: str) -> object:
@@ -134,7 +140,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "RazyncConnector/" + APP_VERSION
 
     def log_message(self, fmt: str, *args) -> None:
-        print("[Razync]", fmt % args)
+        _console("[Razync]", fmt % args)
 
     def _origin(self) -> str:
         return self.headers.get("Origin", "")
@@ -247,12 +253,12 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     if sys.platform != "win32":
         raise SystemExit("O Conector Razync deve ser executado no Windows.")
-    print("=" * 54)
-    print("Conector Razync para Windows")
-    print(f"Pareamento: {CONFIG['pairing_code']}")
-    print(f"Endereço local: http://{HOST}:{PORT}")
-    print("Mantenha esta janela aberta durante o uso.")
-    print("=" * 54)
+    _console("=" * 54)
+    _console("Conector Razync para Windows")
+    _console(f"Pareamento: {CONFIG['pairing_code']}")
+    _console(f"Endereço local: http://{HOST}:{PORT}")
+    _console("Modo visível para pareamento e diagnóstico.")
+    _console("=" * 54)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
 
 
