@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 
 import pandas as pd
@@ -157,6 +158,21 @@ def _numero(valor) -> float:
         return 0.0
 
 
+def _rotulo(valor) -> str:
+    texto = unicodedata.normalize("NFKD", _texto(valor))
+    texto = "".join(letra for letra in texto if not unicodedata.combining(letra))
+    return re.sub(r"[^A-Z0-9]+", " ", texto.upper()).strip()
+
+
+def _primeiro_preenchido(valores: list, inicio: int | None, largura: int = 4):
+    if inicio is None:
+        return ""
+    for indice in range(inicio, min(inicio + largura, len(valores))):
+        if _texto(valores[indice]):
+            return valores[indice]
+    return ""
+
+
 def _excel(conteudo: bytes, nome: str) -> pd.ExcelFile:
     try:
         return pd.ExcelFile(io.BytesIO(conteudo))
@@ -189,34 +205,75 @@ def _excel(conteudo: bytes, nome: str) -> pd.ExcelFile:
 
 def ler_acumuladores(conteudo: bytes, nome: str) -> tuple[pd.DataFrame, dict]:
     xls = _excel(conteudo, nome)
-    bruto = pd.read_excel(xls, sheet_name=xls.sheet_names[0], header=None, dtype=object)
     periodo = {"inicio": None, "fim": None}
-    tipo = ""
     registros = []
-    for _, linha in bruto.iterrows():
-        valores = linha.tolist()
-        primeiro = _texto(valores[0] if valores else "").upper()
-        if primeiro == "PERÍODO:":
-            datas = [pd.to_datetime(v, errors="coerce") for v in valores]
-            datas = [d for d in datas if pd.notna(d)]
-            if datas:
-                periodo = {"inicio": min(datas), "fim": max(datas)}
-        if primeiro in {"ENTRADAS", "SAÍDAS", "SERVIÇOS"}:
-            tipo = primeiro
-            continue
-        codigo = _texto(valores[0] if valores else "")
-        conta = _texto(valores[49] if len(valores) > 49 else "")
-        if not codigo.isdigit() or not conta or not re.fullmatch(r"\d+", conta):
-            continue
-        col_valor = 10 if tipo == "SERVIÇOS" else 13
-        valor = _numero(valores[col_valor] if len(valores) > col_valor else 0)
-        if abs(valor) < 0.005:
-            continue
-        descricao = next((_texto(v) for v in valores[1:12] if _texto(v)), "")
-        registros.append({
-            "TIPO": tipo, "ACUMULADOR": codigo, "DESCRIÇÃO": descricao,
-            "CONTA": conta, "VALOR_FISCAL": valor,
-        })
+    for aba in xls.sheet_names:
+        bruto = pd.read_excel(xls, sheet_name=aba, header=None, dtype=object)
+        tipo = ""
+        col_codigo, col_descricao = 0, None
+        col_valor, col_conta = None, None
+        for _, linha in bruto.iterrows():
+            valores = linha.tolist()
+            rotulos = [_rotulo(valor) for valor in valores]
+            primeiro = rotulos[0] if rotulos else ""
+            if primeiro == "PERIODO":
+                datas = [pd.to_datetime(v, errors="coerce") for v in valores]
+                datas = [d for d in datas if pd.notna(d)]
+                if datas:
+                    periodo = {"inicio": min(datas), "fim": max(datas)}
+            if primeiro in {"ENTRADAS", "SAIDAS", "SERVICOS"}:
+                tipo = {"SAIDAS": "SAÍDAS", "SERVICOS": "SERVIÇOS"}.get(primeiro, primeiro)
+                continue
+
+            # O Domínio muda a posição das colunas conforme o relatório, a empresa
+            # e a quantidade de tributos selecionados. Localizamos os cabeçalhos
+            # pelo nome em vez de depender das antigas colunas fixas 13 e 49.
+            cabecalho = any(r in {"COD", "CODIGO"} for r in rotulos)
+            if cabecalho:
+                for indice, rotulo in enumerate(rotulos):
+                    if rotulo in {"COD", "CODIGO"}:
+                        col_codigo = indice
+                    elif rotulo == "DESCRICAO":
+                        col_descricao = indice
+                    elif rotulo in {"VLR CONTABIL", "VALOR CONTABIL"}:
+                        col_valor = indice
+                    elif rotulo in {"CONTA", "CONTA CONTABIL", "CODIGO CONTA"}:
+                        col_conta = indice
+                continue
+
+            codigo = _texto(_primeiro_preenchido(valores, col_codigo))
+            if not codigo.isdigit():
+                continue
+            valor_indice = col_valor
+            if valor_indice is None:
+                valor_indice = 10 if tipo == "SERVIÇOS" else 13
+            valor = _numero(_primeiro_preenchido(valores, valor_indice))
+            if abs(valor) < 0.005:
+                continue
+
+            conta = _texto(_primeiro_preenchido(valores, col_conta))
+            if not re.fullmatch(r"\d+", conta):
+                # Em algumas exportações o título "Conta" desaparece, embora o
+                # código permaneça na última coluna preenchida do acumulador.
+                candidatos = [
+                    _texto(valor_bruto) for indice, valor_bruto in enumerate(valores)
+                    if indice >= valor_indice + 20 and re.fullmatch(r"\d+", _texto(valor_bruto))
+                    and _texto(valor_bruto) != "0"
+                ]
+                conta = candidatos[-1] if candidatos else ""
+            if not re.fullmatch(r"\d+", conta):
+                continue
+
+            if col_descricao is not None and len(valores) > col_descricao:
+                descricao = _texto(_primeiro_preenchido(valores, col_descricao))
+            else:
+                descricao = next(
+                    (_texto(v) for v in valores[col_codigo + 1:valor_indice] if _texto(v)), ""
+                )
+            registros.append({
+                "TIPO": tipo, "ACUMULADOR": codigo, "DESCRIÇÃO": descricao,
+                "CONTA": conta, "VALOR_FISCAL": valor,
+            })
     if not registros:
         raise ValueError("Nenhum acumulador com conta contábil preenchida foi encontrado.")
     return pd.DataFrame(registros), periodo
