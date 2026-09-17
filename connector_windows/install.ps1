@@ -12,10 +12,7 @@ Copy-Item (Join-Path $source "connector.py") $target -Force
 Copy-Item (Join-Path $source "list_certificates.ps1") $target -Force
 Copy-Item (Join-Path $source "sign_challenge.ps1") $target -Force
 
-$python = Get-Command pythonw.exe -ErrorAction SilentlyContinue
-if ($null -eq $python) {
-    $python = Get-Command python.exe -ErrorAction SilentlyContinue
-}
+$python = Get-Command python.exe -ErrorAction SilentlyContinue
 if ($null -eq $python) {
     throw "Python 3 não foi encontrado. Instale o Python 3 e execute novamente."
 }
