@@ -19,6 +19,7 @@ def render_connector_windows(empresa: str) -> dict | None:
     safe_key = re.sub(r"[^a-zA-Z0-9_]+", "_", empresa)
     result = _COMPONENT(
         connector_url="http://127.0.0.1:17891",
+        mode="certificate",
         key=f"windows_connector_{safe_key}",
         default=None,
     )
@@ -38,3 +39,16 @@ def render_connector_windows(empresa: str) -> dict | None:
             st.caption(f"Validade: {valid_to}")
         return selected
     return None
+
+
+def render_consulta_dctf(empresa: str, competencia: str) -> dict | None:
+    """Abre a DCTFWeb e recebe do conector um relatório baixado no Windows."""
+    safe_key = re.sub(r"[^a-zA-Z0-9_]+", "_", empresa)
+    result = _COMPONENT(
+        connector_url="http://127.0.0.1:17891",
+        mode="dctf",
+        competencia=str(competencia),
+        key=f"dctf_connector_{safe_key}_{competencia}",
+        default=None,
+    )
+    return result if isinstance(result, dict) else None
