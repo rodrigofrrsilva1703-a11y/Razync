@@ -222,21 +222,34 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
             background: transparent;
         }
         [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button {
-            min-height: 2.15rem;
+            min-height: 2.25rem;
             width: auto;
-            padding: .3rem .72rem;
-            border: 1px solid rgba(44, 183, 230, .35);
+            padding: .34rem .78rem;
+            border: 1px solid rgba(91, 203, 255, .38);
             border-radius: 999px;
-            background: rgba(8, 24, 34, .94);
-            box-shadow: 0 7px 22px rgba(0, 0, 0, .28);
-            color: #e9f7fc;
+            background:
+                linear-gradient(135deg, rgba(21, 49, 64, .94), rgba(7, 22, 32, .97)) padding-box,
+                linear-gradient(135deg, rgba(92, 211, 255, .55), rgba(27, 117, 164, .18)) border-box;
+            box-shadow:
+                0 10px 28px rgba(0, 0, 0, .32),
+                inset 0 1px 0 rgba(255, 255, 255, .08);
+            color: #f1f9fc;
             font-size: .72rem;
-            font-weight: 700;
-            backdrop-filter: blur(10px);
+            font-weight: 650;
+            letter-spacing: .01em;
+            backdrop-filter: blur(14px) saturate(125%);
+            transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
         }
         [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button:hover {
-            border-color: rgba(44, 183, 230, .7);
-            transform: translateY(-1px);
+            border-color: rgba(102, 218, 255, .82);
+            transform: translateY(-2px);
+            box-shadow:
+                0 13px 32px rgba(0, 0, 0, .38),
+                0 0 0 3px rgba(44, 183, 230, .08),
+                inset 0 1px 0 rgba(255, 255, 255, .12);
+        }
+        [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button:active {
+            transform: translateY(0) scale(.98);
         }
         @media (max-width: 640px) {
             [class*="st-key-rz_certificado_"] {right: .7rem; top: 4.2rem; bottom: auto;}
@@ -267,7 +280,7 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
         indicador, status = "⚪", "Não cadastrado"
 
     with st.container(key=f"rz_certificado_{chave_visual}"):
-        with st.popover(f"🔐 Certificado  {indicador}"):
+        with st.popover(f"◈  Certificado  {indicador}"):
                 st.markdown("#### Certificado Digital A1")
                 st.caption(f"Status: {status}")
                 if erro_carregamento:
