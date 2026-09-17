@@ -24,6 +24,15 @@ def _normalizar(valor) -> str:
     return "".join(c for c in texto if not unicodedata.combining(c)).upper()
 
 
+def _limpar_cpf_cnpj(valor) -> str:
+    texto = _texto(valor)
+    texto = re.sub(r"\b(?:CPF|CNPJ)\s*[:º°N.-]*\s*", "", texto, flags=re.I)
+    texto = re.sub(r"(?<!\d)\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}(?!\d)", " ", texto)
+    texto = re.sub(r"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)", " ", texto)
+    texto = re.sub(r"(?<!\d)(?:\d{14}|\d{11})(?!\d)", " ", texto)
+    return _texto(texto).strip(" -|/")
+
+
 def _moeda(valor) -> float:
     texto = _texto(valor).replace("R$", "").replace(" ", "")
     negativo = texto.endswith("-") or texto.startswith("-") or texto.upper().endswith("DV")
@@ -37,7 +46,7 @@ def _moeda(valor) -> float:
 
 
 def _registro(banco: str, data, valor: float, historico: str) -> dict:
-    historico = re.sub(r"^(?:Pago|Recebido)\s*:\s*", "", _texto(historico), flags=re.I)
+    historico = re.sub(r"^(?:Pago|Recebido)\s*:\s*", "", _limpar_cpf_cnpj(historico), flags=re.I)
     prefixo = "Recebido: " if valor > 0 else "Pago: "
     return {
         "DESCRIÇÃO": NOMES[banco],

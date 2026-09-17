@@ -2,7 +2,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from razync.kairos_1208 import COLUNAS_MODELO, CONTAS, detalhar_com_contas_pagas
+from razync.kairos_1208 import (
+    COLUNAS_MODELO, CONTAS, _registro, detalhar_com_contas_pagas,
+)
 
 
 def test_contas_e_layout_1208():
@@ -24,6 +26,14 @@ def test_detalhamento_preserva_total():
     assert round(saida["itau"]["VALOR"].sum(), 2) == -300.0
     assert len(saida["itau"]) == 2
     assert len(aplicados) == 1
+
+
+def test_historico_remove_cpf_e_cnpj():
+    registro = _registro(
+        "itau", pd.Timestamp("2026-01-05"), -100,
+        "PIX PARA EMPRESA 26.758.279/0001-60 CPF 421.474.331-87",
+    )
+    assert registro["HISTÓRICO"] == "Pago: PIX PARA EMPRESA"
 
 
 def test_integracao_esta_ligada_no_app():
