@@ -73,7 +73,7 @@ Copy-Item $localLauncher $desktopLauncher -Force
 
 $stopLauncher = Join-Path $desktop "Parar Conector Razync.cmd"
 $stopContent = '@echo off' + [Environment]::NewLine +
-    'powershell.exe -NoLogo -NoProfile -Command "Get-CimInstance Win32_Process ^| Where-Object { $_.CommandLine -and $_.CommandLine -like ''*Razync*Connector*connector.py*'' } ^| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"' + [Environment]::NewLine +
+    'powershell.exe -NoLogo -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like ''*Razync*Connector*connector.py*'' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"' + [Environment]::NewLine +
     'echo Conector Razync encerrado.' + [Environment]::NewLine +
     'timeout /t 2 /nobreak >nul'
 Set-Content -Path $stopLauncher -Value $stopContent -Encoding ASCII
