@@ -122,17 +122,32 @@ def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
                 c2.metric("Contábil compatível", _moeda(item["CONTÁBIL COMPATÍVEL"]))
                 c3.metric("Diferença fiscal", _moeda(item["DIFERENÇA FISCAL"]))
                 c4.metric("Total movimentado", _moeda(item["TOTAL DA CONTA"]))
+                st.caption(
+                    f"Débitos: {_moeda(item['TOTAL DÉBITOS'])} · "
+                    f"Créditos: {_moeda(item['TOTAL CRÉDITOS'])} · "
+                    f"Estornos/redutores: {_moeda(item['ESTORNOS/REDUTORES'])}"
+                )
                 movimentos = detalhes[detalhes["CONTA"].astype(str).eq(conta)].copy()
                 if not movimentos.empty:
                     movimentos["DATA"] = pd.to_datetime(movimentos["DATA"]).dt.strftime("%d/%m/%Y")
-                    st.dataframe(movimentos[["DATA", "HISTÓRICO", "CONTRAPARTIDA", "VALOR", "CLASSIFICAÇÃO"]], use_container_width=True, hide_index=True)
+                    st.dataframe(
+                        movimentos[[
+                            "DATA", "HISTÓRICO", "CONTRAPARTIDA", "DÉBITO",
+                            "CRÉDITO", "NATUREZA", "VALOR", "CLASSIFICAÇÃO"
+                        ]], use_container_width=True, hide_index=True
+                    )
     with aba_alertas:
         quadro = detalhes[detalhes["CLASSIFICAÇÃO"].eq("ALERTA - NÃO FISCAL")].copy()
         if quadro.empty:
             st.success("Nenhum lançamento adicional foi encontrado nas contas conferidas.")
         else:
             quadro["DATA"] = pd.to_datetime(quadro["DATA"]).dt.strftime("%d/%m/%Y")
-            st.dataframe(quadro[["CONTA", "DATA", "HISTÓRICO", "CONTRAPARTIDA", "VALOR"]], use_container_width=True, hide_index=True)
+            st.dataframe(
+                quadro[[
+                    "CONTA", "DATA", "HISTÓRICO", "CONTRAPARTIDA", "DÉBITO",
+                    "CRÉDITO", "NATUREZA", "VALOR"
+                ]], use_container_width=True, hide_index=True
+            )
     with aba_todos:
         quadro = detalhes.copy()
         if not quadro.empty:
@@ -337,12 +352,33 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
     for _, fiscal in agrupado.iterrows():
         conta = str(fiscal["CONTA"])
         lado = "CRÉDITO" if fiscal["TIPO"] == "SAÍDAS" else "DÉBITO"
+        lado_oposto = "DÉBITO" if lado == "CRÉDITO" else "CRÉDITO"
         movimentos = razao[razao["CONTA"].astype(str).eq(conta)].copy()
-        movimentos["VALOR_ANALISADO"] = pd.to_numeric(movimentos.get(lado), errors="coerce").fillna(0.0)
+        movimentos["DÉBITO"] = pd.to_numeric(
+            movimentos.get("DÉBITO"), errors="coerce"
+        ).fillna(0.0)
+        movimentos["CRÉDITO"] = pd.to_numeric(
+            movimentos.get("CRÉDITO"), errors="coerce"
+        ).fillna(0.0)
+        # O valor precisa conservar o sinal. Lançamentos na natureza esperada
+        # somam; lançamentos no lado oposto e valores negativos reduzem o total.
+        # Assim, créditos/débitos de estorno não são descartados nem viram positivos.
+        movimentos["VALOR_ANALISADO"] = movimentos[lado] - movimentos[lado_oposto]
         movimentos = movimentos[movimentos["VALOR_ANALISADO"].abs() >= 0.005].copy()
         movimentos["COMPATÍVEL_FISCAL"] = movimentos["HISTÓRICO"].map(_parece_fiscal)
+        movimentos["NATUREZA"] = movimentos.apply(
+            lambda mov: (
+                f"ESTORNO/REDUTOR ({lado_oposto})"
+                if float(mov["VALOR_ANALISADO"]) < 0
+                else lado
+            ),
+            axis=1,
+        )
         valor_compativel = round(float(movimentos.loc[movimentos["COMPATÍVEL_FISCAL"], "VALOR_ANALISADO"].sum()), 2)
         valor_total = round(float(movimentos["VALOR_ANALISADO"].sum()), 2)
+        total_debitos = round(float(movimentos["DÉBITO"].sum()), 2)
+        total_creditos = round(float(movimentos["CRÉDITO"].sum()), 2)
+        total_redutores = round(float(-movimentos.loc[movimentos["VALOR_ANALISADO"] < 0, "VALOR_ANALISADO"].sum()), 2)
         valor_fiscal = round(float(fiscal["VALOR_FISCAL"]), 2)
         diferenca = round(valor_compativel - valor_fiscal, 2)
         extras = movimentos[~movimentos["COMPATÍVEL_FISCAL"]].copy()
@@ -356,13 +392,16 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
             "CONTA": conta, "TIPO": fiscal["TIPO"], "ACUMULADORES": fiscal["ACUMULADORES"],
             "VALOR FISCAL": valor_fiscal, "CONTÁBIL COMPATÍVEL": valor_compativel,
             "TOTAL DA CONTA": valor_total, "DIFERENÇA FISCAL": diferenca,
+            "TOTAL DÉBITOS": total_debitos, "TOTAL CRÉDITOS": total_creditos,
+            "ESTORNOS/REDUTORES": total_redutores,
             "LANÇAMENTOS EXTRAS": len(extras), "SITUAÇÃO": situacao,
         })
         for _, mov in movimentos.iterrows():
             detalhes.append({
                 "CONTA": conta, "DATA": mov["DATA"], "LOTE": mov["LOTE"],
                 "HISTÓRICO": mov["HISTÓRICO"], "CONTRAPARTIDA": mov["CONTRAPARTIDA"],
-                "VALOR": mov["VALOR_ANALISADO"],
+                "DÉBITO": mov["DÉBITO"], "CRÉDITO": mov["CRÉDITO"],
+                "NATUREZA": mov["NATUREZA"], "VALOR": mov["VALOR_ANALISADO"],
                 "CLASSIFICAÇÃO": "FISCAL COMPATÍVEL" if mov["COMPATÍVEL_FISCAL"] else "ALERTA - NÃO FISCAL",
             })
     return pd.DataFrame(resumos), pd.DataFrame(detalhes)
