@@ -295,6 +295,14 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
                         f"Emissor: {atual['emissor']} · Série final: "
                         f"…{str(atual['numero_serie'])[-8:]}"
                     )
+                st.markdown("##### Usar certificado instalado")
+                try:
+                    from razync.connector_windows import render_connector_windows
+                    render_connector_windows(empresa)
+                except Exception as erro:
+                    st.caption(f"Conector Windows indisponível: {erro}")
+
+                st.markdown("##### Ou enviar certificado A1")
                 st.caption(
                     "Arquivo e senha são armazenados com criptografia."
                 )
