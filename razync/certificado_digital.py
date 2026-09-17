@@ -15,10 +15,50 @@ from datetime import date, datetime, timezone
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography import x509
 from cryptography.x509.oid import NameOID, ObjectIdentifier
 
 
 OID_CNPJ = ObjectIdentifier("2.16.76.1.3.3")
+
+
+def _cnpj_valido(cnpj: str) -> bool:
+    if not re.fullmatch(r"\d{14}", cnpj) or len(set(cnpj)) == 1:
+        return False
+    numeros = [int(numero) for numero in cnpj]
+    for tamanho, pesos in ((12, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]),
+                           (13, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])):
+        resto = sum(numeros[i] * pesos[i] for i in range(tamanho)) % 11
+        digito = 0 if resto < 2 else 11 - resto
+        if numeros[tamanho] != digito:
+            return False
+    return True
+
+
+def _extrair_cnpj(certificado) -> str:
+    textos: list[str] = []
+    for item in certificado.subject:
+        textos.append(str(item.value))
+    try:
+        san = certificado.extensions.get_extension_for_class(
+            x509.SubjectAlternativeName
+        ).value
+        for nome in san:
+            valor = getattr(nome, "value", "")
+            if isinstance(valor, bytes):
+                textos.append(valor.decode("latin1", errors="ignore"))
+                textos.append(valor.hex())
+            else:
+                textos.append(str(valor))
+    except x509.ExtensionNotFound:
+        pass
+    for texto in textos:
+        somente_numeros = re.sub(r"\D", "", texto)
+        for inicio in range(max(1, len(somente_numeros) - 13)):
+            candidato = somente_numeros[inicio:inicio + 14]
+            if _cnpj_valido(candidato):
+                return candidato
+    return ""
 
 
 def _configuracao():
@@ -77,16 +117,7 @@ def validar_certificado(pfx: bytes, senha: str) -> dict:
         encontrados = certificado.subject.get_attributes_for_oid(oid)
         return str(encontrados[0].value) if encontrados else ""
 
-    cnpj = ""
-    especificos = certificado.subject.get_attributes_for_oid(OID_CNPJ)
-    if especificos:
-        cnpj = re.sub(r"\D", "", str(especificos[0].value))
-    if len(cnpj) != 14:
-        for item in certificado.subject:
-            candidato = re.sub(r"\D", "", str(item.value))
-            if len(candidato) == 14:
-                cnpj = candidato
-                break
+    cnpj = _extrair_cnpj(certificado)
     titular = atributo(NameOID.COMMON_NAME)
     emissor_cn = certificado.issuer.get_attributes_for_oid(NameOID.COMMON_NAME)
     inicio = getattr(certificado, "not_valid_before_utc", None)
@@ -139,9 +170,18 @@ def buscar_certificado(empresa: str) -> dict | None:
     return registros[0] if registros else None
 
 
-def salvar_certificado(empresa: str, codigo: str, pfx: bytes, senha: str) -> dict:
+def salvar_certificado(
+    empresa: str, codigo: str, pfx: bytes, senha: str, cnpj_manual: str = "",
+) -> dict:
     _, _, segredo = _configuracao()
     metadados = validar_certificado(pfx, senha)
+    if not metadados["cnpj"]:
+        manual = re.sub(r"\D", "", cnpj_manual)
+        if not _cnpj_valido(manual):
+            raise ValueError(
+                "O certificado não informou o CNPJ. Digite um CNPJ válido no campo manual."
+            )
+        metadados["cnpj"] = manual
     registro = {
         "empresa": empresa, "codigo_empresa": codigo,
         **metadados, "pacote_criptografado": _cifrar(pfx, senha, segredo),
@@ -189,7 +229,10 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
         with st.form(f"form_certificado_{empresa}", clear_on_submit=True):
             arquivo = st.file_uploader("Certificado A1", type=["pfx", "p12"])
             senha = st.text_input("Senha do certificado", type="password")
-            cnpj_esperado = st.text_input("CNPJ da empresa para validação")
+            cnpj_manual = st.text_input(
+                "CNPJ manual (use somente se o certificado não identificar automaticamente)",
+                help="O sistema prioriza sempre o CNPJ contido no certificado.",
+            )
             confirmar = st.form_submit_button(
                 "Salvar ou substituir certificado", type="primary", use_container_width=True
             )
@@ -199,11 +242,13 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
             else:
                 try:
                     metadados = validar_certificado(arquivo.getvalue(), senha)
-                    esperado = re.sub(r"\D", "", cnpj_esperado)
-                    if esperado and metadados["cnpj"] and esperado != metadados["cnpj"]:
-                        raise ValueError("O CNPJ do certificado não corresponde ao CNPJ informado.")
-                    salvar_certificado(empresa, str(codigo), arquivo.getvalue(), senha)
-                    st.success("Certificado validado, criptografado e vinculado à empresa.")
+                    salvo = salvar_certificado(
+                        empresa, str(codigo), arquivo.getvalue(), senha, cnpj_manual
+                    )
+                    st.success(
+                        "Certificado validado e vinculado. CNPJ reconhecido: "
+                        + str(salvo.get("cnpj") or metadados.get("cnpj"))
+                    )
                     st.rerun()
                 except Exception as erro:
                     st.error(str(erro))
