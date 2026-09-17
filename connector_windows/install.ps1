@@ -17,14 +17,29 @@ if ($null -eq $python) {
     throw "Python 3 não foi encontrado. Instale o Python 3 e execute novamente."
 }
 
+$connector = Join-Path $target "connector.py"
+$launcherContent = '@echo off' + [Environment]::NewLine +
+    'title Conector Razync' + [Environment]::NewLine +
+    '"' + $python.Source + '" "' + $connector + '"' + [Environment]::NewLine +
+    'echo.' + [Environment]::NewLine +
+    'echo O Conector Razync foi encerrado ou encontrou um erro.' + [Environment]::NewLine +
+    'pause'
+
+$localLauncher = Join-Path $target "ABRIR_CONECTOR_RAZYNC.cmd"
+Set-Content -Path $localLauncher -Value $launcherContent -Encoding ASCII
+
+$desktop = [Environment]::GetFolderPath("Desktop")
+$desktopLauncher = Join-Path $desktop "Abrir Conector Razync.cmd"
+Copy-Item $localLauncher $desktopLauncher -Force
+
 $startup = [Environment]::GetFolderPath("Startup")
-$launcher = Join-Path $startup "Razync Connector.cmd"
-$command = '@echo off' + [Environment]::NewLine +
-    'start "" "' + $python.Source + '" "' + (Join-Path $target "connector.py") + '"'
-Set-Content -Path $launcher -Value $command -Encoding ASCII
+$startupLauncher = Join-Path $startup "Razync Connector.cmd"
+$startupContent = '@echo off' + [Environment]::NewLine +
+    'start "Conector Razync" "' + $localLauncher + '"'
+Set-Content -Path $startupLauncher -Value $startupContent -Encoding ASCII
 
 Write-Host ""
 Write-Host "Conector Razync instalado com sucesso." -ForegroundColor Green
-Write-Host "Ele será iniciado automaticamente com o Windows."
+Write-Host "Foi criado o atalho Abrir Conector Razync na Area de Trabalho."
 Write-Host "Iniciando agora..."
-Start-Process $python.Source -ArgumentList ('"' + (Join-Path $target "connector.py") + '"')
+Start-Process "cmd.exe" -ArgumentList ('/k ""' + $localLauncher + '""')
