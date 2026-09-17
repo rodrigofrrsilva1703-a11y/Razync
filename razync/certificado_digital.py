@@ -170,6 +170,28 @@ def buscar_certificado(empresa: str) -> dict | None:
     return registros[0] if registros else None
 
 
+def carregar_certificado(empresa: str) -> tuple[bytes, str, dict]:
+    """Recupera e valida o A1 cadastrado sem gravar o conteúdo descriptografado."""
+    consulta = (
+        "certificados_digitais?empresa=eq." + urllib.parse.quote(empresa)
+        + "&select=empresa,cnpj,titular,validade_fim,fingerprint_sha256,"
+        "pacote_criptografado&limit=1"
+    )
+    registros = _requisicao(consulta)
+    if not registros:
+        raise ValueError("A empresa não possui certificado A1 cadastrado.")
+    registro = registros[0]
+    pacote = str(registro.get("pacote_criptografado") or "")
+    if not pacote:
+        raise ValueError("O cadastro do certificado está incompleto.")
+    _, _, segredo = _configuracao()
+    pfx, senha = decifrar_certificado(pacote, segredo)
+    metadados = validar_certificado(pfx, senha)
+    if date.fromisoformat(metadados["validade_fim"]) < date.today():
+        raise ValueError("O certificado A1 cadastrado está vencido.")
+    return pfx, senha, {**registro, **metadados}
+
+
 def salvar_certificado(
     empresa: str, codigo: str, pfx: bytes, senha: str, cnpj_manual: str = "",
 ) -> dict:
