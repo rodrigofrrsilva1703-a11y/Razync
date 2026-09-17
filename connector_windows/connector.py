@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -89,11 +89,11 @@ def sign_challenge(thumbprint: str, challenge_b64: str) -> dict:
     return result
 
 
-DCTF_URL = "https://cav.receita.fazenda.gov.br/autenticacao/login"
+DCTF_URL = "https://servicos.receitafederal.gov.br/"
 
 
 def open_dctfweb() -> dict:
-    """Abre o e-CAC no navegador padrão para acesso autorizado pelo usuário."""
+    """Abre o Portal da Receita para acesso no perfil Procurador digital."""
     if not webbrowser.open(DCTF_URL, new=2):
         os.startfile(DCTF_URL)
     return {"opened": True, "url": DCTF_URL}
