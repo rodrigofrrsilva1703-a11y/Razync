@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import re
 import unicodedata
@@ -144,90 +145,59 @@ def gerar_relatorio_impostos(resultado: pd.DataFrame, empresa: str, competencia:
 
 def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
     import streamlit as st
-    from razync.certificado_digital import buscar_certificado, carregar_certificado
+    from razync.connector_windows import render_consulta_dctf
 
     chave = re.sub(r"[^a-z0-9_]+", "_", str(prefixo).lower()).strip("_")
     st.markdown("### Conferência de Impostos")
     st.caption(
-        "Compare os débitos informados na Receita/DCTFWeb com os saldos do balancete "
-        "da mesma competência."
+        "Envie somente o balancete. O relatório da DCTFWeb será recebido pelo "
+        "Conector Razync instalado neste computador."
     )
-    try:
-        certificado = buscar_certificado(prefixo)
-    except Exception:
-        certificado = None
-    if certificado:
-        st.success(
-            f"Certificado A1 cadastrado e selecionado automaticamente · "
-            f"CNPJ {certificado.get('cnpj') or 'não informado'} · "
-            f"validade {pd.to_datetime(certificado.get('validade_fim')).strftime('%d/%m/%Y')}"
-        )
-        if st.button(
-            "Validar certificado cadastrado",
-            key=f"impostos_{chave}_validar_certificado",
-            use_container_width=True,
-        ):
-            try:
-                _, _, metadados = carregar_certificado(prefixo)
-                st.success(
-                    "Certificado validado com sucesso. Titular: "
-                    + str(metadados.get("titular") or "não informado")
-                )
-            except Exception as erro:
-                st.error(f"Não foi possível usar o certificado cadastrado: {erro}")
-
-        serpro = st.secrets.get("serpro", {})
-        chave_serpro = str(
-            serpro.get("consumer_key", "")
-            or st.secrets.get("SERPRO_CONSUMER_KEY", "")
-        )
-        segredo_serpro = str(
-            serpro.get("consumer_secret", "")
-            or st.secrets.get("SERPRO_CONSUMER_SECRET", "")
-        )
-        if chave_serpro and segredo_serpro:
-            st.info(
-                "Integra Contador configurado. O certificado A1 será usado nas "
-                "consultas automáticas quando o serviço DCTFWeb for acionado."
-            )
-        else:
-            st.warning(
-                "O certificado está pronto, mas a consulta automática oficial ainda "
-                "precisa das chaves do contrato Integra Contador/Serpro. Enquanto isso, "
-                "envie abaixo o relatório exportado da DCTFWeb."
-            )
-            st.link_button(
-                "Conhecer o Integra Contador",
-                "https://loja.serpro.gov.br/integra-contador",
-                use_container_width=True,
-            )
-    else:
-        st.info(
-            "Cadastre o certificado A1 no botão flutuante. Para a consulta automática "
-            "também serão necessárias as chaves do Integra Contador/Serpro."
-        )
 
     competencia = st.date_input(
         "Competência", value=date.today().replace(day=1),
         key=f"impostos_{chave}_competencia",
     )
-    col_receita, col_balancete = st.columns(2)
-    with col_receita:
-        arquivo_receita = st.file_uploader(
-            "Relatório da Receita / DCTFWeb", type=["pdf", "xls", "xlsx", "csv"],
-            key=f"impostos_{chave}_receita",
+    competencia_id = competencia.strftime("%m-%Y")
+    retorno_conector = render_consulta_dctf(empresa, competencia_id)
+    if (
+        isinstance(retorno_conector, dict)
+        and retorno_conector.get("status") == "report"
+        and retorno_conector.get("content")
+    ):
+        try:
+            conteudo_receita = base64.b64decode(
+                str(retorno_conector["content"]), validate=True
+            )
+            nome_receita = str(retorno_conector.get("name") or "DCTFWeb.pdf")
+            st.session_state[f"impostos_{chave}_receita_bytes"] = conteudo_receita
+            st.session_state[f"impostos_{chave}_receita_nome"] = nome_receita
+        except Exception:
+            st.error("O relatório recebido do conector está inválido.")
+
+    receita = st.session_state.get(f"impostos_{chave}_receita_bytes")
+    nome_receita = st.session_state.get(f"impostos_{chave}_receita_nome", "")
+    if receita:
+        st.success(f"Relatório da DCTFWeb recebido: {nome_receita}")
+
+    arquivo_balancete = st.file_uploader(
+        "Balancete contábil", type=["xls", "xlsx", "csv"],
+        key=f"impostos_{chave}_balancete",
+        help="Este é o único arquivo que precisa ser enviado manualmente.",
+    )
+    if not receita:
+        st.info(
+            "Use os botões acima para abrir a DCTFWeb, baixar o relatório da "
+            "competência e trazê-lo automaticamente para o Razync."
         )
-    with col_balancete:
-        arquivo_balancete = st.file_uploader(
-            "Balancete contábil", type=["xls", "xlsx", "csv"],
-            key=f"impostos_{chave}_balancete",
-        )
-    if arquivo_receita is None or arquivo_balancete is None:
-        st.info("Envie os dois arquivos para iniciar a conferência automática.")
         return
+    if arquivo_balancete is None:
+        st.info("Envie o balancete para iniciar a conferência.")
+        return
+
     try:
         resultado = processar_conferencia_impostos(
-            arquivo_receita.getvalue(), arquivo_receita.name,
+            receita, nome_receita,
             arquivo_balancete.getvalue(), arquivo_balancete.name,
         )
     except Exception as erro:
@@ -240,7 +210,10 @@ def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
     m1, m2, m3 = st.columns(3)
     m1.metric("Impostos analisados", len(resultado))
     m2.metric("Conferidos", conferidos)
-    m3.metric("Diferença total", f"R$ {total_diferenca:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    m3.metric(
+        "Diferença total",
+        f"R$ {total_diferenca:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+    )
     if revisar:
         st.error(f"{revisar} imposto(s) precisam de revisão.")
     else:
