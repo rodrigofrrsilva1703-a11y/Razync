@@ -8913,9 +8913,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if st.session_state['empresa_organizador'] == 'hw_88':
         empresa_hw88 = '88 - H & W SERVIÇOS MÉDICOS S/S LTDA'
         contas_hw88 = {'itau': '508'}
-        aba_operacoes_hw88, aba_base_hw88 = st.tabs([
-            'Organizar arquivos', 'Base Inteligente'
+        aba_operacoes_hw88, aba_base_hw88, aba_fiscal_hw88 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
         ])
+        with aba_fiscal_hw88:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('hw_88', empresa_hw88)
 
         with aba_base_hw88:
             renderizar_base_inteligente_empresa(
@@ -9011,9 +9014,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if st.session_state['empresa_organizador'] == 'engekraft_969':
         empresa_969 = '969 - ENGEKRAFT AUTOMAÇÃO LTDA - EPP'
-        aba_operacoes_969, aba_base_969 = st.tabs([
-            'Organizar arquivos', 'Base Inteligente'
+        aba_operacoes_969, aba_base_969, aba_fiscal_969 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
         ])
+        with aba_fiscal_969:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('engekraft_969', empresa_969)
 
         with aba_operacoes_969:
             st.markdown('#### Extrato Itaú → Modelo Domínio')
@@ -9069,9 +9075,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if st.session_state['empresa_organizador'] == 'gz_1211':
         empresa_gz = '1211 - GZ IMPORTADORA E EXPORTADORA LTDA EPP'
-        aba_operacoes_gz, aba_base_gz = st.tabs([
-            'Organizar arquivos', 'Base Inteligente'
+        aba_operacoes_gz, aba_base_gz, aba_fiscal_gz = st.tabs([
+            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
         ])
+        with aba_fiscal_gz:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('gz_1211', empresa_gz)
 
         with aba_operacoes_gz:
             st.markdown('#### Extrato Itaú + Boletos liquidados → Modelo Domínio')
@@ -9173,9 +9182,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if st.session_state['empresa_organizador'] == 'eletro_forte_filial':
         empresa_1408 = '1408 - ELETRO FORTE COMERCIAL ELÉTRICA LTDA. (FILIAL)'
-        aba_operacoes_1408, aba_base_1408 = st.tabs([
-            'Organizar arquivos', 'Base Inteligente'
+        aba_operacoes_1408, aba_base_1408, aba_fiscal_1408 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
         ])
+        with aba_fiscal_1408:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('eletro_forte_filial', empresa_1408)
 
         with aba_base_1408:
             renderizar_base_inteligente_eletro_forte(
@@ -9277,9 +9289,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             {'itau_512': '512'} if filial_ef
             else {'bb': '8', 'itau_508': '508', 'itau_509': '509'}
         )
-        aba_operacoes_ef, aba_francesinhas_ef, aba_base_ef = st.tabs([
-            'Organizar arquivos', 'Francesinhas', 'Base Inteligente'
+        aba_operacoes_ef, aba_francesinhas_ef, aba_base_ef, aba_fiscal_ef = st.tabs([
+            'Organizar arquivos', 'Francesinhas', 'Base Inteligente', 'Conferência Fiscal'
         ])
+        with aba_fiscal_ef:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal(chave_estabelecimento, titulo_pagina_organizador)
 
         with aba_base_ef:
             renderizar_base_inteligente_eletro_forte(
@@ -9715,10 +9730,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
 
     if st.session_state['empresa_organizador'] == 'lcarlos':
         contas_lcarlos = {'santander': '513'}
-        aba_operacoes_lcarlos, aba_base_lcarlos = st.tabs([
+        aba_operacoes_lcarlos, aba_base_lcarlos, aba_fiscal_lcarlos = st.tabs([
             'Organizar arquivos',
             'Base Inteligente',
+            'Conferência Fiscal',
         ])
+        with aba_fiscal_lcarlos:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('lcarlos', titulo_pagina_organizador)
 
         with aba_base_lcarlos:
             renderizar_base_inteligente_empresa(
@@ -9867,9 +9886,12 @@ elif st.session_state['pagina_ativa'] == 'organizador':
     if st.session_state['empresa_organizador'] == 'vgv_1402':
         empresa_vgv = '1402 - VGV EMPREENDIMENTOS LTDA - ME'
         contas_vgv = {'btg': '510'}
-        aba_operacoes_vgv, aba_base_vgv = st.tabs([
-            'Organizar arquivos', 'Base Inteligente'
+        aba_operacoes_vgv, aba_base_vgv, aba_fiscal_vgv = st.tabs([
+            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
         ])
+        with aba_fiscal_vgv:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('vgv_1402', empresa_vgv)
 
         with aba_base_vgv:
             renderizar_base_inteligente_empresa(
@@ -9955,10 +9977,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         empresa_autokraft = configuracao_empresa_autokraft['empresa']
         slug_empresa_autokraft = configuracao_empresa_autokraft["slug"]
 
-        aba_operacoes_autokraft, aba_base_autokraft = st.tabs([
+        aba_operacoes_autokraft, aba_base_autokraft, aba_fiscal_autokraft = st.tabs([
             "Organizar arquivos",
-            "Base Inteligente"
+            "Base Inteligente",
+            "Conferência Fiscal"
         ])
+        with aba_fiscal_autokraft:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal(slug_empresa_autokraft, empresa_autokraft)
 
         with aba_base_autokraft:
             renderizar_base_inteligente_empresa(
@@ -10103,10 +10129,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         empresa_accede = config_accede['empresa']
         slug_accede = config_accede['slug']
 
-        aba_operacoes_accede, aba_base_accede = st.tabs([
+        aba_operacoes_accede, aba_base_accede, aba_fiscal_accede = st.tabs([
             'Organizar arquivos',
-            'Base Inteligente'
+            'Base Inteligente',
+            'Conferência Fiscal'
         ])
+        with aba_fiscal_accede:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal(slug_accede, empresa_accede)
 
         with aba_base_accede:
             renderizar_base_inteligente_empresa(
@@ -10223,10 +10253,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         empresa_radani = config_radani['empresa']
         slug_radani = config_radani['slug']
 
-        aba_operacoes_radani, aba_base_radani = st.tabs([
+        aba_operacoes_radani, aba_base_radani, aba_fiscal_radani = st.tabs([
             'Organizar arquivos',
-            'Base Inteligente'
+            'Base Inteligente',
+            'Conferência Fiscal'
         ])
+        with aba_fiscal_radani:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal(slug_radani, empresa_radani)
 
         with aba_base_radani:
             renderizar_base_inteligente_empresa(
@@ -10521,10 +10555,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         empresa_up_pack = config_up_pack['empresa']
         slug_up_pack = config_up_pack['slug']
 
-        aba_operacoes_up, aba_base_up = st.tabs([
+        aba_operacoes_up, aba_base_up, aba_fiscal_up = st.tabs([
             'Organizar arquivos',
-            'Base Inteligente'
+            'Base Inteligente',
+            'Conferência Fiscal'
         ])
+        with aba_fiscal_up:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal(slug_up_pack, empresa_up_pack)
 
         with aba_base_up:
             renderizar_base_inteligente_empresa(
@@ -10823,10 +10861,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     erro_limpeza_legada
                 )
 
-        aba_operacoes, aba_base_inteligente = st.tabs([
+        aba_operacoes, aba_base_inteligente, aba_fiscal = st.tabs([
             "Organizar arquivos",
-            "Base Inteligente"
+            "Base Inteligente",
+            "Conferência Fiscal"
         ])
+        with aba_fiscal:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal(chave_estabelecimento, titulo_pagina_organizador)
 
         with aba_base_inteligente:
             renderizar_base_inteligente_empresa(
@@ -11401,10 +11443,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             },
         }
 
-        aba_nibo, aba_base_dias = st.tabs([
+        aba_nibo, aba_base_dias, aba_fiscal_dias = st.tabs([
             'Organizar arquivos',
-            'Base Inteligente'
+            'Base Inteligente',
+            'Conferência Fiscal'
         ])
+        with aba_fiscal_dias:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('dias_pereira', '1529 - Dias e Pereira')
 
         with aba_base_dias:
             renderizar_base_inteligente_empresa(

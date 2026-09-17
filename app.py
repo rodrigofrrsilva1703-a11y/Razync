@@ -118,7 +118,13 @@ def _renderizar_lucrativite_841():
 
     empresa_841 = "841 - LUCRATIVITE SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO LTDA - ME"
 
-    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("lucrativite_841", empresa_841)
 
     with aba_operacoes:
         st.markdown("#### Banco Inter → Modelo Domínio")
@@ -229,7 +235,13 @@ def _renderizar_valean_625():
         {"nome": "Caixa · Conta 504", "slug": "caixa", "banco": "caixa", "conta": "504"},
         {"nome": "Sicredi · Conta 3999", "slug": "sicredi", "banco": "sicredi", "conta": "3999"},
     ]
-    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("valean_625", empresa_625)
 
     # A conferência genérica espera identificar o banco pelo conteúdo/estrutura da
     # planilha. O arquivo da 625 é gerado em abas por banco; por isso, lemos a aba
@@ -444,7 +456,13 @@ def _renderizar_valean_626():
         st.session_state.pop("valean_626_erro", None)
         st.session_state["valean_626_processador_versao"] = PROCESSADOR_VALEAN_626_VERSAO
 
-    aba_operacoes_626, aba_base_626 = st.tabs(["Organizar arquivos", "Base Inteligente"])
+    aba_operacoes_626, aba_base_626, aba_fiscal_626 = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal_626:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("valean_626", empresa_626)
 
     with aba_operacoes_626:
         st.markdown("#### Extratos bancários → Modelo Domínio")
@@ -614,7 +632,13 @@ def _renderizar_dias_pereira_1530():
     )
 
     empresa = "1530 - DIAS PEREIRA SOCIEDADE INDIVIDUAL DE ADVOCACIA"
-    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("dias_pereira_1530", empresa)
 
     with aba_operacoes:
         st.markdown("#### Extrato Itaú → Modelo Domínio")
@@ -717,7 +741,13 @@ def _renderizar_kairos_1208():
     )
 
     empresa = "1208 - KAIROS DESMONTE INDUSTRIAIS EIRELI - ME"
-    aba_operacoes, aba_base = st.tabs(["Organizar arquivos", "Base Inteligente"])
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("kairos_1208", empresa)
 
     with aba_operacoes:
         st.markdown("#### Extratos bancários → Modelo Domínio")
@@ -985,5 +1015,37 @@ def _renderizar_conferencia_fiscal_autokraft():
             )
 
 
-if st.session_state.get("empresa_organizador") == "autokraft_industrial":
-    _renderizar_conferencia_fiscal_autokraft()
+# A conferência da Autokraft agora é renderizada dentro da aba padrão, como nas
+# demais empresas. A função legada acima permanece apenas para compatibilidade.
+
+
+# Empresas que já exibem a conferência ao lado da Base Inteligente. Para qualquer
+# empresa cadastrada que ainda não tenha ferramentas bancárias próprias, a aba
+# fiscal continua disponível, garantindo cobertura obrigatória em todo o cadastro.
+_EMPRESAS_COM_ABA_FISCAL = {
+    "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
+    "lcarlos", "vgv_1402", "autokraft_industrial", "autokraft_projetos", "isa",
+    "accede_automacao", "accede_equipamentos", "radani", "up_pack", "nova_geracao",
+    "dias_pereira", "lucrativite_841", "valean_625", "valean_626",
+    "dias_pereira_1530", "kairos_1208",
+}
+_empresa_selecionada_fiscal = st.session_state.get("empresa_organizador")
+if (
+    _empresa_selecionada_fiscal
+    and _empresa_selecionada_fiscal not in _EMPRESAS_COM_ABA_FISCAL
+):
+    _cadastro_fiscal = next(
+        (
+            item for item in _catalogo.EMPRESAS
+            if item.get("chave_sistema", item.get("chave")) == _empresa_selecionada_fiscal
+        ),
+        None,
+    )
+    _nome_empresa_fiscal = (
+        f"{_cadastro_fiscal.get('codigo')} - {_cadastro_fiscal.get('nome')}"
+        if _cadastro_fiscal else str(_empresa_selecionada_fiscal)
+    )
+    _aba_fiscal_obrigatoria = st.tabs(["Conferência Fiscal"])[0]
+    with _aba_fiscal_obrigatoria:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal(_empresa_selecionada_fiscal, _nome_empresa_fiscal)

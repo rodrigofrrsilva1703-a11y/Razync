@@ -16,6 +16,129 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 
+def _moeda(valor) -> str:
+    numero = float(valor or 0)
+    return f"R$ {numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
+    """Renderiza a conferência fiscal genérica com estado isolado por empresa."""
+    import streamlit as st
+
+    chave = re.sub(r"[^a-z0-9_]+", "_", str(prefixo).lower()).strip("_")
+    base = f"fiscal_{chave}"
+    st.markdown("### Conferência Fiscal × Contábil")
+    st.caption(
+        f"Empresa: {empresa}. Envie o Resumo por Acumulador e o Razão do mesmo período. "
+        "Somente acumuladores com conta preenchida são conferidos; movimentos não fiscais "
+        "são separados em alertas."
+    )
+    col_fiscal, col_razao = st.columns(2)
+    with col_fiscal:
+        arquivo_acumuladores = st.file_uploader(
+            "Relatório de acumuladores do Domínio", type=["xls", "xlsx"],
+            key=f"{base}_acumuladores",
+        )
+    with col_razao:
+        arquivo_razao = st.file_uploader(
+            "Razão com todas as contas", type=["xls", "xlsx"], key=f"{base}_razao",
+        )
+    if arquivo_acumuladores is None or arquivo_razao is None:
+        st.info("Envie os dois relatórios. A conferência começará automaticamente.")
+        return
+
+    import hashlib
+    assinatura = hashlib.sha256(
+        arquivo_acumuladores.getvalue() + arquivo_razao.getvalue()
+    ).hexdigest()
+    if st.session_state.get(f"{base}_assinatura") != assinatura:
+        try:
+            with st.spinner("Cruzando acumuladores, contas e lançamentos do razão..."):
+                resultado = processar_conferencia(
+                    arquivo_acumuladores.getvalue(), arquivo_acumuladores.name,
+                    arquivo_razao.getvalue(), arquivo_razao.name,
+                )
+            st.session_state[f"{base}_resultado"] = resultado
+            st.session_state[f"{base}_assinatura"] = assinatura
+            st.session_state.pop(f"{base}_erro", None)
+        except Exception as erro:
+            st.session_state[f"{base}_erro"] = str(erro)
+            st.session_state.pop(f"{base}_resultado", None)
+
+    if st.session_state.get(f"{base}_erro"):
+        st.error("Não foi possível concluir a conferência: " + st.session_state[f"{base}_erro"])
+    resultado = st.session_state.get(f"{base}_resultado")
+    if not isinstance(resultado, dict):
+        return
+    resumo = resultado.get("resumo", pd.DataFrame())
+    detalhes = resultado.get("detalhes", pd.DataFrame())
+    if resumo.empty:
+        st.warning("Nenhuma conta pôde ser comparada.")
+        return
+
+    conferidas = int(resumo["SITUAÇÃO"].astype(str).str.startswith("CONFERE").sum())
+    alertas = int(resumo["LANÇAMENTOS EXTRAS"].sum())
+    revisar = int((resumo["SITUAÇÃO"] == "REVISAR").sum())
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Contas analisadas", len(resumo))
+    m2.metric("Fiscal conferido", conferidas)
+    m3.metric("Lançamentos em alerta", alertas)
+    m4.metric("Contas para revisar", revisar)
+
+    periodo = resultado.get("periodo_fiscal", {})
+    inicio = pd.to_datetime(periodo.get("inicio"), errors="coerce")
+    periodo_nome = inicio.strftime("%m%Y") if pd.notna(inicio) else "PERIODO_ANALISADO"
+    nome_empresa = re.sub(r"[^A-Za-z0-9]+", "_", str(empresa)).strip("_")[:45]
+    st.download_button(
+        "Baixar relatório completo da conferência",
+        data=gerar_relatorio_excel(resultado),
+        file_name=f"{nome_empresa}_CONFERENCIA_FISCAL_{periodo_nome}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True, key=f"{base}_download",
+    )
+    if revisar:
+        st.error(f"{revisar} conta(s) possuem diferença fiscal e precisam de revisão.")
+    elif alertas:
+        st.warning("Os valores fiscais conferem, mas existem lançamentos contábeis adicionais para revisar.")
+    else:
+        st.success("Todas as contas conferem e não foram encontrados lançamentos adicionais.")
+
+    aba_visao, aba_alertas, aba_todos = st.tabs([
+        "Visão geral", f"Alertas ({alertas})", "Todos os lançamentos"
+    ])
+    with aba_visao:
+        ordem = {"REVISAR": 0, "AUSENTE NO CONTÁBIL": 1, "CONFERE COM ALERTAS": 2, "CONFERE": 3}
+        resumo_ordenado = resumo.assign(
+            _ORDEM=resumo["SITUAÇÃO"].map(ordem).fillna(9)
+        ).sort_values(["_ORDEM", "CONTA"])
+        for _, item in resumo_ordenado.iterrows():
+            conta, situacao = str(item["CONTA"]), str(item["SITUAÇÃO"])
+            extras = int(item["LANÇAMENTOS EXTRAS"])
+            titulo = f"Conta {conta} · {situacao}" + (f" · {extras} alerta(s)" if extras else "")
+            with st.expander(titulo, expanded=situacao != "CONFERE"):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Valor fiscal", _moeda(item["VALOR FISCAL"]))
+                c2.metric("Contábil compatível", _moeda(item["CONTÁBIL COMPATÍVEL"]))
+                c3.metric("Diferença fiscal", _moeda(item["DIFERENÇA FISCAL"]))
+                c4.metric("Total movimentado", _moeda(item["TOTAL DA CONTA"]))
+                movimentos = detalhes[detalhes["CONTA"].astype(str).eq(conta)].copy()
+                if not movimentos.empty:
+                    movimentos["DATA"] = pd.to_datetime(movimentos["DATA"]).dt.strftime("%d/%m/%Y")
+                    st.dataframe(movimentos[["DATA", "HISTÓRICO", "CONTRAPARTIDA", "VALOR", "CLASSIFICAÇÃO"]], use_container_width=True, hide_index=True)
+    with aba_alertas:
+        quadro = detalhes[detalhes["CLASSIFICAÇÃO"].eq("ALERTA - NÃO FISCAL")].copy()
+        if quadro.empty:
+            st.success("Nenhum lançamento adicional foi encontrado nas contas conferidas.")
+        else:
+            quadro["DATA"] = pd.to_datetime(quadro["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(quadro[["CONTA", "DATA", "HISTÓRICO", "CONTRAPARTIDA", "VALOR"]], use_container_width=True, hide_index=True)
+    with aba_todos:
+        quadro = detalhes.copy()
+        if not quadro.empty:
+            quadro["DATA"] = pd.to_datetime(quadro["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(quadro, use_container_width=True, hide_index=True)
+
+
 def _texto(valor) -> str:
     if valor is None or (not isinstance(valor, str) and pd.isna(valor)):
         return ""
