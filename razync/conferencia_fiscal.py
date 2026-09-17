@@ -28,6 +28,10 @@ def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
 
     chave = re.sub(r"[^a-z0-9_]+", "_", str(prefixo).lower()).strip("_")
     base = f"fiscal_{chave}"
+    codigo_empresa = ""
+    codigo_no_nome = re.match(r"\s*(\d+)\s*-", str(empresa))
+    if codigo_no_nome:
+        codigo_empresa = codigo_no_nome.group(1)
     st.markdown("### Conferência Fiscal × Contábil")
     st.caption(
         f"Empresa: {empresa}. Envie o Resumo por Acumulador e o Razão do mesmo período. "
@@ -58,6 +62,7 @@ def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
                 resultado = processar_conferencia(
                     arquivo_acumuladores.getvalue(), arquivo_acumuladores.name,
                     arquivo_razao.getvalue(), arquivo_razao.name,
+                    filial_alvo=codigo_empresa,
                 )
             st.session_state[f"{base}_resultado"] = resultado
             st.session_state[f"{base}_assinatura"] = assinatura
@@ -76,6 +81,15 @@ def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
     if resumo.empty:
         st.warning("Nenhuma conta pôde ser comparada.")
         return
+
+    filial_aplicada = resultado.get("filial_aplicada", "")
+    filiais_encontradas = resultado.get("filiais_encontradas", [])
+    if filial_aplicada:
+        st.success(
+            f"Razão consolidado identificado. Conferência filtrada pela filial "
+            f"{filial_aplicada}. Filiais presentes no arquivo: "
+            f"{', '.join(filiais_encontradas)}."
+        )
 
     conferidas = int(resumo["SITUAÇÃO"].astype(str).str.startswith("CONFERE").sum())
     alertas = int(resumo["LANÇAMENTOS EXTRAS"].sum())
@@ -296,39 +310,74 @@ def ler_acumuladores(conteudo: bytes, nome: str) -> tuple[pd.DataFrame, dict]:
 
 def ler_razao(conteudo: bytes, nome: str) -> tuple[pd.DataFrame, dict]:
     xls = _excel(conteudo, nome)
-    bruto = pd.read_excel(xls, sheet_name=xls.sheet_names[0], header=None, dtype=object)
     conta = ""
     descricao_conta = ""
     registros = []
     periodo = {"inicio": None, "fim": None}
-    for _, linha in bruto.iterrows():
-        valores = linha.tolist()
-        primeiro = _texto(valores[0] if valores else "")
-        if primeiro.upper() == "PERÍODO:":
-            achado = re.findall(r"\d{2}/\d{2}/\d{4}", " ".join(_texto(v) for v in valores))
-            if len(achado) >= 2:
-                periodo = {
-                    "inicio": pd.to_datetime(achado[0], dayfirst=True),
-                    "fim": pd.to_datetime(achado[1], dayfirst=True),
-                }
-        if primeiro.upper() == "CONTA:":
-            conta = re.sub(r"\D", "", _texto(valores[1] if len(valores) > 1 else ""))
-            descricao_conta = _texto(valores[5] if len(valores) > 5 else "")
-            continue
-        data = pd.to_datetime(valores[0] if valores else None, dayfirst=True, errors="coerce")
-        if not conta or pd.isna(data):
-            continue
-        debito = _numero(valores[8] if len(valores) > 8 else 0)
-        credito = _numero(valores[9] if len(valores) > 9 else 0)
-        if abs(debito) < 0.005 and abs(credito) < 0.005:
-            continue
-        registros.append({
-            "CONTA": conta, "DESCRIÇÃO_CONTA": descricao_conta, "DATA": data.normalize(),
-            "LOTE": _texto(valores[1] if len(valores) > 1 else ""),
-            "HISTÓRICO": _texto(valores[2] if len(valores) > 2 else ""),
-            "CONTRAPARTIDA": _texto(valores[7] if len(valores) > 7 else ""),
-            "DÉBITO": debito, "CRÉDITO": credito,
-        })
+    for aba in xls.sheet_names:
+        bruto = pd.read_excel(xls, sheet_name=aba, header=None, dtype=object)
+        colunas = {
+            "DATA": 0, "LOTE": 1, "HISTÓRICO": 2, "CONTRAPARTIDA": 7,
+            "DÉBITO": 8, "CRÉDITO": 9, "FILIAL": None,
+        }
+        for _, linha in bruto.iterrows():
+            valores = linha.tolist()
+            rotulos = [_rotulo(valor) for valor in valores]
+            primeiro = rotulos[0] if rotulos else ""
+            if primeiro == "PERIODO":
+                achado = re.findall(r"\d{2}/\d{2}/\d{4}", " ".join(_texto(v) for v in valores))
+                if len(achado) >= 2:
+                    periodo = {
+                        "inicio": pd.to_datetime(achado[0], dayfirst=True),
+                        "fim": pd.to_datetime(achado[1], dayfirst=True),
+                    }
+            if primeiro == "CONTA":
+                conta = re.sub(r"\D", "", _texto(_primeiro_preenchido(valores, 1)))
+                descricao_conta = _texto(_primeiro_preenchido(valores, 5, 5))
+                continue
+
+            # O razão consolidado pode acrescentar a coluna Filial e deslocar as
+            # demais colunas. A posição é obtida pelos títulos de cada página.
+            if "DATA" in rotulos and any(r == "HISTORICO" for r in rotulos):
+                for indice, rotulo in enumerate(rotulos):
+                    if rotulo == "DATA":
+                        colunas["DATA"] = indice
+                    elif rotulo == "LOTE":
+                        colunas["LOTE"] = indice
+                    elif rotulo == "HISTORICO":
+                        colunas["HISTÓRICO"] = indice
+                    elif rotulo in {"CTA C PART", "CONTRAPARTIDA", "CONTA CONTRAPARTIDA"}:
+                        colunas["CONTRAPARTIDA"] = indice
+                    elif rotulo == "DEBITO":
+                        colunas["DÉBITO"] = indice
+                    elif rotulo == "CREDITO":
+                        colunas["CRÉDITO"] = indice
+                    elif rotulo in {"FILIAL", "COD FILIAL", "CODIGO FILIAL"}:
+                        colunas["FILIAL"] = indice
+                continue
+
+            data = pd.to_datetime(
+                valores[colunas["DATA"]] if len(valores) > colunas["DATA"] else None,
+                dayfirst=True, errors="coerce",
+            )
+            if not conta or pd.isna(data):
+                continue
+            debito = _numero(valores[colunas["DÉBITO"]] if len(valores) > colunas["DÉBITO"] else 0)
+            credito = _numero(valores[colunas["CRÉDITO"]] if len(valores) > colunas["CRÉDITO"] else 0)
+            if abs(debito) < 0.005 and abs(credito) < 0.005:
+                continue
+            filial = ""
+            if colunas["FILIAL"] is not None and len(valores) > colunas["FILIAL"]:
+                filial = re.sub(r"\D", "", _texto(valores[colunas["FILIAL"]]))
+                filial = filial.lstrip("0") or ("0" if filial else "")
+            registros.append({
+                "CONTA": conta, "DESCRIÇÃO_CONTA": descricao_conta, "FILIAL": filial,
+                "DATA": data.normalize(),
+                "LOTE": _texto(valores[colunas["LOTE"]] if len(valores) > colunas["LOTE"] else ""),
+                "HISTÓRICO": _texto(valores[colunas["HISTÓRICO"]] if len(valores) > colunas["HISTÓRICO"] else ""),
+                "CONTRAPARTIDA": _texto(valores[colunas["CONTRAPARTIDA"]] if len(valores) > colunas["CONTRAPARTIDA"] else ""),
+                "DÉBITO": debito, "CRÉDITO": credito,
+            })
     if not registros:
         raise ValueError("Nenhum lançamento foi encontrado no razão.")
     return pd.DataFrame(registros), periodo
@@ -407,13 +456,30 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
     return pd.DataFrame(resumos), pd.DataFrame(detalhes)
 
 
-def processar_conferencia(acumuladores_bytes: bytes, acumuladores_nome: str, razao_bytes: bytes, razao_nome: str):
+def processar_conferencia(
+    acumuladores_bytes: bytes, acumuladores_nome: str,
+    razao_bytes: bytes, razao_nome: str, filial_alvo: str | None = None,
+):
     acumuladores, periodo_fiscal = ler_acumuladores(acumuladores_bytes, acumuladores_nome)
     razao, periodo_razao = ler_razao(razao_bytes, razao_nome)
+    filiais_encontradas = sorted(
+        filial for filial in razao.get("FILIAL", pd.Series(dtype=str)).astype(str).unique()
+        if filial
+    )
+    filial_normalizada = re.sub(r"\D", "", str(filial_alvo or "")).lstrip("0")
+    if filiais_encontradas and filial_normalizada:
+        if filial_normalizada not in filiais_encontradas:
+            raise ValueError(
+                f"O razão contém as filiais {', '.join(filiais_encontradas)}, mas não possui "
+                f"lançamentos da empresa {filial_normalizada}."
+            )
+        razao = razao[razao["FILIAL"].astype(str).eq(filial_normalizada)].copy()
     resumo, detalhes = conferir_fiscal_contabil(acumuladores, razao)
     return {
         "resumo": resumo, "detalhes": detalhes, "acumuladores": acumuladores,
         "periodo_fiscal": periodo_fiscal, "periodo_razao": periodo_razao,
+        "filial_aplicada": filial_normalizada if filiais_encontradas else "",
+        "filiais_encontradas": filiais_encontradas,
     }
 
 
