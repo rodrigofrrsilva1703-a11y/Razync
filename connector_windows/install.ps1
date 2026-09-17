@@ -21,6 +21,12 @@ if (-not (Test-Path $pythonPath)) {
     $zipPath = Join-Path $env:TEMP "razync-python-3.12.10.zip"
     $pythonUrl = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip"
     Invoke-WebRequest -UseBasicParsing -Headers @{"Cache-Control"="no-cache"} -Uri $pythonUrl -OutFile $zipPath
+    $checksumEsperado = "FE8EF205F2E9C3BA44D0CF9954E1ABD3"
+    $checksumObtido = (Get-FileHash -Path $zipPath -Algorithm MD5).Hash.ToUpperInvariant()
+    if ($checksumObtido -ne $checksumEsperado) {
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        throw "A verificacao de integridade do componente interno falhou."
+    }
     Expand-Archive -Path $zipPath -DestinationPath $runtime -Force
     Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 }
