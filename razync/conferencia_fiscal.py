@@ -25,7 +25,7 @@ def _moeda(valor) -> str:
     return f"R$ {numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
+def _renderizar_conferencia_fiscal_contabil(prefixo: str, empresa: str) -> None:
     """Renderiza a conferência fiscal genérica com estado isolado por empresa."""
     import streamlit as st
 
@@ -176,6 +176,21 @@ def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
         if not quadro.empty:
             quadro["DATA"] = pd.to_datetime(quadro["DATA"]).dt.strftime("%d/%m/%Y")
             st.dataframe(quadro, use_container_width=True, hide_index=True)
+
+
+def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
+    """Agrupa as conferências fiscal/contábil e de impostos na mesma aba."""
+    import streamlit as st
+
+    aba_fiscal, aba_impostos = st.tabs([
+        "Fiscal × Contábil", "Impostos × Balancete",
+    ])
+    with aba_fiscal:
+        _renderizar_conferencia_fiscal_contabil(prefixo, empresa)
+    with aba_impostos:
+        from razync.conferencia_impostos import renderizar_conferencia_impostos
+
+        renderizar_conferencia_impostos(prefixo, empresa)
 
 
 def _texto(valor) -> str:
