@@ -5,22 +5,33 @@ if ($env:OS -ne "Windows_NT") {
 }
 
 $source = Split-Path -Parent $MyInvocation.MyCommand.Path
-$target = Join-Path $env:LOCALAPPDATA "Razync\Connector\app"
+$root = Join-Path $env:LOCALAPPDATA "Razync\Connector"
+$target = Join-Path $root "app"
+$runtime = Join-Path $root "python"
 New-Item -ItemType Directory -Path $target -Force | Out-Null
+New-Item -ItemType Directory -Path $runtime -Force | Out-Null
 
 Copy-Item (Join-Path $source "connector.py") $target -Force
 Copy-Item (Join-Path $source "list_certificates.ps1") $target -Force
 Copy-Item (Join-Path $source "sign_challenge.ps1") $target -Force
 
-$python = Get-Command python.exe -ErrorAction SilentlyContinue
-if ($null -eq $python) {
-    throw "Python 3 não foi encontrado. Instale o Python 3 e execute novamente."
+$pythonPath = Join-Path $runtime "python.exe"
+if (-not (Test-Path $pythonPath)) {
+    Write-Host "Preparando o componente interno do conector..."
+    $zipPath = Join-Path $env:TEMP "razync-python-3.12.10.zip"
+    $pythonUrl = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip"
+    Invoke-WebRequest -UseBasicParsing -Headers @{"Cache-Control"="no-cache"} -Uri $pythonUrl -OutFile $zipPath
+    Expand-Archive -Path $zipPath -DestinationPath $runtime -Force
+    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+}
+if (-not (Test-Path $pythonPath)) {
+    throw "Nao foi possivel preparar o componente interno do conector."
 }
 
 $connector = Join-Path $target "connector.py"
 $launcherContent = '@echo off' + [Environment]::NewLine +
     'title Conector Razync' + [Environment]::NewLine +
-    '"' + $python.Source + '" "' + $connector + '"' + [Environment]::NewLine +
+    '"' + $pythonPath + '" "' + $connector + '"' + [Environment]::NewLine +
     'echo.' + [Environment]::NewLine +
     'echo O Conector Razync foi encerrado ou encontrou um erro.' + [Environment]::NewLine +
     'pause'
