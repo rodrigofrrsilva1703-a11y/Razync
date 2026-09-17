@@ -875,30 +875,95 @@ def _renderizar_conferencia_fiscal_autokraft():
     m2.metric("Fiscal conferido", conferidas)
     m3.metric("Lançamentos em alerta", alertas)
     m4.metric("Contas para revisar", revisar)
-    st.markdown("#### Resultado por conta")
-    st.dataframe(
-        resumo, use_container_width=True, hide_index=True,
-        column_config={
-            "VALOR FISCAL": st.column_config.NumberColumn(format="R$ %.2f"),
-            "CONTÁBIL COMPATÍVEL": st.column_config.NumberColumn(format="R$ %.2f"),
-            "TOTAL DA CONTA": st.column_config.NumberColumn(format="R$ %.2f"),
-            "DIFERENÇA FISCAL": st.column_config.NumberColumn(format="R$ %.2f"),
-        },
-    )
-    if not detalhes.empty:
-        st.markdown("#### Lançamentos analisados")
-        filtro = st.selectbox(
-            "Exibir", ["Somente alertas", "Todos os lançamentos"],
-            key="autokraft_3_filtro_detalhes_fiscais",
+    if revisar:
+        st.error(f"{revisar} conta(s) possuem diferença fiscal e precisam de revisão.")
+    elif alertas:
+        st.warning(
+            "Os valores fiscais conferem, mas existem lançamentos contábeis adicionais "
+            "que devem ser revisados."
         )
+    else:
+        st.success("Todas as contas conferem e não foram encontrados lançamentos adicionais.")
+
+    aba_visao, aba_alertas, aba_todos = st.tabs([
+        "Visão geral", f"Alertas ({alertas})", "Todos os lançamentos"
+    ])
+
+    with aba_visao:
+        st.markdown("#### Conferência por conta")
+        ordem = {"REVISAR": 0, "AUSENTE NO CONTÁBIL": 1, "CONFERE COM ALERTAS": 2, "CONFERE": 3}
+        resumo_ordenado = resumo.assign(
+            _ORDEM=resumo["SITUAÇÃO"].map(ordem).fillna(9)
+        ).sort_values(["_ORDEM", "CONTA"])
+        for _, conta_resultado in resumo_ordenado.iterrows():
+            conta = str(conta_resultado["CONTA"])
+            situacao = str(conta_resultado["SITUAÇÃO"])
+            extras_conta = int(conta_resultado["LANÇAMENTOS EXTRAS"])
+            titulo = f"Conta {conta} · {situacao}"
+            if extras_conta:
+                titulo += f" · {extras_conta} alerta(s)"
+            with st.expander(
+                titulo,
+                expanded=situacao != "CONFERE",
+            ):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Valor fiscal", formatar_moeda(conta_resultado["VALOR FISCAL"]))
+                c2.metric("Contábil compatível", formatar_moeda(conta_resultado["CONTÁBIL COMPATÍVEL"]))
+                c3.metric("Diferença fiscal", formatar_moeda(conta_resultado["DIFERENÇA FISCAL"]))
+                c4.metric("Total movimentado", formatar_moeda(conta_resultado["TOTAL DA CONTA"]))
+                st.caption(
+                    f"Acumulador(es): {conta_resultado['ACUMULADORES']} · "
+                    f"Natureza analisada: {conta_resultado['TIPO'].title()}"
+                )
+                movimentos_conta = detalhes[detalhes["CONTA"].astype(str).eq(conta)].copy()
+                if not movimentos_conta.empty:
+                    movimentos_conta["DATA"] = pd.to_datetime(
+                        movimentos_conta["DATA"]
+                    ).dt.strftime("%d/%m/%Y")
+                    st.dataframe(
+                        movimentos_conta[[
+                            "DATA", "HISTÓRICO", "CONTRAPARTIDA", "VALOR", "CLASSIFICAÇÃO"
+                        ]],
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "VALOR": st.column_config.NumberColumn(format="R$ %.2f"),
+                            "HISTÓRICO": st.column_config.TextColumn(width="large"),
+                            "CLASSIFICAÇÃO": st.column_config.TextColumn(width="medium"),
+                        },
+                    )
+
+    with aba_alertas:
+        alertas_df = detalhes[
+            detalhes["CLASSIFICAÇÃO"].eq("ALERTA - NÃO FISCAL")
+        ].copy()
+        if alertas_df.empty:
+            st.success("Nenhum lançamento adicional foi encontrado nas contas conferidas.")
+        else:
+            st.caption(
+                "Estes lançamentos não foram usados para fechar o valor fiscal. "
+                "Revise a conta contábil e a contrapartida antes de corrigir."
+            )
+            alertas_df["DATA"] = pd.to_datetime(alertas_df["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(
+                alertas_df[["CONTA", "DATA", "HISTÓRICO", "CONTRAPARTIDA", "VALOR"]],
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "VALOR": st.column_config.NumberColumn(format="R$ %.2f"),
+                    "HISTÓRICO": st.column_config.TextColumn(width="large"),
+                },
+            )
+
+    with aba_todos:
         exibicao = detalhes.copy()
-        if filtro == "Somente alertas":
-            exibicao = exibicao[exibicao["CLASSIFICAÇÃO"].eq("ALERTA - NÃO FISCAL")]
-        exibicao["DATA"] = pd.to_datetime(exibicao["DATA"]).dt.strftime("%d/%m/%Y")
-        st.dataframe(
-            exibicao, use_container_width=True, hide_index=True,
-            column_config={"VALOR": st.column_config.NumberColumn(format="R$ %.2f")},
-        )
+        if not exibicao.empty:
+            exibicao["DATA"] = pd.to_datetime(exibicao["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(
+                exibicao, use_container_width=True, hide_index=True,
+                column_config={
+                    "VALOR": st.column_config.NumberColumn(format="R$ %.2f"),
+                    "HISTÓRICO": st.column_config.TextColumn(width="large"),
+                },
+            )
 
 
 if st.session_state.get("empresa_organizador") == "autokraft_industrial":
