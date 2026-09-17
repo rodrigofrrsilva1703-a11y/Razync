@@ -17,7 +17,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 
-VERSAO_LEITOR_FISCAL = "2026.09.17.5-natureza-acumulador"
+VERSAO_LEITOR_FISCAL = "2026.09.17.6-fechamento-pelo-total"
 
 
 def _moeda(valor) -> str:
@@ -439,12 +439,17 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
             ),
             axis=1,
         )
-        valor_compativel = round(float(movimentos.loc[movimentos["COMPATÍVEL_FISCAL"], "VALOR_ANALISADO"].sum()), 2)
+        valor_fiscal = round(float(fiscal["VALOR_FISCAL"]), 2)
         valor_total = round(float(movimentos["VALOR_ANALISADO"].sum()), 2)
+        # Muitos razões do Domínio trazem somente o código da contrapartida e o
+        # nome da empresa no histórico. Se a coluna contábil correta fecha com o
+        # acumulador, o próprio fechamento é evidência suficiente de compatibilidade.
+        if not movimentos.empty and abs(valor_total - valor_fiscal) <= 0.01:
+            movimentos["COMPATÍVEL_FISCAL"] = True
+        valor_compativel = round(float(movimentos.loc[movimentos["COMPATÍVEL_FISCAL"], "VALOR_ANALISADO"].sum()), 2)
         total_debitos = round(float(movimentos["DÉBITO"].sum()), 2) if lado == "DÉBITO" else 0.0
         total_creditos = round(float(movimentos["CRÉDITO"].sum()), 2) if lado == "CRÉDITO" else 0.0
         total_redutores = round(float(-movimentos.loc[movimentos["VALOR_ANALISADO"] < 0, "VALOR_ANALISADO"].sum()), 2)
-        valor_fiscal = round(float(fiscal["VALOR_FISCAL"]), 2)
         diferenca = round(valor_compativel - valor_fiscal, 2)
         extras = movimentos[~movimentos["COMPATÍVEL_FISCAL"]].copy()
         if abs(diferenca) <= 0.01:
