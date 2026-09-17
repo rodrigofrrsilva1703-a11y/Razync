@@ -17,7 +17,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 
-VERSAO_LEITOR_FISCAL = "2026.09.17.4-filial-mesclada"
+VERSAO_LEITOR_FISCAL = "2026.09.17.5-natureza-acumulador"
 
 
 def _moeda(valor) -> str:
@@ -140,9 +140,14 @@ def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
                 c2.metric("Contábil compatível", _moeda(item["CONTÁBIL COMPATÍVEL"]))
                 c3.metric("Diferença fiscal", _moeda(item["DIFERENÇA FISCAL"]))
                 c4.metric("Total movimentado", _moeda(item["TOTAL DA CONTA"]))
+                coluna_analisada = "Crédito" if item["TIPO"] == "SAÍDAS" else "Débito"
+                total_coluna = (
+                    item["TOTAL CRÉDITOS"] if coluna_analisada == "Crédito"
+                    else item["TOTAL DÉBITOS"]
+                )
                 st.caption(
-                    f"Débitos: {_moeda(item['TOTAL DÉBITOS'])} · "
-                    f"Créditos: {_moeda(item['TOTAL CRÉDITOS'])} · "
+                    f"Coluna analisada: {coluna_analisada} · "
+                    f"Total líquido: {_moeda(total_coluna)} · "
                     f"Estornos/redutores: {_moeda(item['ESTORNOS/REDUTORES'])}"
                 )
                 movimentos = detalhes[detalhes["CONTA"].astype(str).eq(conta)].copy()
@@ -413,7 +418,6 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
     for _, fiscal in agrupado.iterrows():
         conta = str(fiscal["CONTA"])
         lado = "CRÉDITO" if fiscal["TIPO"] == "SAÍDAS" else "DÉBITO"
-        lado_oposto = "DÉBITO" if lado == "CRÉDITO" else "CRÉDITO"
         movimentos = razao[razao["CONTA"].astype(str).eq(conta)].copy()
         movimentos["DÉBITO"] = pd.to_numeric(
             movimentos.get("DÉBITO"), errors="coerce"
@@ -421,15 +425,15 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
         movimentos["CRÉDITO"] = pd.to_numeric(
             movimentos.get("CRÉDITO"), errors="coerce"
         ).fillna(0.0)
-        # O valor precisa conservar o sinal. Lançamentos na natureza esperada
-        # somam; lançamentos no lado oposto e valores negativos reduzem o total.
-        # Assim, créditos/débitos de estorno não são descartados nem viram positivos.
-        movimentos["VALOR_ANALISADO"] = movimentos[lado] - movimentos[lado_oposto]
+        # Cada grupo do acumulador determina a coluna correta do razão:
+        # ENTRADAS/SERVIÇOS = Débito; SAÍDAS = Crédito. O lado oposto não participa
+        # da conferência. Valores negativos na coluna escolhida reduzem como estorno.
+        movimentos["VALOR_ANALISADO"] = movimentos[lado]
         movimentos = movimentos[movimentos["VALOR_ANALISADO"].abs() >= 0.005].copy()
         movimentos["COMPATÍVEL_FISCAL"] = movimentos["HISTÓRICO"].map(_parece_fiscal)
         movimentos["NATUREZA"] = movimentos.apply(
             lambda mov: (
-                f"ESTORNO/REDUTOR ({lado_oposto})"
+                f"ESTORNO/REDUTOR ({lado})"
                 if float(mov["VALOR_ANALISADO"]) < 0
                 else lado
             ),
@@ -437,8 +441,8 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
         )
         valor_compativel = round(float(movimentos.loc[movimentos["COMPATÍVEL_FISCAL"], "VALOR_ANALISADO"].sum()), 2)
         valor_total = round(float(movimentos["VALOR_ANALISADO"].sum()), 2)
-        total_debitos = round(float(movimentos["DÉBITO"].sum()), 2)
-        total_creditos = round(float(movimentos["CRÉDITO"].sum()), 2)
+        total_debitos = round(float(movimentos["DÉBITO"].sum()), 2) if lado == "DÉBITO" else 0.0
+        total_creditos = round(float(movimentos["CRÉDITO"].sum()), 2) if lado == "CRÉDITO" else 0.0
         total_redutores = round(float(-movimentos.loc[movimentos["VALOR_ANALISADO"] < 0, "VALOR_ANALISADO"].sum()), 2)
         valor_fiscal = round(float(fiscal["VALOR_FISCAL"]), 2)
         diferenca = round(valor_compativel - valor_fiscal, 2)
