@@ -818,7 +818,7 @@ if st.session_state.get("empresa_organizador") == "kairos_1208":
 
 
 def _renderizar_conferencia_fiscal_autokraft():
-    from razync.conferencia_fiscal import processar_conferencia
+    from razync.conferencia_fiscal import gerar_relatorio_excel, processar_conferencia
 
     st.markdown("---")
     st.markdown("### Conferência Fiscal × Contábil")
@@ -838,11 +838,14 @@ def _renderizar_conferencia_fiscal_autokraft():
             "Razão com todas as contas", type=["xls", "xlsx"],
             key="autokraft_3_razao_fiscal",
         )
-    if st.button(
-        "Analisar conferência fiscal", type="primary", use_container_width=True,
-        key="autokraft_3_processar_conferencia_fiscal",
-        disabled=arquivo_acumuladores is None or arquivo_razao is None,
-    ):
+    if arquivo_acumuladores is None or arquivo_razao is None:
+        st.info("Envie os dois relatórios. A conferência começará automaticamente.")
+        return
+
+    assinatura_fiscal = hashlib.sha256(
+        arquivo_acumuladores.getvalue() + arquivo_razao.getvalue()
+    ).hexdigest()
+    if st.session_state.get("autokraft_3_assinatura_fiscal") != assinatura_fiscal:
         try:
             resultado = executar_com_loading(
                 "Cruzando acumuladores, contas e lançamentos do razão...",
@@ -851,6 +854,7 @@ def _renderizar_conferencia_fiscal_autokraft():
                 arquivo_razao.getvalue(), arquivo_razao.name,
             )
             st.session_state["autokraft_3_resultado_fiscal"] = resultado
+            st.session_state["autokraft_3_assinatura_fiscal"] = assinatura_fiscal
             st.session_state.pop("autokraft_3_erro_fiscal", None)
         except Exception as erro:
             st.session_state["autokraft_3_erro_fiscal"] = str(erro)
@@ -875,6 +879,21 @@ def _renderizar_conferencia_fiscal_autokraft():
     m2.metric("Fiscal conferido", conferidas)
     m3.metric("Lançamentos em alerta", alertas)
     m4.metric("Contas para revisar", revisar)
+    periodo = resultado.get("periodo_fiscal", {})
+    inicio = pd.to_datetime(periodo.get("inicio"), errors="coerce")
+    fim = pd.to_datetime(periodo.get("fim"), errors="coerce")
+    periodo_nome = (
+        f"{inicio.strftime('%m%Y')}" if pd.notna(inicio)
+        else "PERIODO_ANALISADO"
+    )
+    st.download_button(
+        "Baixar relatório completo da conferência",
+        data=gerar_relatorio_excel(resultado),
+        file_name=f"AUTOKRAFT_3_CONFERENCIA_FISCAL_{periodo_nome}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        key="autokraft_3_download_conferencia_fiscal",
+    )
     if revisar:
         st.error(f"{revisar} conta(s) possuem diferença fiscal e precisam de revisão.")
     elif alertas:

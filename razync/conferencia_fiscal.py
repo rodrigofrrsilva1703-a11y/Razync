@@ -11,6 +11,9 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 
 def _texto(valor) -> str:
@@ -193,3 +196,75 @@ def processar_conferencia(acumuladores_bytes: bytes, acumuladores_nome: str, raz
         "resumo": resumo, "detalhes": detalhes, "acumuladores": acumuladores,
         "periodo_fiscal": periodo_fiscal, "periodo_razao": periodo_razao,
     }
+
+
+def gerar_relatorio_excel(resultado: dict) -> bytes:
+    """Gera o relatório da conferência em abas auditáveis."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    azul = PatternFill("solid", fgColor="123047")
+    azul_claro = PatternFill("solid", fgColor="DCEAF4")
+    amarelo = PatternFill("solid", fgColor="FFF1CC")
+    vermelho = PatternFill("solid", fgColor="FADBD8")
+    verde = PatternFill("solid", fgColor="DDF2E1")
+
+    def adicionar_aba(nome: str, quadro: pd.DataFrame):
+        ws = wb.create_sheet(nome)
+        if quadro is None or quadro.empty:
+            ws.append(["Nenhum registro encontrado"])
+            return ws
+        colunas = list(quadro.columns)
+        ws.append(colunas)
+        for celula in ws[1]:
+            celula.fill = azul
+            celula.font = Font(color="FFFFFF", bold=True)
+            celula.alignment = Alignment(horizontal="center")
+        for registro in quadro.itertuples(index=False, name=None):
+            valores = []
+            for valor in registro:
+                if isinstance(valor, pd.Timestamp):
+                    valor = valor.to_pydatetime()
+                elif pd.isna(valor):
+                    valor = ""
+                valores.append(valor)
+            ws.append(valores)
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+        for indice, coluna in enumerate(colunas, start=1):
+            valores = [str(ws.cell(linha, indice).value or "") for linha in range(1, ws.max_row + 1)]
+            ws.column_dimensions[get_column_letter(indice)].width = min(max(len(v) for v in valores) + 2, 55)
+            if any(chave in str(coluna).upper() for chave in ("VALOR", "TOTAL", "DIFERENÇA", "CONTÁBIL")):
+                for linha in range(2, ws.max_row + 1):
+                    ws.cell(linha, indice).number_format = 'R$ #,##0.00'
+            if str(coluna).upper() == "DATA":
+                for linha in range(2, ws.max_row + 1):
+                    ws.cell(linha, indice).number_format = "dd/mm/yyyy"
+        return ws
+
+    resumo = resultado.get("resumo", pd.DataFrame()).copy()
+    detalhes = resultado.get("detalhes", pd.DataFrame()).copy()
+    acumuladores = resultado.get("acumuladores", pd.DataFrame()).copy()
+    ws_resumo = adicionar_aba("Resumo por conta", resumo)
+    if not resumo.empty and "SITUAÇÃO" in resumo.columns:
+        coluna_situacao = list(resumo.columns).index("SITUAÇÃO") + 1
+        for linha in range(2, ws_resumo.max_row + 1):
+            situacao = str(ws_resumo.cell(linha, coluna_situacao).value or "")
+            preenchimento = (
+                verde if situacao == "CONFERE" else
+                amarelo if situacao == "CONFERE COM ALERTAS" else vermelho
+            )
+            for celula in ws_resumo[linha]:
+                celula.fill = preenchimento
+    alertas = detalhes[
+        detalhes.get("CLASSIFICAÇÃO", pd.Series(dtype=str)).eq("ALERTA - NÃO FISCAL")
+    ].copy() if not detalhes.empty else pd.DataFrame()
+    ws_alertas = adicionar_aba("Alertas", alertas)
+    if ws_alertas.max_row > 1:
+        for linha in range(2, ws_alertas.max_row + 1):
+            for celula in ws_alertas[linha]:
+                celula.fill = amarelo
+    adicionar_aba("Todos os lançamentos", detalhes)
+    adicionar_aba("Acumuladores considerados", acumuladores)
+    saida = io.BytesIO()
+    wb.save(saida)
+    return saida.getvalue()
