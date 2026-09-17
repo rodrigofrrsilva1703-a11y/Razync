@@ -212,7 +212,8 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
         [class*="st-key-rz_certificado_"] {
             position: fixed;
             right: 1.15rem;
-            bottom: 4.6rem;
+            top: 4.6rem;
+            bottom: auto;
             z-index: 999;
             width: auto;
             margin: 0;
@@ -238,7 +239,7 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
             transform: translateY(-1px);
         }
         @media (max-width: 640px) {
-            [class*="st-key-rz_certificado_"] {right: .7rem; bottom: 4.2rem;}
+            [class*="st-key-rz_certificado_"] {right: .7rem; top: 4.2rem; bottom: auto;}
             [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button {
                 min-height: 2rem; padding: .25rem .62rem; font-size: .68rem;
             }
