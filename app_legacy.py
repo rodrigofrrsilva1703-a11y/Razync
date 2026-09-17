@@ -8353,6 +8353,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         )
 
     if empresa_organizador:
+        from razync.certificado_digital import renderizar_certificado_digital
+        renderizar_certificado_digital(
+            str(empresa_organizador), str(titulo_pagina_organizador)
+        )
         st.markdown(
             """
             <style>

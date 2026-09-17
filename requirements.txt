@@ -9,3 +9,4 @@ PyMuPDF==1.26.3
 pytesseract==0.3.13
 rapidocr==3.9.2
 onnxruntime==1.20.1
+cryptography==46.0.0
