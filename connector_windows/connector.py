@@ -12,11 +12,13 @@ import os
 import secrets
 import subprocess
 import sys
+import time
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -85,6 +87,47 @@ def sign_challenge(thumbprint: str, challenge_b64: str) -> dict:
     if not isinstance(result, dict):
         raise RuntimeError("Resposta de assinatura inválida.")
     return result
+
+
+DCTF_URL = "https://cav.receita.fazenda.gov.br/autenticacao/login"
+
+
+def open_dctfweb() -> dict:
+    """Abre o e-CAC no navegador padrão para acesso autorizado pelo usuário."""
+    if not webbrowser.open(DCTF_URL, new=2):
+        os.startfile(DCTF_URL)
+    return {"opened": True, "url": DCTF_URL}
+
+
+def latest_dctf_report() -> dict:
+    """Lê somente um relatório fiscal recente da pasta Downloads."""
+    downloads = Path(os.environ.get("USERPROFILE", "")) / "Downloads"
+    if not downloads.is_dir():
+        raise ValueError("A pasta Downloads do Windows não foi encontrada.")
+    allowed = {".pdf", ".xls", ".xlsx", ".csv"}
+    hints = ("dctf", "darf", "debito", "debitos", "declaracao", "receita")
+    limit_time = time.time() - 3600
+    candidates = [
+        item for item in downloads.iterdir()
+        if item.is_file()
+        and item.suffix.lower() in allowed
+        and item.stat().st_mtime >= limit_time
+        and any(hint in item.name.lower() for hint in hints)
+    ]
+    if not candidates:
+        raise ValueError(
+            "Nenhum relatório recente da DCTFWeb foi encontrado em Downloads. "
+            "Baixe o relatório no e-CAC e tente novamente."
+        )
+    report = max(candidates, key=lambda item: item.stat().st_mtime)
+    size = report.stat().st_size
+    if size <= 0 or size > 25 * 1024 * 1024:
+        raise ValueError("O relatório encontrado está vazio ou excede 25 MB.")
+    return {
+        "name": report.name,
+        "modified_at": report.stat().st_mtime,
+        "content": base64.b64encode(report.read_bytes()).decode("ascii"),
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -157,6 +200,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json({"error": str(exc)}, 500)
             return
+        if path == "/v1/dctf/latest":
+            try:
+                self._json(latest_dctf_report())
+            except ValueError as exc:
+                self._json({"error": str(exc)}, 404)
+            except Exception as exc:
+                self._json({"error": str(exc)}, 500)
+            return
         self._json({"error": "Rota não encontrada."}, 404)
 
     def do_POST(self) -> None:
@@ -182,6 +233,9 @@ class Handler(BaseHTTPRequestHandler):
                     str(body.get("challenge", "")).strip(),
                 )
                 self._json(result)
+                return
+            if path == "/v1/dctf/open":
+                self._json(open_dctfweb())
                 return
             self._json({"error": "Rota não encontrada."}, 404)
         except ValueError as exc:
