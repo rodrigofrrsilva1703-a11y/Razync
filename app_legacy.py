@@ -9294,7 +9294,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         ])
         with aba_fiscal_ef:
             from razync.conferencia_fiscal import renderizar_conferencia_fiscal
-            renderizar_conferencia_fiscal(chave_estabelecimento, titulo_pagina_organizador)
+            renderizar_conferencia_fiscal(chave_base_ef, empresa_ef)
 
         with aba_base_ef:
             renderizar_base_inteligente_eletro_forte(
@@ -10868,7 +10868,7 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         ])
         with aba_fiscal:
             from razync.conferencia_fiscal import renderizar_conferencia_fiscal
-            renderizar_conferencia_fiscal(chave_estabelecimento, titulo_pagina_organizador)
+            renderizar_conferencia_fiscal(empresa_base_nova, nome_base_nova)
 
         with aba_base_inteligente:
             renderizar_base_inteligente_empresa(
