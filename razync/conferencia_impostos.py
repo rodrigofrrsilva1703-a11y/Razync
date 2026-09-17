@@ -144,7 +144,7 @@ def gerar_relatorio_impostos(resultado: pd.DataFrame, empresa: str, competencia:
 
 def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
     import streamlit as st
-    from razync.certificado_digital import buscar_certificado
+    from razync.certificado_digital import buscar_certificado, carregar_certificado
 
     chave = re.sub(r"[^a-z0-9_]+", "_", str(prefixo).lower()).strip("_")
     st.markdown("### Conferência de Impostos")
@@ -158,11 +158,54 @@ def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
         certificado = None
     if certificado:
         st.success(
-            f"Certificado A1 disponível · CNPJ {certificado.get('cnpj') or 'não informado'} · "
+            f"Certificado A1 cadastrado e selecionado automaticamente · "
+            f"CNPJ {certificado.get('cnpj') or 'não informado'} · "
             f"validade {pd.to_datetime(certificado.get('validade_fim')).strftime('%d/%m/%Y')}"
         )
+        if st.button(
+            "Validar certificado cadastrado",
+            key=f"impostos_{chave}_validar_certificado",
+            use_container_width=True,
+        ):
+            try:
+                _, _, metadados = carregar_certificado(prefixo)
+                st.success(
+                    "Certificado validado com sucesso. Titular: "
+                    + str(metadados.get("titular") or "não informado")
+                )
+            except Exception as erro:
+                st.error(f"Não foi possível usar o certificado cadastrado: {erro}")
+
+        serpro = st.secrets.get("serpro", {})
+        chave_serpro = str(
+            serpro.get("consumer_key", "")
+            or st.secrets.get("SERPRO_CONSUMER_KEY", "")
+        )
+        segredo_serpro = str(
+            serpro.get("consumer_secret", "")
+            or st.secrets.get("SERPRO_CONSUMER_SECRET", "")
+        )
+        if chave_serpro and segredo_serpro:
+            st.info(
+                "Integra Contador configurado. O certificado A1 será usado nas "
+                "consultas automáticas quando o serviço DCTFWeb for acionado."
+            )
+        else:
+            st.warning(
+                "O certificado está pronto, mas a consulta automática oficial ainda "
+                "precisa das chaves do contrato Integra Contador/Serpro. Enquanto isso, "
+                "envie abaixo o relatório exportado da DCTFWeb."
+            )
+            st.link_button(
+                "Conhecer o Integra Contador",
+                "https://loja.serpro.gov.br/integra-contador",
+                use_container_width=True,
+            )
     else:
-        st.info("Cadastre o certificado A1 no botão flutuante para habilitar futuras consultas automáticas à Receita.")
+        st.info(
+            "Cadastre o certificado A1 no botão flutuante. Para a consulta automática "
+            "também serão necessárias as chaves do Integra Contador/Serpro."
+        )
 
     competencia = st.date_input(
         "Competência", value=date.today().replace(day=1),
