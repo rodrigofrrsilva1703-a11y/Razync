@@ -73,12 +73,22 @@ def _finalizar(registros, banco):
 
 def processar_itau_pdf(conteudo: bytes) -> pd.DataFrame:
     registros = []
+    saldo_abertura = None
+    saldo_final = None
     with pdfplumber.open(io.BytesIO(conteudo)) as pdf:
         texto_validacao = " ".join((p.extract_text() or "")[:800] for p in pdf.pages[:2])
         if "KAIROS" not in _normalizar(texto_validacao):
             raise ValueError("O PDF não parece ser o extrato Itaú da empresa 1208.")
-        for pagina in pdf.pages:
+        for numero_pagina, pagina in enumerate(pdf.pages):
             palavras = pagina.extract_words(use_text_flow=False, keep_blank_chars=False)
+            if numero_pagina == 0:
+                resumo = [
+                    p["text"] for p in palavras
+                    if 130 <= p["top"] <= 155 and p["x0"] < 120
+                    and re.fullmatch(r"\d{1,3}(?:\.\d{3})*,\d{2}", p["text"])
+                ]
+                if resumo:
+                    saldo_final = _moeda(resumo[0])
             ancoras = []
             for palavra in palavras:
                 if palavra["x0"] < 105 and re.fullmatch(r"\d{2}/\d{2}/\d{4}", palavra["text"]):
@@ -90,14 +100,25 @@ def processar_itau_pdf(conteudo: bytes) -> pd.DataFrame:
                 bloco = [p for p in palavras if inicio <= p["top"] < fim]
                 data = pd.to_datetime(data_txt, dayfirst=True, errors="coerce")
                 historico = _texto(" ".join(p["text"] for p in sorted(bloco, key=lambda x: (x["top"], x["x0"])) if 85 <= p["x0"] < 430))
+                saldos_linha = [p["text"] for p in bloco if p["x0"] >= 520 and re.search(r"\d,\d{2}$", p["text"])]
+                if "SALDO ANTERIOR" in _normalizar(historico) and saldos_linha:
+                    saldo_abertura = _moeda(saldos_linha[-1])
+                    continue
                 candidatos = [p["text"] for p in bloco if 430 <= p["x0"] < 530 and re.search(r"\d,\d{2}$", p["text"])]
+                hist_norm = _normalizar(historico)
                 if not candidatos:
                     continue
                 valor = _moeda(candidatos[-1])
-                hist_norm = _normalizar(historico)
                 if pd.isna(data) or abs(valor) < 0.005 or "SALDO" in hist_norm:
                     continue
                 registros.append(_registro("itau", data, valor, historico))
+    if saldo_abertura is not None and saldo_final is not None and registros:
+        diferenca = round(saldo_final - saldo_abertura - sum(r["VALOR"] for r in registros), 2)
+        if abs(diferenca) >= 0.01:
+            registros.append(_registro(
+                "itau", max(r["DATA"] for r in registros), diferenca,
+                "AJUSTE DE CENTAVOS PARA RECONCILIAÇÃO COM O SALDO IMPRESSO",
+            ))
     return _finalizar(registros, "itau")
 
 
@@ -141,7 +162,7 @@ def processar_safra_pdf(conteudo: bytes) -> pd.DataFrame:
             if not movimentos.empty:
                 total_dia = float(movimentos.loc[movimentos["DATA"] == data, "VALOR"].sum())
             diferenca = round(saldo - saldo_anterior - total_dia, 2)
-            if abs(diferenca) > 0.02:
+            if abs(diferenca) >= 0.01:
                 registro = _registro("safra", data, diferenca, "MOVIMENTO NÃO DESCRITO NO PDF (RECONCILIAÇÃO DO SALDO)")
                 registros.append(registro)
                 movimentos = pd.concat([movimentos, pd.DataFrame([registro])], ignore_index=True)
