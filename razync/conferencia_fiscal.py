@@ -17,6 +17,9 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 
+VERSAO_LEITOR_FISCAL = "2026.09.17.4-filial-mesclada"
+
+
 def _moeda(valor) -> str:
     numero = float(valor or 0)
     return f"R$ {numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -55,6 +58,7 @@ def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
     import hashlib
     assinatura = hashlib.sha256(
         arquivo_acumuladores.getvalue() + arquivo_razao.getvalue()
+        + VERSAO_LEITOR_FISCAL.encode("utf-8") + codigo_empresa.encode("utf-8")
     ).hexdigest()
     if st.session_state.get(f"{base}_assinatura") != assinatura:
         try:
@@ -352,7 +356,10 @@ def ler_razao(conteudo: bytes, nome: str) -> tuple[pd.DataFrame, dict]:
                         colunas["DÉBITO"] = indice
                     elif rotulo == "CREDITO":
                         colunas["CRÉDITO"] = indice
-                    elif rotulo in {"FILIAL", "COD FILIAL", "CODIGO FILIAL"}:
+                    elif rotulo in {
+                        "FILIAL", "COD FILIAL", "CODIGO FILIAL", "COD DA FILIAL",
+                        "CODIGO DA FILIAL", "EMPRESA FILIAL", "ESTABELECIMENTO", "ESTAB",
+                    } or rotulo.startswith("FILIAL "):
                         colunas["FILIAL"] = indice
                 continue
 
@@ -368,7 +375,12 @@ def ler_razao(conteudo: bytes, nome: str) -> tuple[pd.DataFrame, dict]:
                 continue
             filial = ""
             if colunas["FILIAL"] is not None and len(valores) > colunas["FILIAL"]:
-                filial = re.sub(r"\D", "", _texto(valores[colunas["FILIAL"]]))
+                # Nos XLS do Domínio o cabeçalho pode ocupar várias células e o
+                # valor da filial ficar uma ou duas posições após o início dele.
+                filial = re.sub(
+                    r"\D", "",
+                    _texto(_primeiro_preenchido(valores, colunas["FILIAL"], 3)),
+                )
                 filial = filial.lstrip("0") or ("0" if filial else "")
             registros.append({
                 "CONTA": conta, "DESCRIÇÃO_CONTA": descricao_conta, "FILIAL": filial,
