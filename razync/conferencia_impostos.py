@@ -53,7 +53,35 @@ def _linhas_documento(conteudo: bytes, nome: str) -> list[list]:
     extensao = Path(nome).suffix.lower()
     if extensao == ".pdf":
         leitor = PdfReader(io.BytesIO(conteudo))
-        return [[linha] for pagina in leitor.pages for linha in (pagina.extract_text() or "").splitlines()]
+        linhas = [
+            [linha]
+            for pagina in leitor.pages
+            for linha in (pagina.extract_text() or "").splitlines()
+            if linha.strip()
+        ]
+        if linhas:
+            return linhas
+        # Alguns balancetes são PDFs digitalizados. Nesse caso usamos OCR,
+        # mantendo o mesmo fluxo de extração por descrições e valores.
+        try:
+            import fitz
+            import pytesseract
+            from PIL import Image
+
+            documento = fitz.open(stream=conteudo, filetype="pdf")
+            linhas_ocr = []
+            for pagina in documento:
+                pixmap = pagina.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                imagem = Image.frombytes(
+                    "RGB", [pixmap.width, pixmap.height], pixmap.samples
+                )
+                texto = pytesseract.image_to_string(imagem, lang="por")
+                linhas_ocr.extend([[linha] for linha in texto.splitlines() if linha.strip()])
+            return linhas_ocr
+        except Exception as erro:
+            raise ValueError(
+                "O balancete PDF não possui texto legível e o OCR não conseguiu processá-lo."
+            ) from erro
     if extensao == ".csv":
         quadro = pd.read_csv(io.BytesIO(conteudo), header=None, sep=None, engine="python", dtype=object)
         return quadro.fillna("").values.tolist()
@@ -181,7 +209,7 @@ def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
         st.success(f"Relatório da DCTFWeb recebido: {nome_receita}")
 
     arquivo_balancete = st.file_uploader(
-        "Balancete contábil", type=["xls", "xlsx", "csv"],
+        "Balancete contábil", type=["pdf", "xls", "xlsx", "csv"],
         key=f"impostos_{chave}_balancete",
         help="Este é o único arquivo que precisa ser enviado manualmente.",
     )
