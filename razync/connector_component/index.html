@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+:root{font-family:Inter,system-ui,sans-serif;color:#eaf5f8;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:transparent}
+.card{border:1px solid rgba(99,203,239,.26);border-radius:12px;padding:12px;background:rgba(9,28,38,.82)}
+.row{display:flex;align-items:center;gap:8px}.grow{flex:1}
+.title{font-size:13px;font-weight:700}.sub{font-size:11px;color:#9fb6bf;margin-top:3px}
+.dot{width:8px;height:8px;border-radius:50%;background:#6b7c83}.dot.ok{background:#36d399}.dot.warn{background:#f5b942}
+button,input,select{width:100%;border-radius:8px;border:1px solid rgba(108,188,216,.28);background:#102c38;color:#edf9fc;padding:8px 10px;font-size:12px}
+button{cursor:pointer;font-weight:650;margin-top:8px}button.primary{background:#147da5;border-color:#36bce9}
+button:hover{filter:brightness(1.1)}input{margin-top:9px}select{margin-top:9px}
+.hidden{display:none}.error{font-size:11px;color:#ff9d9d;margin-top:7px}
+.link{font-size:11px;color:#73d6f6;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="row">
+    <span id="dot" class="dot"></span>
+    <div class="grow"><div class="title">Certificado instalado no Windows</div><div id="status" class="sub">Verificando o conector…</div></div>
+  </div>
+  <div id="offline" class="hidden">
+    <div class="sub" style="margin-top:9px">Instale e abra o Conector Razync neste computador.</div>
+    <button id="retry">Verificar novamente</button>
+  </div>
+  <div id="pair" class="hidden">
+    <input id="code" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos exibido pelo conector">
+    <button id="pairButton" class="primary">Parear computador</button>
+  </div>
+  <div id="ready" class="hidden">
+    <select id="certificates"></select>
+    <button id="selectButton" class="primary">Usar este certificado</button>
+  </div>
+  <div id="error" class="error hidden"></div>
+</div>
+<script>
+const API_VERSION=1;
+let args={};
+const $=id=>document.getElementById(id);
+function post(type,data={}){window.parent.postMessage({isStreamlitMessage:true,type,...data},"*")}
+function value(v){post("streamlit:setComponentValue",{value:v})}
+function height(){post("streamlit:setFrameHeight",{height:document.documentElement.scrollHeight})}
+function show(id){["offline","pair","ready"].forEach(x=>$(x).classList.toggle("hidden",x!==id));height()}
+function error(message){$("error").textContent=message;$("error").classList.toggle("hidden",!message);height()}
+function tokenKey(){return "razync_connector_token_v1"}
+function headers(){const t=localStorage.getItem(tokenKey());return t?{Authorization:"Bearer "+t}:{}}
+async function request(path,options={}){
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),2500);
+  try{
+    return await fetch((args.connector_url||"http://127.0.0.1:17891")+path,{
+      ...options,headers:{...(options.headers||{}),...headers()},signal:controller.signal,cache:"no-store"
+    });
+  }finally{clearTimeout(timer)}
+}
+async function loadCertificates(){
+  const response=await request("/v1/certificates");
+  if(response.status===401){localStorage.removeItem(tokenKey());show("pair");$("status").textContent="Conector encontrado — informe o código";return}
+  if(!response.ok)throw new Error("Não foi possível ler os certificados.");
+  const data=await response.json();const list=data.certificates||[];const select=$("certificates");select.innerHTML="";
+  if(!list.length){const op=document.createElement("option");op.textContent="Nenhum certificado com chave privada";op.value="";select.appendChild(op)}
+  list.forEach((cert,index)=>{const op=document.createElement("option");op.value=String(index);op.textContent=(cert.subject||"Certificado")+" · até "+String(cert.valid_to||"").slice(0,10);op._cert=cert;select.appendChild(op)});
+  select._certificates=list;show("ready");$("dot").className="dot ok";$("status").textContent=list.length?list.length+" certificado(s) disponível(is)":"Conector ativo, sem certificados";
+  value({status:"ready",count:list.length});height()
+}
+async function detect(){
+  error("");$("status").textContent="Verificando o conector…";$("dot").className="dot";
+  try{
+    const health=await request("/v1/health");
+    if(!health.ok)throw new Error();
+    if(localStorage.getItem(tokenKey()))await loadCertificates();
+    else{show("pair");$("dot").className="dot warn";$("status").textContent="Conector encontrado — pareamento necessário";value({status:"pairing"})}
+  }catch(e){show("offline");$("status").textContent="Conector não encontrado";value({status:"offline"})}
+}
+$("retry").onclick=detect;
+$("pairButton").onclick=async()=>{
+  error("");const code=$("code").value.trim();
+  if(!/^\d{6}$/.test(code)){error("Informe o código de 6 dígitos.");return}
+  try{
+    const response=await request("/v1/pair",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});
+    const data=await response.json();if(!response.ok)throw new Error(data.error||"Pareamento recusado.");
+    localStorage.setItem(tokenKey(),data.token);await loadCertificates()
+  }catch(e){error(e.message||"Falha no pareamento.")}
+};
+$("selectButton").onclick=()=>{
+  const list=$("certificates")._certificates||[];const cert=list[Number($("certificates").value)];
+  if(cert)value({status:"selected",certificate:cert})
+};
+window.addEventListener("message",event=>{
+  if(event.data.type==="streamlit:render"){args=event.data.args||{};detect()}
+});
+post("streamlit:componentReady",{apiVersion:API_VERSION});height();
+</script>
+</body>
+</html>
