@@ -8,6 +8,18 @@ $source = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Join-Path $env:LOCALAPPDATA "Razync\Connector"
 $target = Join-Path $root "app"
 $runtime = Join-Path $root "python"
+
+# Encerra somente instâncias antigas do próprio conector antes de atualizar.
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.CommandLine -and
+        $_.CommandLine -like "*Razync*Connector*connector.py*"
+    } |
+    ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+Start-Sleep -Milliseconds 800
+
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 New-Item -ItemType Directory -Path $runtime -Force | Out-Null
 
