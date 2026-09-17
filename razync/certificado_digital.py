@@ -210,21 +210,39 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
         """
         <style>
         [class*="st-key-rz_certificado_"] {
-            border: 1px solid rgba(58, 142, 181, .28);
-            border-radius: 14px;
-            background: linear-gradient(135deg, rgba(12, 28, 39, .98), rgba(8, 20, 29, .98));
-            padding: .48rem .7rem;
-            margin: .1rem 0 .65rem;
-            box-shadow: none;
+            position: fixed;
+            right: 1.15rem;
+            bottom: 4.6rem;
+            z-index: 999;
+            width: auto;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
         }
         [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button {
-            min-height: 2rem; padding: .25rem .7rem; font-size: .72rem;
-            border-color: rgba(73, 126, 154, .32);
+            min-height: 2.15rem;
+            width: auto;
+            padding: .3rem .72rem;
+            border: 1px solid rgba(44, 183, 230, .35);
+            border-radius: 999px;
+            background: rgba(8, 24, 34, .94);
+            box-shadow: 0 7px 22px rgba(0, 0, 0, .28);
+            color: #e9f7fc;
+            font-size: .72rem;
+            font-weight: 700;
+            backdrop-filter: blur(10px);
         }
-        .rz-cert-icon {font-size: 1.05rem; line-height: 1; padding-top: .12rem;}
-        .rz-cert-title {font-size: .82rem; font-weight: 750; color: #eef7fb; line-height: 1.1;}
-        .rz-cert-copy {font-size: .67rem; color: #8298a7; margin-top: .1rem; line-height: 1.2;}
-        .rz-cert-status {text-align: right; font-size: .69rem; font-weight: 700; white-space: nowrap;}
+        [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button:hover {
+            border-color: rgba(44, 183, 230, .7);
+            transform: translateY(-1px);
+        }
+        @media (max-width: 640px) {
+            [class*="st-key-rz_certificado_"] {right: .7rem; bottom: 4.2rem;}
+            [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button {
+                min-height: 2rem; padding: .25rem .62rem; font-size: .68rem;
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -237,49 +255,28 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
     else:
         erro_carregamento = ""
 
+    if erro_carregamento:
+        indicador, status = "🔴", "Indisponível"
+    elif atual:
+        validade_status = date.fromisoformat(atual["validade_fim"])
+        dias_status = (validade_status - date.today()).days
+        indicador = "🟢" if dias_status > 30 else "🟡" if dias_status >= 0 else "🔴"
+        status = "Ativo" if dias_status >= 0 else "Vencido"
+    else:
+        indicador, status = "⚪", "Não cadastrado"
+
     with st.container(key=f"rz_certificado_{chave_visual}"):
-        icone_col, titulo_col, status_col, acao_col = st.columns(
-            [.32, 4.5, 1.15, 1.05], vertical_alignment="center", gap="small"
-        )
-        with icone_col:
-            st.markdown('<div class="rz-cert-icon">🔐</div>', unsafe_allow_html=True)
-        with titulo_col:
-            if atual:
-                validade = date.fromisoformat(atual["validade_fim"])
-                subtitulo = (
-                    f"CNPJ {atual['cnpj'] or 'não informado'} · "
-                    f"vence em {validade.strftime('%d/%m/%Y')}"
-                )
-            else:
-                subtitulo = "Nenhum certificado A1 vinculado"
-            st.markdown(
-                '<div class="rz-cert-title">Certificado Digital</div>'
-                f'<div class="rz-cert-copy">{subtitulo}</div>',
-                unsafe_allow_html=True,
-            )
-        with status_col:
-            if erro_carregamento:
-                cor, status = "#f85149", "Indisponível"
-            elif atual:
-                validade_status = date.fromisoformat(atual["validade_fim"])
-                dias_status = (validade_status - date.today()).days
-                cor = "#3fb950" if dias_status > 30 else "#d6a84b" if dias_status >= 0 else "#f85149"
-                status = "Ativo" if dias_status >= 0 else "Vencido"
-            else:
-                cor, status = "#8298a7", "Não cadastrado"
-            st.markdown(
-                f'<div class="rz-cert-status" style="color:{cor};">● {status}</div>',
-                unsafe_allow_html=True,
-            )
-        with acao_col:
-            with st.popover("Gerenciar" if atual else "Adicionar", use_container_width=True):
+        with st.popover(f"🔐 Certificado  {indicador}"):
                 st.markdown("#### Certificado Digital A1")
+                st.caption(f"Status: {status}")
                 if erro_carregamento:
                     st.error(erro_carregamento)
                     return
                 if atual:
+                    validade = date.fromisoformat(atual["validade_fim"])
                     st.write(f"**Titular:** {atual['titular'] or 'Não informado'}")
                     st.write(f"**CNPJ:** {atual['cnpj'] or 'Não informado'}")
+                    st.write(f"**Validade:** {validade.strftime('%d/%m/%Y')}")
                     st.caption(
                         f"Emissor: {atual['emissor']} · Série final: "
                         f"…{str(atual['numero_serie'])[-8:]}"
