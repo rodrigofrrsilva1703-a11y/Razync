@@ -213,24 +213,18 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
             border: 1px solid rgba(58, 142, 181, .28);
             border-radius: 14px;
             background: linear-gradient(135deg, rgba(12, 28, 39, .98), rgba(8, 20, 29, .98));
-            padding: .78rem .95rem .62rem;
-            margin: .15rem 0 .85rem;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, .10);
+            padding: .48rem .7rem;
+            margin: .1rem 0 .65rem;
+            box-shadow: none;
         }
-        [class*="st-key-rz_certificado_"] [data-testid="stMetric"] {
-            background: rgba(13, 36, 49, .72);
-            border: 1px solid rgba(73, 126, 154, .22);
-            border-radius: 10px;
-            padding: .55rem .7rem;
+        [class*="st-key-rz_certificado_"] [data-testid="stPopover"] button {
+            min-height: 2rem; padding: .25rem .7rem; font-size: .72rem;
+            border-color: rgba(73, 126, 154, .32);
         }
-        [class*="st-key-rz_certificado_"] [data-testid="stExpander"] {
-            border-color: rgba(73, 126, 154, .25);
-            border-radius: 10px;
-            background: rgba(6, 17, 24, .38);
-        }
-        .rz-cert-title {font-size: .96rem; font-weight: 750; color: #eef7fb;}
-        .rz-cert-copy {font-size: .73rem; color: #8298a7; margin-top: .08rem;}
-        .rz-cert-status {text-align: right; font-size: .75rem; font-weight: 700; padding-top: .25rem;}
+        .rz-cert-icon {font-size: 1.05rem; line-height: 1; padding-top: .12rem;}
+        .rz-cert-title {font-size: .82rem; font-weight: 750; color: #eef7fb; line-height: 1.1;}
+        .rz-cert-copy {font-size: .67rem; color: #8298a7; margin-top: .1rem; line-height: 1.2;}
+        .rz-cert-status {text-align: right; font-size: .69rem; font-weight: 700; white-space: nowrap;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -244,11 +238,23 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
         erro_carregamento = ""
 
     with st.container(key=f"rz_certificado_{chave_visual}"):
-        titulo_col, status_col = st.columns([4, 1.35], vertical_alignment="center")
+        icone_col, titulo_col, status_col, acao_col = st.columns(
+            [.32, 4.5, 1.15, 1.05], vertical_alignment="center", gap="small"
+        )
+        with icone_col:
+            st.markdown('<div class="rz-cert-icon">🔐</div>', unsafe_allow_html=True)
         with titulo_col:
+            if atual:
+                validade = date.fromisoformat(atual["validade_fim"])
+                subtitulo = (
+                    f"CNPJ {atual['cnpj'] or 'não informado'} · "
+                    f"vence em {validade.strftime('%d/%m/%Y')}"
+                )
+            else:
+                subtitulo = "Nenhum certificado A1 vinculado"
             st.markdown(
-                '<div class="rz-cert-title">🔐 Certificado Digital</div>'
-                '<div class="rz-cert-copy">Acesso protegido para consultas fiscais da empresa.</div>',
+                '<div class="rz-cert-title">Certificado Digital</div>'
+                f'<div class="rz-cert-copy">{subtitulo}</div>',
                 unsafe_allow_html=True,
             )
         with status_col:
@@ -265,82 +271,61 @@ def renderizar_certificado_digital(empresa: str, nome_empresa: str) -> None:
                 f'<div class="rz-cert-status" style="color:{cor};">● {status}</div>',
                 unsafe_allow_html=True,
             )
-
-        if erro_carregamento:
-            st.error(erro_carregamento)
-            return
-        if atual:
-            validade = date.fromisoformat(atual["validade_fim"])
-            dias = (validade - date.today()).days
-            if dias < 0:
-                st.error(f"Certificado vencido em {validade.strftime('%d/%m/%Y')}.")
-            elif dias <= 30:
-                st.warning(f"Certificado vence em {dias} dia(s): {validade.strftime('%d/%m/%Y')}.")
-            else:
-                st.success(f"Certificado válido até {validade.strftime('%d/%m/%Y')}.")
-            m1, m2, m3 = st.columns([1.25, 1.45, 1])
-            m1.metric("CNPJ", atual["cnpj"] or "Não informado")
-            m2.metric("Titular", atual["titular"] or "Não informado")
-            m3.metric("Validade", validade.strftime("%d/%m/%Y"))
-            st.caption(
-                f"Emissor: {atual['emissor']} · Série final: "
-                f"…{str(atual['numero_serie'])[-8:]}"
-            )
-        else:
-            st.info(
-                "Nenhum certificado vinculado. Cadastre um A1 para preparar as "
-                "consultas fiscais automáticas."
-            )
-
-        rotulo_gerenciar = "Substituir ou remover" if atual else "Cadastrar certificado A1"
-        with st.expander(rotulo_gerenciar, expanded=not atual):
-            st.caption(
-                "O arquivo e a senha são criptografados antes do armazenamento. "
-                "A senha nunca é exibida novamente."
-            )
-            with st.form(f"form_certificado_{empresa}", clear_on_submit=True):
-                arquivo = st.file_uploader(
-                    "Arquivo do certificado", type=["pfx", "p12"],
-                    help="Selecione o arquivo A1 no formato .pfx ou .p12.",
+        with acao_col:
+            with st.popover("Gerenciar" if atual else "Adicionar", use_container_width=True):
+                st.markdown("#### Certificado Digital A1")
+                if erro_carregamento:
+                    st.error(erro_carregamento)
+                    return
+                if atual:
+                    st.write(f"**Titular:** {atual['titular'] or 'Não informado'}")
+                    st.write(f"**CNPJ:** {atual['cnpj'] or 'Não informado'}")
+                    st.caption(
+                        f"Emissor: {atual['emissor']} · Série final: "
+                        f"…{str(atual['numero_serie'])[-8:]}"
+                    )
+                st.caption(
+                    "Arquivo e senha são armazenados com criptografia."
                 )
-                col_senha, col_cnpj = st.columns(2)
-                with col_senha:
+                with st.form(f"form_certificado_{empresa}", clear_on_submit=True):
+                    arquivo = st.file_uploader(
+                        "Certificado A1", type=["pfx", "p12"],
+                        help="Arquivo .pfx ou .p12.",
+                    )
                     senha = st.text_input("Senha", type="password")
-                with col_cnpj:
                     cnpj_manual = st.text_input(
                         "CNPJ manual (opcional)",
-                        help="Use apenas se o certificado não informar automaticamente.",
+                        help="Use apenas se não for identificado automaticamente.",
                     )
-                confirmar = st.form_submit_button(
-                    "Validar e salvar certificado", type="primary", use_container_width=True
-                )
-            if confirmar:
-                if arquivo is None or not senha:
-                    st.error("Envie o certificado e informe a senha.")
-                else:
-                    try:
-                        metadados = validar_certificado(arquivo.getvalue(), senha)
-                        salvo = salvar_certificado(
-                            empresa, str(codigo), arquivo.getvalue(), senha, cnpj_manual
-                        )
-                        st.success(
-                            "Certificado vinculado. CNPJ reconhecido: "
-                            + str(salvo.get("cnpj") or metadados.get("cnpj"))
-                        )
-                        st.rerun()
-                    except Exception as erro:
-                        st.error(str(erro))
+                    confirmar = st.form_submit_button(
+                        "Validar e salvar", type="primary", use_container_width=True
+                    )
+                if confirmar:
+                    if arquivo is None or not senha:
+                        st.error("Envie o certificado e informe a senha.")
+                    else:
+                        try:
+                            metadados = validar_certificado(arquivo.getvalue(), senha)
+                            salvo = salvar_certificado(
+                                empresa, str(codigo), arquivo.getvalue(), senha, cnpj_manual
+                            )
+                            st.success(
+                                "Certificado vinculado. CNPJ: "
+                                + str(salvo.get("cnpj") or metadados.get("cnpj"))
+                            )
+                            st.rerun()
+                        except Exception as erro:
+                            st.error(str(erro))
 
-            if atual:
-                st.markdown("---")
-                st.caption("Remova somente quando o certificado não for mais utilizado.")
-                confirmar_exclusao = st.checkbox(
-                    "Confirmo a remoção", key=f"excluir_cert_{empresa}"
-                )
-                if st.button(
-                    "Remover certificado", disabled=not confirmar_exclusao,
-                    key=f"btn_excluir_cert_{empresa}", use_container_width=True,
-                ):
-                    excluir_certificado(empresa)
-                    st.success("Certificado removido.")
-                    st.rerun()
+                if atual:
+                    st.markdown("---")
+                    confirmar_exclusao = st.checkbox(
+                        "Confirmar remoção", key=f"excluir_cert_{empresa}"
+                    )
+                    if st.button(
+                        "Remover", disabled=not confirmar_exclusao,
+                        key=f"btn_excluir_cert_{empresa}", use_container_width=True,
+                    ):
+                        excluir_certificado(empresa)
+                        st.success("Certificado removido.")
+                        st.rerun()
