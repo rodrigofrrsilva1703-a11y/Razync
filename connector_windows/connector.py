@@ -19,12 +19,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.6.1"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", ROOT)) / "Razync" / "Connector"
 CONFIG_FILE = DATA_DIR / "config.json"
+AUTOMATION_LOG = DATA_DIR / "automation.log"
 DEFAULT_ORIGINS = {
     "https://razync-k9la2wnmiml5tm3edjvgur.streamlit.app",
     "http://localhost:8501",
@@ -159,6 +160,8 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
             str(chrome_config["chrome"]),
             f"--user-data-dir={profile}",
             "--remote-debugging-port=17892",
+            "--remote-debugging-address=127.0.0.1",
+            "--remote-allow-origins=http://127.0.0.1:17892",
             "--no-first-run",
             "--no-default-browser-check",
             automation_url,
@@ -168,7 +171,7 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
     subprocess.Popen(
         [
             "powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
-            "-File", str(ROOT / "automate_ecac.ps1"), target_cnpj,
+            "-File", str(ROOT / "automate_ecac.ps1"), target_cnpj, str(AUTOMATION_LOG),
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
