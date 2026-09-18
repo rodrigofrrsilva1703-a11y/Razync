@@ -11865,27 +11865,26 @@ elif st.session_state['pagina_ativa'] == 'razao':
                 # ---------------- TABELA DE EXIBIÇÃO ----------------
                 df_exibicao = df_conciliacao[[
                     'DATA_EXIBICAO',
-                    'SAIDAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_SAIDAS_EXT_ENTRADAS_RAZAO',
-                    'ENTRADAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_ENTRADAS_EXT_SAIDAS_RAZAO',
+                    'ENTRADAS_RAZAO', 'SAIDAS_EXTRATO', 'DIF_SAIDAS_EXT_ENTRADAS_RAZAO',
+                    'SAIDAS_RAZAO', 'ENTRADAS_EXTRATO', 'DIF_ENTRADAS_EXT_SAIDAS_RAZAO',
                     'STATUS'
                 ]].copy()
                 df_exibicao.columns = [
                     'Data',
-                    'Saídas Extrato (R$)', 'Entradas/Débitos Razão (R$)', 'Dif. Saída Ext. x Entrada Razão (R$)',
-                    'Entradas Extrato (R$)', 'Saídas/Créditos Razão (R$)', 'Dif. Entrada Ext. x Saída Razão (R$)',
+                    'Débito Razão', 'Saída Extrato', 'Diferença Saídas',
+                    'Crédito Razão', 'Entrada Extrato', 'Diferença Entradas',
                     'Status'
                 ]
                 colunas_monetarias_conciliacao = [
-                    'Saídas Extrato (R$)', 'Entradas/Débitos Razão (R$)',
-                    'Dif. Saída Ext. x Entrada Razão (R$)',
-                    'Entradas Extrato (R$)', 'Saídas/Créditos Razão (R$)',
-                    'Dif. Entrada Ext. x Saída Razão (R$)'
+                    'Débito Razão', 'Saída Extrato', 'Diferença Saídas',
+                    'Crédito Razão', 'Entrada Extrato', 'Diferença Entradas'
                 ]
                 
                 st.dataframe(
                     formatar_dataframe_moeda_br(df_exibicao, colunas_monetarias_conciliacao),
-                    use_container_width=True, 
-                    height=380
+                    use_container_width=True,
+                    height=390,
+                    hide_index=True
                 )
 
                 # ---------------- EXPORTAÇÃO EXCEL BLINDADA ----------------
@@ -11905,13 +11904,13 @@ elif st.session_state['pagina_ativa'] == 'razao':
                     if not df_divergencias.empty:
                         df_div_export = df_divergencias[[
                             'DATA_EXIBICAO',
-                            'SAIDAS_EXTRATO', 'ENTRADAS_RAZAO', 'DIF_SAIDAS_EXT_ENTRADAS_RAZAO',
-                            'ENTRADAS_EXTRATO', 'SAIDAS_RAZAO', 'DIF_ENTRADAS_EXT_SAIDAS_RAZAO'
+                            'ENTRADAS_RAZAO', 'SAIDAS_EXTRATO', 'DIF_SAIDAS_EXT_ENTRADAS_RAZAO',
+                            'SAIDAS_RAZAO', 'ENTRADAS_EXTRATO', 'DIF_ENTRADAS_EXT_SAIDAS_RAZAO'
                         ]].copy()
                         df_div_export.columns = [
                             'Data',
-                            'Saidas Extrato', 'Entradas Debitos Razao', 'Diferenca Saida Ext x Entrada Razao',
-                            'Entradas Extrato', 'Saidas Creditos Razao', 'Diferenca Entrada Ext x Saida Razao'
+                            'Debito Razao', 'Saida Extrato', 'Diferenca Saidas',
+                            'Credito Razao', 'Entrada Extrato', 'Diferenca Entradas'
                         ]
                         for col in df_div_export.columns[1:]: df_div_export[col] = df_div_export[col].apply(formatar_moeda)
                         sanitizar_dataframe(df_div_export).to_excel(writer, sheet_name="Dias Divergentes", index=False)
