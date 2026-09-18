@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.5.1"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -172,6 +172,7 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
         "opened": True,
         "url": ECAC_LOGIN_URL,
         "automation": "chrome",
+        "certificate_auto_select": bool(chrome_config.get("policy_applied")),
         "cnpj": target_cnpj,
         "competencia": competencia,
         "certificate": {
