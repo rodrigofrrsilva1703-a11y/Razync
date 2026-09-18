@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.5.1"
+APP_VERSION = "0.6.0"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -151,27 +151,33 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
     chrome_config = _powershell("configure_chrome.ps1", normalized_thumbprint)
     if not isinstance(chrome_config, dict) or not chrome_config.get("chrome"):
         raise RuntimeError("O Google Chrome não foi encontrado neste computador.")
-    extension = ROOT / "chrome_extension"
-    if not (extension / "manifest.json").is_file():
-        raise RuntimeError("O módulo de automação do Chrome não está instalado.")
     profile = DATA_DIR / "chrome_profile"
     profile.mkdir(parents=True, exist_ok=True)
-    automation_url = f"{ECAC_LOGIN_URL}#razync_cnpj={target_cnpj}&competencia={competencia}"
+    automation_url = ECAC_LOGIN_URL
     subprocess.Popen(
         [
             str(chrome_config["chrome"]),
             f"--user-data-dir={profile}",
-            f"--load-extension={extension}",
+            "--remote-debugging-port=17892",
             "--no-first-run",
             "--no-default-browser-check",
             automation_url,
         ],
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
+    subprocess.Popen(
+        [
+            "powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
+            "-File", str(ROOT / "automate_ecac.ps1"), target_cnpj,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
     return {
         "opened": True,
         "url": ECAC_LOGIN_URL,
-        "automation": "chrome",
+        "automation": "chrome_cdp",
         "certificate_auto_select": bool(chrome_config.get("policy_applied")),
         "cnpj": target_cnpj,
         "competencia": competencia,
