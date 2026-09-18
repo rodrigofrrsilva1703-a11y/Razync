@@ -1,4 +1,7 @@
-"""Conferência dos impostos da Receita/DCTFWeb com o balancete contábil."""
+"""Conferência dos impostos da Receita/DCTFWeb com o balancete contábil.
+
+Versão sincronizada com o Conector Windows 0.4.
+"""
 
 from __future__ import annotations
 
