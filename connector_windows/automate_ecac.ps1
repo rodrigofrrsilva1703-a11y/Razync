@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $deadline = (Get-Date).AddMinutes(10)
 $messageId = 0
 $lastStage = ""
+$profileChanged = $false
 
 function Write-AutomationLog([string]$Message) {
     try {
@@ -60,6 +61,7 @@ $quotedCnpj = $safeCnpj | ConvertTo-Json -Compress
 $expression = @"
 (() => {
   const cnpj = $quotedCnpj;
+  const profileChanged = __PROFILE_CHANGED__;
   const clean = value => String(value || '').normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
   const visible = element => !!(element && element.getClientRects && element.getClientRects().length);
@@ -97,26 +99,39 @@ $expression = @"
     activate(found);
     return true;
   };
-  const inputs = all('input:not([type=hidden])').filter(visible);
-  const cnpjInput = inputs.find(input => {
-    const identity = clean([input.name,input.id,input.placeholder,input.getAttribute('aria-label')].join(' '));
-    return identity.includes('cnpj') || identity.includes('cpf/cnpj') || identity.includes('ni');
-  });
-  if (cnpjInput) {
+  const profileLabels = all('label,span,p,a,td,div').filter(visible)
+    .filter(element => {
+      const text = textOf(element);
+      return text.includes('procurador de pessoa juridica') && text.includes('cnpj') && text.length < 140;
+    })
+    .sort((left, right) => textOf(left).length - textOf(right).length);
+  let procuradorRow = null;
+  for (const label of profileLabels) {
+    let candidate = label;
+    for (let level = 0; candidate && level < 7; level++, candidate = candidate.parentElement) {
+      const rowInputs = [...candidate.querySelectorAll('input:not([type=hidden])')].filter(visible);
+      const rowButtons = [...candidate.querySelectorAll('button,a,input[type=button],input[type=submit],[role=button]')]
+        .filter(visible).filter(button => textOf(button).includes('alterar'));
+      if (rowInputs.length === 1 && rowButtons.length >= 1) {
+        procuradorRow = {container:candidate, input:rowInputs[0], button:rowButtons[0]};
+        break;
+      }
+    }
+    if (procuradorRow) break;
+  }
+  if (procuradorRow) {
+    const cnpjInput = procuradorRow.input;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     setter ? setter.call(cnpjInput, cnpj) : (cnpjInput.value = cnpj);
     cnpjInput.dispatchEvent(new Event('input',{bubbles:true}));
     cnpjInput.dispatchEvent(new Event('change',{bubbles:true}));
-    for (const select of all('select').filter(visible)) {
-      const option = [...select.options].find(item => clean(item.text).includes('procurador'));
-      if (option) { select.value=option.value; select.dispatchEvent(new Event('change',{bubbles:true})); }
-    }
-    setTimeout(() => clickText(['alterar','confirmar','continuar','avancar']), 500);
-    return 'cnpj_preenchido';
+    setTimeout(() => activate(procuradorRow.button), 350);
+    return 'procurador_pj_preenchido';
   }
   if (clickText(['entrar com gov.br','entrar com govbr','acesso gov.br','acesso govbr'])) return 'govbr_clicado';
   if (clickText(['certificado digital','seu certificado digital'])) return 'certificado_clicado';
-  if (clickText(['alterar perfil de acesso','alterar perfil'])) return 'perfil_clicado';
+  if (profileChanged && clickText(['dctfweb','dctf web'])) return 'dctfweb_clicado';
+  if (!profileChanged && clickText(['alterar perfil de acesso','alterar perfil'])) return 'perfil_clicado';
   return 'aguardando:' + location.hostname;
 })()
 "@
@@ -132,7 +147,10 @@ while ((Get-Date) -lt $deadline) {
             if ($target.type -notin @('page','iframe') -or -not $target.webSocketDebuggerUrl) { continue }
             if ($target.url -notmatch 'gov\.br|receita\.fazenda\.gov\.br') { continue }
             $matched = $true
-            $stage = Invoke-CdpExpression ([string]$target.webSocketDebuggerUrl) $expression
+            $profileFlag = if ($profileChanged) { 'true' } else { 'false' }
+            $currentExpression = $expression.Replace('__PROFILE_CHANGED__', $profileFlag)
+            $stage = Invoke-CdpExpression ([string]$target.webSocketDebuggerUrl) $currentExpression
+            if ($stage -eq 'procurador_pj_preenchido') { $profileChanged = $true }
             if ($stage -and $stage -ne $lastStage) {
                 $lastStage = $stage
                 Write-AutomationLog ("Etapa: " + $stage)
