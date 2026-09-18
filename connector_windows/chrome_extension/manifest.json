@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Razync e-CAC",
+  "version": "2.0.0",
+  "description": "Automação local do acesso ao e-CAC como procurador.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://cav.receita.fazenda.gov.br/*",
+    "https://*.receita.fazenda.gov.br/*",
+    "https://www.gov.br/*",
+    "https://sso.acesso.gov.br/*"
+  ],
+  "content_scripts": [{
+    "matches": [
+      "https://cav.receita.fazenda.gov.br/*",
+      "https://*.receita.fazenda.gov.br/*",
+      "https://www.gov.br/*",
+      "https://sso.acesso.gov.br/*"
+    ],
+    "js": ["content.js"],
+    "run_at": "document_idle",
+    "all_frames": true
+  }]
+}
