@@ -29,25 +29,60 @@ $chrome = $chromeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-O
 if (-not $chrome) { throw "Google Chrome nao encontrado." }
 
 $policyApplied = $false
+$policyScope = "none"
+$filter = @{ ISSUER = @{ CN = $issuerCn }; SUBJECT = @{ CN = $subjectCn } }
+$hosts = @(
+    'https://cav.receita.fazenda.gov.br',
+    'https://www.gov.br',
+    'https://sso.acesso.gov.br',
+    'https://certificado.sso.acesso.gov.br'
+)
+$rules = @()
+foreach ($hostName in $hosts) {
+    $rules += (@{ pattern = $hostName; filter = $filter } | ConvertTo-Json -Compress -Depth 6)
+}
 try {
     $policyPath = 'HKCU:\Software\Policies\Google\Chrome\AutoSelectCertificateForUrls'
     New-Item -Path $policyPath -Force -ErrorAction Stop | Out-Null
-    $filter = @{ ISSUER = @{ CN = $issuerCn }; SUBJECT = @{ CN = $subjectCn } }
-    $hosts = @(
-        'https://cav.receita.fazenda.gov.br',
-        'https://www.gov.br',
-        'https://sso.acesso.gov.br'
-    )
-    for ($index = 0; $index -lt $hosts.Count; $index++) {
-        $rule = @{ pattern = $hosts[$index]; filter = $filter } | ConvertTo-Json -Compress -Depth 6
-        New-ItemProperty -Path $policyPath -Name ([string]($index + 1)) -Value $rule -PropertyType String -Force -ErrorAction Stop | Out-Null
+    for ($index = 0; $index -lt $rules.Count; $index++) {
+        New-ItemProperty -Path $policyPath -Name ([string]($index + 1)) -Value $rules[$index] -PropertyType String -Force -ErrorAction Stop | Out-Null
     }
     $policyApplied = $true
+    $policyScope = "user"
 } catch [System.UnauthorizedAccessException] {
-    # Computadores gerenciados podem bloquear Policies. O Chrome ainda deve
-    # abrir; nesse caso o usuário confirma o A1 no seletor nativo uma vez.
-    $policyApplied = $false
+    # Se a politica do usuario estiver protegida, solicita elevacao somente
+    # para gravar as mesmas regras na politica local da maquina.
+    $machinePath = 'HKLM:\Software\Policies\Google\Chrome\AutoSelectCertificateForUrls'
+    $machineRulesMatch = $true
+    for ($index = 0; $index -lt $rules.Count; $index++) {
+        $propertyName = [string]($index + 1)
+        $installed = Get-ItemProperty -Path $machinePath -Name $propertyName -ErrorAction SilentlyContinue
+        $installedRule = if ($installed) { $installed.PSObject.Properties[$propertyName].Value } else { $null }
+        if ([string]$installedRule -ne [string]$rules[$index]) { $machineRulesMatch = $false; break }
+    }
+    if ($machineRulesMatch) {
+        $policyApplied = $true
+        $policyScope = "machine"
+    }
+    $adminHelper = Join-Path $PSScriptRoot 'configure_chrome_admin.ps1'
+    if (-not $policyApplied -and (Test-Path $adminHelper)) {
+        $rulesJson = ConvertTo-Json -Compress -InputObject @($rules)
+        $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($rulesJson))
+        try {
+            $arguments = @(
+                '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                '-File', ('"' + $adminHelper + '"'), '-RulesBase64', $payload
+            )
+            $elevated = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Verb RunAs -Wait -PassThru -ErrorAction Stop
+            if ($elevated.ExitCode -eq 0) {
+                $policyApplied = $true
+                $policyScope = "machine"
+            }
+        } catch {
+            $policyApplied = $false
+        }
+    }
 }
 
-@{ chrome = [string]$chrome; subject_cn = $subjectCn; issuer_cn = $issuerCn; policy_applied = $policyApplied } |
+@{ chrome = [string]$chrome; subject_cn = $subjectCn; issuer_cn = $issuerCn; policy_applied = $policyApplied; policy_scope = $policyScope } |
     ConvertTo-Json -Compress
