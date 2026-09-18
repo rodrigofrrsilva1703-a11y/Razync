@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.4.1"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -96,7 +96,7 @@ def sign_challenge(thumbprint: str, challenge_b64: str) -> dict:
     return result
 
 
-DCTF_URL = "https://servicos.receitafederal.gov.br/"
+ECAC_LOGIN_URL = "https://cav.receita.fazenda.gov.br/autenticacao/login"
 
 
 def _digits(value: str) -> str:
@@ -149,11 +149,11 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
         capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         timeout=15, check=False,
     )
-    if not webbrowser.open(DCTF_URL, new=2):
-        os.startfile(DCTF_URL)
+    if not webbrowser.open(ECAC_LOGIN_URL, new=2):
+        os.startfile(ECAC_LOGIN_URL)
     return {
         "opened": True,
-        "url": DCTF_URL,
+        "url": ECAC_LOGIN_URL,
         "cnpj": target_cnpj,
         "competencia": competencia,
         "certificate": {
@@ -219,9 +219,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Vary", "Origin")
         self.end_headers()
 
-    def _json(self, data: object, status: int = 200) -> None:
-        self._headers(status)
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+    def _json(self, data: object, status: int = 200) -> bool:
+        """Envia JSON sem derrubar o conector se o navegador cancelar a chamada."""
+        try:
+            self._headers(status)
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return True
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            return False
 
     def _body(self) -> dict:
         try:
@@ -238,15 +243,18 @@ class Handler(BaseHTTPRequestHandler):
         if not self._origin_allowed():
             self._json({"error": "Origem não autorizada."}, 403)
             return
-        self.send_response(204)
-        origin = self._origin()
-        if origin:
-            self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Vary", "Origin")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
-        self.end_headers()
+        try:
+            self.send_response(204)
+            origin = self._origin()
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+            self.end_headers()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            return
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -307,6 +315,8 @@ class Handler(BaseHTTPRequestHandler):
                 ))
                 return
             self._json({"error": "Rota não encontrada."}, 404)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            return
         except ValueError as exc:
             self._json({"error": str(exc)}, 400)
         except Exception as exc:
