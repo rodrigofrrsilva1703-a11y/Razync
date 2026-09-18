@@ -41,13 +41,14 @@ def render_connector_windows(empresa: str) -> dict | None:
     return None
 
 
-def render_consulta_dctf(empresa: str, competencia: str) -> dict | None:
+def render_consulta_dctf(empresa: str, competencia: str, cnpj: str) -> dict | None:
     """Abre a DCTFWeb e recebe do conector um relatório baixado no Windows."""
     safe_key = re.sub(r"[^a-zA-Z0-9_]+", "_", empresa)
     result = _COMPONENT(
         connector_url="http://127.0.0.1:17891",
         mode="dctf",
         competencia=str(competencia),
+        cnpj=str(cnpj),
         key=f"dctf_connector_{safe_key}_{competencia}",
         default=None,
     )
