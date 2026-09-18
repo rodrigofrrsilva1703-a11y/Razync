@@ -127,12 +127,12 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
     if not re.fullmatch(r"(0[1-9]|1[0-2])-\d{4}", str(competencia or "")):
         raise ValueError("A competência informada é inválida.")
 
-    normalized_thumbprint = _digits(thumbprint).upper()
+    normalized_thumbprint = re.sub(r"[^0-9A-F]", "", str(thumbprint or "").upper())
     certificates = list_certificates()
     selected = next(
         (
             certificate for certificate in certificates
-            if _digits(certificate.get("thumbprint", "")).upper() == normalized_thumbprint
+            if re.sub(r"[^0-9A-F]", "", str(certificate.get("thumbprint", "")).upper()) == normalized_thumbprint
         ),
         None,
     )
