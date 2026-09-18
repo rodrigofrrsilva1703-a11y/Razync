@@ -30,12 +30,12 @@ button:hover{filter:brightness(1.1)}input,select{margin-top:9px}
 
 <div id="dctfCard" class="card hidden">
   <div class="row"><span id="dctfDot" class="dot"></span><div class="grow">
-    <div class="title">Consulta DCTFWeb pelo Conector</div>
+    <div class="title">Consulta DCTFWeb como procurador</div>
     <div id="dctfStatus" class="sub">Verificando o conector…</div>
   </div></div>
   <div id="dctfActions" class="hidden">
-    <button id="openDctf" class="primary">1. Abrir Portal da Receita</button>
-    <div class="sub" style="margin-top:8px">No Portal da Receita, clique no avatar, represente o CNPJ como Procurador digital e abra a DCTFWeb da competência. Baixe o relatório e volte aqui.</div>
+    <button id="openDctf" class="primary">1. Iniciar consulta da empresa</button>
+    <div class="sub" style="margin-top:8px">Será usado o certificado do escritório como procurador. O CNPJ representado vem do balancete e nunca precisa ser igual ao CNPJ do certificado.</div>
     <button id="findReport">2. Trazer relatório baixado para o Razync</button>
   </div>
   <div id="dctfError" class="error hidden"></div>
@@ -77,7 +77,7 @@ async function detectDctf(){
   message("dctfError","");message("dctfSuccess","");
   try{const health=await request("/v1/health");if(!health.ok)throw new Error();
     if(!localStorage.getItem(tokenKey())){$("dctfStatus").textContent="Pareie o conector no botão Certificado";$("dctfDot").className="dot warn";value({status:"pairing"});return}
-    $("dctfDot").className="dot ok";$("dctfStatus").textContent="Conector ativo · competência "+(args.competencia||"selecionada");$("dctfActions").classList.remove("hidden");value({status:"ready"})
+    $("dctfDot").className="dot ok";$("dctfStatus").textContent="Conector ativo · CNPJ "+(args.cnpj||"não identificado")+" · competência "+(args.competencia||"selecionada");$("dctfActions").classList.remove("hidden");value({status:"ready"})
   }catch(e){$("dctfStatus").textContent="Conector não encontrado. Abra o atalho da Área de Trabalho.";$("dctfActions").classList.add("hidden");value({status:"offline"})}
   height()
 }
@@ -85,7 +85,7 @@ $("retry").onclick=detectCertificate;
 $("pairButton").onclick=async()=>{message("error","");const code=$("code").value.trim();if(!/^\d{6}$/.test(code)){message("error","Informe o código de 6 dígitos.");return}
   try{const response=await request("/v1/pair",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});const data=await response.json();if(!response.ok)throw new Error(data.error||"Pareamento recusado.");localStorage.setItem(tokenKey(),data.token);await loadCertificates()}catch(e){message("error",e.message||"Falha no pareamento.")}};
 $("selectButton").onclick=()=>{const list=$("certificates")._certificates||[],cert=list[Number($("certificates").value)];if(cert){localStorage.setItem("razync_selected_certificate",JSON.stringify(cert));value({status:"selected",certificate:cert})}};
-$("openDctf").onclick=async()=>{message("dctfError","");try{const response=await request("/v1/dctf/open",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const data=await response.json();if(!response.ok)throw new Error(data.error||"Não foi possível abrir o Portal da Receita.");message("dctfSuccess","Portal da Receita aberto. Entre como Procurador digital da empresa, baixe o relatório da DCTFWeb e volte ao Razync.")}catch(e){message("dctfError",e.message)}};
+$("openDctf").onclick=async()=>{message("dctfError","");try{const cert=JSON.parse(localStorage.getItem("razync_selected_certificate")||"null");if(!cert||!cert.thumbprint)throw new Error("Selecione primeiro o certificado do escritório.");if(!args.cnpj)throw new Error("Não foi possível identificar o CNPJ da empresa no balancete.");const response=await request("/v1/dctf/open",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cnpj:args.cnpj,competencia:args.competencia,thumbprint:cert.thumbprint})});const data=await response.json();if(!response.ok)throw new Error(data.error||"Não foi possível iniciar a consulta.");message("dctfSuccess","Portal aberto para o CNPJ "+data.cnpj+". O certificado selecionado é do escritório e o acesso será feito como procurador.")}catch(e){message("dctfError",e.message)}};
 $("findReport").onclick=async()=>{message("dctfError","");message("dctfSuccess","Localizando o relatório em Downloads…");try{const response=await request("/v1/dctf/latest",{},15000);const data=await response.json();if(!response.ok)throw new Error(data.error||"Relatório não encontrado.");message("dctfSuccess","Relatório encontrado: "+data.name);value({status:"report",name:data.name,content:data.content,modified_at:data.modified_at})}catch(e){message("dctfSuccess","");message("dctfError",e.message)}};
 window.addEventListener("message",event=>{if(event.data.type!=="streamlit:render")return;args=event.data.args||{};const dctf=args.mode==="dctf";$("certificateCard").classList.toggle("hidden",dctf);$("dctfCard").classList.toggle("hidden",!dctf);dctf?detectDctf():detectCertificate()});
 post("streamlit:componentReady",{apiVersion:API_VERSION});height();
