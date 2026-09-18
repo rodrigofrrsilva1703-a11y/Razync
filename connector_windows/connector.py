@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.4.1"
+APP_VERSION = "0.5.0"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -141,7 +141,6 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
             "O certificado do escritório selecionado não está disponível no Windows."
         )
 
-    # O CNPJ é colocado na área de transferência para a etapa de representação.
     # A chave privada permanece no repositório do Windows e nunca é exportada.
     subprocess.run(
         ["powershell.exe", "-NoLogo", "-NoProfile", "-Command",
@@ -149,11 +148,30 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
         capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         timeout=15, check=False,
     )
-    if not webbrowser.open(ECAC_LOGIN_URL, new=2):
-        os.startfile(ECAC_LOGIN_URL)
+    chrome_config = _powershell("configure_chrome.ps1", normalized_thumbprint)
+    if not isinstance(chrome_config, dict) or not chrome_config.get("chrome"):
+        raise RuntimeError("O Google Chrome não foi encontrado neste computador.")
+    extension = ROOT / "chrome_extension"
+    if not (extension / "manifest.json").is_file():
+        raise RuntimeError("O módulo de automação do Chrome não está instalado.")
+    profile = DATA_DIR / "chrome_profile"
+    profile.mkdir(parents=True, exist_ok=True)
+    automation_url = f"{ECAC_LOGIN_URL}#razync_cnpj={target_cnpj}&competencia={competencia}"
+    subprocess.Popen(
+        [
+            str(chrome_config["chrome"]),
+            f"--user-data-dir={profile}",
+            f"--load-extension={extension}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            automation_url,
+        ],
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
     return {
         "opened": True,
         "url": ECAC_LOGIN_URL,
+        "automation": "chrome",
         "cnpj": target_cnpj,
         "competencia": competencia,
         "certificate": {
