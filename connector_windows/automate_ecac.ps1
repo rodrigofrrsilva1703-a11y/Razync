@@ -21,7 +21,7 @@ function Invoke-CdpExpression([string]$WebSocketUrl, [string]$Expression) {
     $socket = [System.Net.WebSockets.ClientWebSocket]::new()
     try {
         $socket.Options.KeepAliveInterval = [TimeSpan]::FromSeconds(15)
-        $socket.ConnectAsync([Uri]$WebSocketUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+        [void]$socket.ConnectAsync([Uri]$WebSocketUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
         $script:messageId++
         $currentId = $script:messageId
         $payload = @{
@@ -30,7 +30,7 @@ function Invoke-CdpExpression([string]$WebSocketUrl, [string]$Expression) {
             params = @{ expression = $Expression; returnByValue = $true; awaitPromise = $true; userGesture = $true }
         } | ConvertTo-Json -Compress -Depth 8
         $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
-        $socket.SendAsync([ArraySegment[byte]]::new($bytes), [Net.WebSockets.WebSocketMessageType]::Text, $true,
+        [void]$socket.SendAsync([ArraySegment[byte]]::new($bytes), [Net.WebSockets.WebSocketMessageType]::Text, $true,
             [Threading.CancellationToken]::None).GetAwaiter().GetResult()
         $buffer = New-Object byte[] 65536
         $expires = (Get-Date).AddSeconds(5)
@@ -119,6 +119,18 @@ $expression = @"
     }
     if (procuradorRow) break;
   }
+  // O e-CAC antigo não associa os rótulos aos inputs. Nessa janela fixa,
+  // pessoa jurídica é sempre a segunda opção exibida.
+  if (!procuradorRow) {
+    const pageText = clean(document.body && document.body.innerText);
+    const modalInputs = all('input:not([type=hidden]):not([type=button]):not([type=submit])').filter(visible);
+    const alterButtons = controls.filter(button => textOf(button).includes('alterar'));
+    if (pageText.includes('alterar perfil de acesso') &&
+        pageText.includes('procurador de pessoa juridica') &&
+        modalInputs.length >= 2 && alterButtons.length >= 2) {
+      procuradorRow = {container:document.body, input:modalInputs[1], button:alterButtons[1]};
+    }
+  }
   if (procuradorRow) {
     const cnpjInput = procuradorRow.input;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -144,9 +156,12 @@ while ((Get-Date) -lt $deadline) {
         $targets = Invoke-RestMethod -Uri 'http://127.0.0.1:17892/json' -TimeoutSec 2
         $matched = $false
         foreach ($target in @($targets)) {
-            if ($target.type -notin @('page','iframe') -or -not $target.webSocketDebuggerUrl) { continue }
+            if ($target.type -ne 'page' -or -not $target.webSocketDebuggerUrl) { continue }
             if ($target.url -notmatch 'gov\.br|receita\.fazenda\.gov\.br') { continue }
             $matched = $true
+            try {
+                [void](Invoke-RestMethod -Uri ('http://127.0.0.1:17892/json/activate/' + $target.id) -TimeoutSec 2)
+            } catch {}
             $profileFlag = if ($profileChanged) { 'true' } else { 'false' }
             $currentExpression = $expression.Replace('__PROFILE_CHANGED__', $profileFlag)
             $stage = Invoke-CdpExpression ([string]$target.webSocketDebuggerUrl) $currentExpression
