@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.7.1"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
