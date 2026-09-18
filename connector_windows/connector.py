@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -98,11 +99,69 @@ def sign_challenge(thumbprint: str, challenge_b64: str) -> dict:
 DCTF_URL = "https://servicos.receitafederal.gov.br/"
 
 
-def open_dctfweb() -> dict:
-    """Abre o Portal da Receita para acesso no perfil Procurador digital."""
+def _digits(value: str) -> str:
+    return "".join(char for char in str(value or "") if char.isdigit())
+
+
+def _valid_cnpj(value: str) -> bool:
+    cnpj = _digits(value)
+    if len(cnpj) != 14 or len(set(cnpj)) == 1:
+        return False
+    numbers = [int(char) for char in cnpj]
+    for size in (12, 13):
+        weights = ([5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] if size == 12
+                   else [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+        total = sum(number * weight for number, weight in zip(numbers[:size], weights))
+        digit = 11 - (total % 11)
+        expected = 0 if digit >= 10 else digit
+        if numbers[size] != expected:
+            return False
+    return True
+
+
+def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
+    """Prepara a consulta usando o certificado do escritorio como procurador."""
+    target_cnpj = _digits(cnpj)
+    if not _valid_cnpj(target_cnpj):
+        raise ValueError("O CNPJ da empresa representada é inválido.")
+    if not re.fullmatch(r"(0[1-9]|1[0-2])-\d{4}", str(competencia or "")):
+        raise ValueError("A competência informada é inválida.")
+
+    normalized_thumbprint = _digits(thumbprint).upper()
+    certificates = list_certificates()
+    selected = next(
+        (
+            certificate for certificate in certificates
+            if _digits(certificate.get("thumbprint", "")).upper() == normalized_thumbprint
+        ),
+        None,
+    )
+    if not selected:
+        raise ValueError(
+            "O certificado do escritório selecionado não está disponível no Windows."
+        )
+
+    # O CNPJ é colocado na área de transferência para a etapa de representação.
+    # A chave privada permanece no repositório do Windows e nunca é exportada.
+    subprocess.run(
+        ["powershell.exe", "-NoLogo", "-NoProfile", "-Command",
+         "Set-Clipboard -Value $args[0]", target_cnpj],
+        capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        timeout=15, check=False,
+    )
     if not webbrowser.open(DCTF_URL, new=2):
         os.startfile(DCTF_URL)
-    return {"opened": True, "url": DCTF_URL}
+    return {
+        "opened": True,
+        "url": DCTF_URL,
+        "cnpj": target_cnpj,
+        "competencia": competencia,
+        "certificate": {
+            "thumbprint": selected.get("thumbprint", ""),
+            "subject": selected.get("subject", ""),
+        },
+        "profile": "procurador",
+    }
 
 
 def latest_dctf_report() -> dict:
@@ -241,7 +300,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(result)
                 return
             if path == "/v1/dctf/open":
-                self._json(open_dctfweb())
+                self._json(open_dctfweb(
+                    str(body.get("cnpj", "")),
+                    str(body.get("competencia", "")),
+                    str(body.get("thumbprint", "")),
+                ))
                 return
             self._json({"error": "Rota não encontrada."}, 404)
         except ValueError as exc:
