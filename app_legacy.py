@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 130178)
-Total output lines: 11930
-
 import streamlit as st
 # Deploy sync: pesquisa de empresas aprovada em 2026-09-01.
 import pandas as pd
@@ -4998,7 +4995,3026 @@ def processar_mapa_autokraft(file_bytes, filename=''):
     """Converte as abas diárias do mapa Autokraft para o Modelo Domínio."""
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     # Os mapas da Autokraft existem em dois padrões de nome de aba:
-    # arquivos antigos usam DD.MM e arquivos mais novos usam DD…30178 tokens truncated…                        with col_g3: 
+    # arquivos antigos usam DD.MM e arquivos mais novos usam DD-MM.
+    # Aceitamos ambos sem incluir abas auxiliares de pagamentos/adiantamentos.
+    abas_diarias = [
+        aba for aba in xls.sheet_names
+        if re.fullmatch(r'\d{2}[.-]\d{2}', str(aba).strip())
+    ]
+    if not abas_diarias:
+        raise ValueError(
+            "Nenhuma aba diária no formato DD-MM ou DD.MM foi encontrada no arquivo enviado."
+        )
+
+    ano_nome = re.search(r'(?<!\d)(20\d{2})(?!\d)', str(filename))
+    ano_referencia = int(ano_nome.group(1)) if ano_nome else datetime.now().year
+    colunas_saida = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    registros = {'Itaú': [], 'Daycoval': []}
+    abas_processadas = []
+
+    for nome_aba in abas_diarias:
+        df = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
+        if df.empty or df.shape[1] < 6:
+            continue
+
+        data_raw = df.iloc[1, 2] if len(df.index) > 1 and df.shape[1] > 2 else None
+        if isinstance(data_raw, (int, float)) and not pd.isna(data_raw):
+            data_aba = pd.to_datetime(
+                data_raw, unit='D', origin='1899-12-30', errors='coerce'
+            )
+        else:
+            data_aba = pd.to_datetime(data_raw, dayfirst=True, errors='coerce')
+        if pd.isna(data_aba):
+            partes_data = re.split(r'[.-]', str(nome_aba).strip())
+            if len(partes_data) != 2:
+                continue
+            dia, mes = [int(parte) for parte in partes_data]
+            data_aba = pd.Timestamp(year=ano_referencia, month=mes, day=dia)
+
+        banco_atual = None
+        for _, linha in df.iterrows():
+            nome_bloco = normalizar_texto(texto_celula_seguro(linha.iloc[0])).strip()
+            if nome_bloco == 'itau':
+                banco_atual = 'Itaú'
+            elif nome_bloco == 'daycoval':
+                banco_atual = 'Daycoval'
+
+            historico_credito = texto_celula_seguro(linha.iloc[2])
+            historico_debito = texto_celula_seguro(linha.iloc[4])
+            texto_credito = normalizar_texto(historico_credito)
+            texto_debito = normalizar_texto(historico_debito)
+
+            if texto_credito.startswith('total de creditos') or texto_debito.startswith(
+                'total de debitos'
+            ):
+                banco_atual = None
+                continue
+            if banco_atual is None:
+                continue
+
+            if historico_credito and not texto_credito.startswith('total'):
+                valor_credito = abs(limpar_valor_monetario(linha.iloc[3]))
+                if valor_credito:
+                    historico_credito_final = limpar_caracteres_ilegais(
+                        historico_credito
+                    ).strip()
+                    registros[banco_atual].append({
+                        'DESCRIÇÃO': f'BANCO {banco_atual.upper()}',
+                        'DATA': data_aba.to_pydatetime(),
+                        'VALOR': valor_credito,
+                        'DÉBITO': '',
+                        'CRÉDITO': '',
+                        'HISTÓRICO': f'Recebido: {historico_credito_final}'
+                    })
+
+            if historico_debito and not texto_debito.startswith('total'):
+                valor_debito = abs(limpar_valor_monetario(linha.iloc[5]))
+                if valor_debito:
+                    historico_debito_final = limpar_caracteres_ilegais(
+                        historico_debito
+                    ).strip()
+                    registros[banco_atual].append({
+                        'DESCRIÇÃO': f'BANCO {banco_atual.upper()}',
+                        'DATA': data_aba.to_pydatetime(),
+                        'VALOR': -valor_debito,
+                        'DÉBITO': '',
+                        'CRÉDITO': '',
+                        'HISTÓRICO': f'Pago: {historico_debito_final}'
+                    })
+
+        abas_processadas.append(str(nome_aba))
+
+    dados_por_banco = {}
+    for nome_banco, linhas in registros.items():
+        df_banco = pd.DataFrame(linhas, columns=colunas_saida)
+        if not df_banco.empty:
+            df_banco = df_banco.sort_values('DATA', kind='stable').reset_index(drop=True)
+        dados_por_banco[nome_banco] = {
+            'principal': df_banco,
+            'retirados': pd.DataFrame(columns=colunas_saida + ['MOTIVO'])
+        }
+
+    total_lancamentos = sum(
+        len(dados['principal']) for dados in dados_por_banco.values()
+    )
+    if total_lancamentos == 0:
+        raise ValueError(
+            "As abas diárias foram encontradas, mas nenhum lançamento bancário válido foi lido."
+        )
+    return dados_por_banco, abas_processadas
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def processar_planilha_accede_sig(file_bytes, banco_nome, empresa=''):
+    """
+    Converte planilhas SIG da ACCEDE para o Modelo Domínio.
+
+    Regra estrutural: uma linha com DATA inicia o lançamento/grupo. Todas as linhas
+    seguintes sem DATA pertencem a esse grupo até surgir uma nova DATA. Quando há
+    detalhamento com valor individual, o total da linha principal não é duplicado.
+    """
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    colunas_saida = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    registros = []
+
+    def texto_exato(valor):
+        if valor is None or pd.isna(valor):
+            return ''
+        if isinstance(valor, float) and valor.is_integer():
+            return str(int(valor))
+        return limpar_caracteres_ilegais(str(valor)).strip()
+
+    for nome_aba in xls.sheet_names:
+        bruto = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
+        if bruto.empty:
+            continue
+
+        idx_header = None
+        nomes_header = None
+        for idx in range(min(len(bruto), 30)):
+            nomes = [normalizar_texto(texto_celula_seguro(v)).strip() for v in bruto.iloc[idx].tolist()]
+            if all(nome in nomes for nome in ['data', 'complemento', 'entrada', 'saida']):
+                idx_header = idx
+                nomes_header = nomes
+                break
+        if idx_header is None:
+            continue
+
+        def coluna(nome):
+            return nomes_header.index(nome) if nome in nomes_header else None
+
+        c_data = coluna('data')
+        c_dc = coluna('d/c')
+        c_comp = coluna('complemento')
+        c_conf = coluna('conf')
+        c_ent = coluna('entrada')
+        c_sai = coluna('saida')
+        linhas = bruto.iloc[idx_header + 1:].reset_index(drop=True)
+        i = 0
+
+        while i < len(linhas):
+            principal = linhas.iloc[i]
+            data = pd.to_datetime(principal.iloc[c_data], dayfirst=True, errors='coerce')
+            if pd.isna(data):
+                i += 1
+                continue
+
+            j = i + 1
+            detalhes = []
+            while j < len(linhas):
+                proxima_data = pd.to_datetime(linhas.iloc[j].iloc[c_data], dayfirst=True, errors='coerce')
+                if not pd.isna(proxima_data):
+                    break
+                valores_linha = [texto_celula_seguro(v) for v in linhas.iloc[j].tolist()]
+                if any(valores_linha):
+                    detalhes.append(linhas.iloc[j])
+                j += 1
+
+            entrada = abs(limpar_valor_monetario(principal.iloc[c_ent])) if c_ent is not None else 0.0
+            saida = abs(limpar_valor_monetario(principal.iloc[c_sai])) if c_sai is not None else 0.0
+            sinal_grupo = 1 if entrada else (-1 if saida else 0)
+            dc_principal = texto_exato(principal.iloc[c_dc]) if c_dc is not None else ''
+            complemento = texto_exato(principal.iloc[c_comp]) if c_comp is not None else ''
+            conf_principal = texto_exato(principal.iloc[c_conf]) if c_conf is not None else ''
+            descricao_banco = 'BANCO ITAÚ' if normalizar_texto(banco_nome) == 'itau' else 'SICREDI'
+
+            detalhes_validos = []
+            for detalhe in detalhes:
+                # Nos SIGs ACCEDE os detalhes aparecem deslocados para a esquerda:
+                # [vazio/data, Conf/Documento, Valor, Favorecido/Descrição, ...].
+                conf_doc = texto_exato(detalhe.iloc[1]) if len(detalhe) > 1 else ''
+                valor_individual = abs(limpar_valor_monetario(detalhe.iloc[2])) if len(detalhe) > 2 else 0.0
+                favorecido = texto_exato(detalhe.iloc[3]) if len(detalhe) > 3 else ''
+                if valor_individual:
+                    detalhes_validos.append((conf_doc, valor_individual, favorecido))
+
+            if detalhes_validos:
+                for conf_doc, valor_individual, favorecido in detalhes_validos:
+                    historico = ' '.join(parte for parte in [favorecido, conf_doc] if parte).strip()
+                    if not historico:
+                        historico = complemento or conf_principal or dc_principal or 'MOVIMENTO BANCARIO'
+                    registros.append({
+                        'DESCRIÇÃO': descricao_banco,
+                        'DATA': data.to_pydatetime(),
+                        'VALOR': round(valor_individual * (sinal_grupo or -1), 2),
+                        'DÉBITO': '',
+                        'CRÉDITO': '',
+                        'HISTÓRICO': historico
+                    })
+            else:
+                valor = entrada if entrada else (-saida if saida else 0.0)
+                if valor:
+                    historico = complemento or conf_principal or dc_principal or 'MOVIMENTO BANCARIO'
+                    registros.append({
+                        'DESCRIÇÃO': descricao_banco,
+                        'DATA': data.to_pydatetime(),
+                        'VALOR': round(valor, 2),
+                        'DÉBITO': '',
+                        'CRÉDITO': '',
+                        'HISTÓRICO': historico
+                    })
+            i = j
+
+    df = pd.DataFrame(registros, columns=colunas_saida)
+    if df.empty:
+        raise ValueError(f'Nenhum lançamento válido foi encontrado na planilha SIG do {banco_nome}.')
+    df = df.sort_values('DATA', kind='stable').reset_index(drop=True)
+    if empresa == 'accede_automacao':
+        conta_bancaria = CONFIGURACOES_ACCEDE[empresa]['contas_bancarias'][
+            normalizar_texto(banco_nome)
+        ]
+        df = aplicar_regras_accede_1000(df, conta_bancaria)
+    return df
+
+
+def filtrar_dataframe_periodo(df, data_inicial, data_final):
+    """Mantém somente os lançamentos entre as datas informadas, inclusive."""
+    if df is None or df.empty:
+        return df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+    if 'DATA' not in df.columns:
+        return df.iloc[0:0].copy()
+    # Extratos brasileiros usam dia/mês/ano. Sem dayfirst=True, por exemplo,
+    # 01/04/2026 seria interpretado como 4 de janeiro e sairia do filtro de abril.
+    datas = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.date
+    mascara = datas.between(data_inicial, data_final, inclusive='both')
+    return df.loc[mascara].copy().reset_index(drop=True)
+
+def identificar_chave_banco_empresa(valor):
+    """Identifica os bancos conhecidos por descrição, aba, arquivo ou conta."""
+    texto = normalizar_texto(texto_celula_seguro(valor))
+    digitos = re.sub(r'\D', '', texto_celula_seguro(valor))
+    if 'btg' in texto or 'pactual' in texto or '5606318' in digitos:
+        return 'btg'
+    if 'itau' in texto or any(conta in digitos for conta in ['995495', '980026']):
+        return 'itau'
+    if 'bradesco' in texto or any(conta in digitos for conta in ['4519906', '30848']):
+        return 'bradesco'
+    if 'fibra' in texto or '6739471' in digitos:
+        return 'fibra'
+    if 'daycoval' in texto:
+        return 'daycoval'
+    if 'sicredi' in texto:
+        return 'sicredi'
+    if 'santander' in texto:
+        return 'santander'
+    if 'banco do brasil' in texto:
+        return 'banco_brasil'
+    return ''
+
+def nome_banco_por_chave(chave):
+    return {
+        'btg': 'BTG',
+        'itau': 'Itaú', 'bradesco': 'Bradesco', 'fibra': 'Fibra',
+        'daycoval': 'Daycoval', 'sicredi': 'Sicredi',
+        'santander': 'Santander', 'banco_brasil': 'Banco do Brasil'
+    }.get(chave, chave)
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=16)
+def ler_planilha_organizada_conferencia(file_bytes, banco_alvo, conta_alvo=None):
+    """Lê a planilha final e retorna somente o banco escolhido para conferência."""
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    # Aceita aliases de banco (como itau_hw88), comparando pelo banco real.
+    banco_alvo = 'itau' if str(banco_alvo).lower().startswith('itau') else banco_alvo
+    colunas_base = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    principais, retirados, bancos_encontrados = [], [], set()
+
+    for nome_aba in xls.sheet_names:
+        df_bruto = pd.read_excel(xls, sheet_name=nome_aba, header=None, dtype=object)
+        if df_bruto.empty:
+            continue
+
+        indice_cabecalho = None
+        for indice in range(min(len(df_bruto), 30)):
+            nomes_linha = [
+                normalizar_texto(texto_celula_seguro(valor)).strip()
+                for valor in df_bruto.iloc[indice].tolist()
+            ]
+            if ('data' in nomes_linha and 'valor' in nomes_linha and
+                    any(nome in nomes_linha for nome in ['historico', 'histórico'])):
+                indice_cabecalho = indice
+                break
+        if indice_cabecalho is None:
+            continue
+
+        cabecalhos = [texto_celula_seguro(valor) for valor in df_bruto.iloc[indice_cabecalho]]
+        df_aba = df_bruto.iloc[indice_cabecalho + 1:].copy()
+        df_aba.columns = cabecalhos
+        mapa = {normalizar_texto(str(coluna)).strip(): coluna for coluna in df_aba.columns}
+        col_data = mapa.get('data')
+        col_valor = mapa.get('valor')
+        col_hist = mapa.get('historico')
+        col_desc = mapa.get('descricao')
+        col_motivo = mapa.get('motivo')
+        col_debito = mapa.get('debito')
+        col_credito = mapa.get('credito')
+        if col_data is None or col_valor is None or col_hist is None:
+            continue
+
+        banco_aba = identificar_chave_banco_empresa(nome_aba)
+        aba_retirados = 'retir' in normalizar_texto(nome_aba)
+        for _, linha in df_aba.iterrows():
+            if conta_alvo:
+                contas_linha = {
+                    re.sub(r'\D', '', texto_celula_seguro(linha[coluna]))
+                    for coluna in [col_debito, col_credito]
+                    if coluna is not None
+                }
+                conta_normalizada = re.sub(r'\D', '', str(conta_alvo))
+                if conta_normalizada not in contas_linha:
+                    continue
+            banco_linha = (
+                identificar_chave_banco_empresa(linha[col_desc]) if col_desc is not None else ''
+            ) or banco_aba
+            if banco_linha:
+                bancos_encontrados.add(banco_linha)
+            if banco_linha != banco_alvo:
+                continue
+
+            data_raw = linha[col_data]
+            if pd.api.types.is_number(data_raw) and not pd.isna(data_raw):
+                data = pd.to_datetime(float(data_raw), unit='D', origin='1899-12-30', errors='coerce')
+            else:
+                data = pd.to_datetime(data_raw, dayfirst=True, errors='coerce')
+            valor = limpar_valor_monetario(linha[col_valor])
+            if pd.isna(data) or valor == 0:
+                continue
+
+            descricao = texto_celula_seguro(linha[col_desc]) if col_desc is not None else ''
+            if not descricao:
+                descricao = {
+                    'btg': 'BANCO BTG',
+                    'itau': 'BANCO ITAÚ', 'bradesco': 'BANCO BRADESCO',
+                    'fibra': 'BANCO FIBRA', 'daycoval': 'BANCO DAYCOVAL',
+                    'sicredi': 'SICREDI', 'santander': 'BANCO SANTANDER',
+                    'banco_brasil': 'BANCO DO BRASIL'
+                }[banco_alvo]
+            historico_valor = linha[col_hist]
+            historico = (
+                '' if historico_valor is None or pd.isna(historico_valor)
+                else limpar_caracteres_ilegais(str(historico_valor))
+            )
+            registro = {
+                'DESCRIÇÃO': descricao,
+                'DATA': data.to_pydatetime(),
+                'VALOR': valor,
+                'DÉBITO': '',
+                'CRÉDITO': '',
+                'HISTÓRICO': historico
+            }
+            if aba_retirados:
+                registro['MOTIVO'] = (
+                    texto_celula_seguro(linha[col_motivo]) if col_motivo is not None
+                    else 'Estorno de baixa identificado'
+                )
+                retirados.append(registro)
+            else:
+                principais.append(registro)
+
+    # A conferência das empresas Autokraft/I.S.A também aceita o próprio mapa
+    # bancário com abas diárias DD-MM ou DD.MM. Se ele não tiver o cabeçalho do
+    # Modelo Domínio, reutiliza o mesmo leitor já usado pelo organizador.
+    if not principais and banco_alvo in {'itau', 'daycoval'}:
+        try:
+            dados_mapa, _ = processar_mapa_autokraft(file_bytes)
+            nome_mapa = 'Itaú' if banco_alvo == 'itau' else 'Daycoval'
+            bloco_mapa = dados_mapa.get(nome_mapa, {})
+            principal_mapa = bloco_mapa.get('principal', pd.DataFrame()).copy()
+            retirados_mapa = bloco_mapa.get('retirados', pd.DataFrame()).copy()
+            bancos_mapa = [
+                nome for nome, dados in dados_mapa.items()
+                if not dados.get('principal', pd.DataFrame()).empty
+            ]
+            if not principal_mapa.empty:
+                return principal_mapa, retirados_mapa, bancos_mapa
+        except Exception:
+            # Não era um mapa diário: mantém o resultado normal do leitor do
+            # Modelo Domínio e deixa a interface informar a ausência de dados.
+            pass
+
+    return (
+        pd.DataFrame(principais, columns=colunas_base),
+        pd.DataFrame(retirados, columns=colunas_base + ['MOTIVO']),
+        [nome_banco_por_chave(chave) for chave in sorted(bancos_encontrados)]
+    )
+
+def gerar_excel_nova_geracao(dados_por_banco, modelo_bytes=None, prefixar_historicos=True):
+    """Gera um único arquivo com uma aba do Modelo Domínio para cada banco.
+
+    prefixar_historicos=False é exclusivo dos fluxos em que o histórico já traz
+    PAGO/RECEBIDO da origem, como Nova Geração 266 e 1396.
+    """
+    from openpyxl import Workbook, load_workbook
+
+    if modelo_bytes:
+        wb = load_workbook(io.BytesIO(modelo_bytes))
+        ws_modelo = wb[wb.sheetnames[0]]
+        if ws_modelo.max_row > 1:
+            ws_modelo.delete_rows(2, ws_modelo.max_row - 1)
+    else:
+        wb = Workbook()
+        ws_modelo = wb.active
+        ws_modelo.title = 'Modelo temporário'
+        ws_modelo.append(['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO'])
+
+    cabecalhos = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+    for col, cabecalho in enumerate(cabecalhos, 1):
+        ws_modelo.cell(1, col, cabecalho)
+
+    def preparar_linha_modelo(registro, colunas):
+        linha = []
+        for coluna in colunas:
+            valor = registro.get(coluna, '')
+            if coluna == 'DATA':
+                data = pd.to_datetime(valor, errors='coerce')
+                valor = data.strftime('%d/%m/%Y') if not pd.isna(data) else ''
+            elif coluna == 'HISTÓRICO' and prefixar_historicos:
+                valor = prefixar_historico_movimento(
+                    valor, registro.get('VALOR', 0)
+                )
+            elif pd.isna(valor):
+                valor = ''
+            linha.append(valor)
+        return linha
+
+    nomes_criados = []
+    retirados_gerais = []
+    for nome_banco, dados_banco in dados_por_banco.items():
+        nome_aba = str(nome_banco)[:31]
+        if nome_aba in nomes_criados:
+            sufixo = 2
+            while f"{nome_aba[:28]} {sufixo}" in nomes_criados:
+                sufixo += 1
+            nome_aba = f"{nome_aba[:28]} {sufixo}"
+
+        ws_banco = wb.copy_worksheet(ws_modelo)
+        ws_banco.title = nome_aba
+        nomes_criados.append(nome_aba)
+
+        df_principal = dados_banco.get('principal', pd.DataFrame())
+        df_retirados = dados_banco.get('retirados', pd.DataFrame())
+        for registro in df_principal.to_dict('records'):
+            ws_banco.append(preparar_linha_modelo(registro, cabecalhos))
+        if not df_retirados.empty:
+            retirados_gerais.extend(df_retirados.to_dict('records'))
+
+    wb.remove(ws_modelo)
+
+    if retirados_gerais:
+        nome_retirados = 'Lançamentos retirados'
+        if nome_retirados in wb.sheetnames:
+            del wb[nome_retirados]
+        ws_ret = wb.create_sheet(nome_retirados)
+        cabecalhos_ret = cabecalhos + ['MOTIVO']
+        ws_ret.append(cabecalhos_ret)
+        for registro in retirados_gerais:
+            ws_ret.append(preparar_linha_modelo(registro, cabecalhos_ret))
+
+    saida = io.BytesIO()
+    wb.save(saida)
+    return saida.getvalue()
+
+def processar_pdf_bradesco_mensal(reader, banco='BANCO BRADESCO'):
+    """Lê extratos mensais Bradesco, inclusive PDFs rasterizados via OCR."""
+    lancamentos = []
+    data_atual = None
+    partes_historico = []
+    ultimo_saldo = None
+    dentro_saldos_invest = False
+    modo_ocr = False
+    saldo_abertura = None
+    indice_saldo_abertura = 0
+    erro_ocr = ''
+
+    regex_data = re.compile(r'^(\d{2}/\d{2}/\d{4})\s*[|—-]?\s*(.*)$')
+    regex_moeda = re.compile(r'-?\d{1,3}(?:\.\d{3})*,\d{2}')
+    ignorar_prefixos = (
+        'extrato de:', 'agência | conta', 'agencia | conta', 'data lançamento',
+        'data lancamento', 'folha ', 'extrato mensal / por período',
+        'extrato mensal / por periodo', 'nome do usuário:', 'nome do usuario:',
+        'data da operação:', 'data da operacao:', 'os dados acima têm como base',
+        'os dados acima tem como base',
+    )
+
+    textos_paginas = [pagina.extract_text() or '' for pagina in reader.pages]
+
+    # PDF-imagem: OCR somente quando não existe qualquer camada de texto.
+    if not any(texto.strip() for texto in textos_paginas):
+        modo_ocr = True
+        try:
+            import fitz
+            import pytesseract
+            from PIL import Image, ImageOps
+
+            caminho_pdf = (
+                getattr(reader, '_razync_source_path', None)
+                or getattr(getattr(reader, 'stream', None), 'name', None)
+            )
+            if not caminho_pdf or not os.path.exists(caminho_pdf):
+                erro_ocr = 'Arquivo temporário do PDF não ficou disponível para o OCR.'
+                reader._razync_ocr_error = erro_ocr
+            if caminho_pdf and os.path.exists(caminho_pdf):
+                documento_ocr = fitz.open(caminho_pdf)
+                textos_paginas = []
+                for pagina_ocr in documento_ocr:
+                    pix = pagina_ocr.get_pixmap(
+                        matrix=fitz.Matrix(4.0, 4.0), alpha=False
+                    )
+                    imagem = Image.frombytes(
+                        'RGB', [pix.width, pix.height], pix.samples
+                    )
+                    imagem = ImageOps.autocontrast(ImageOps.grayscale(imagem))
+                    texto_ocr = pytesseract.image_to_string(
+                        imagem,
+                        lang='por',
+                        config='--psm 6 -c preserve_interword_spaces=1'
+                    )
+                    textos_paginas.append(texto_ocr or '')
+                documento_ocr.close()
+        except Exception as erro:
+            erro_ocr = str(erro)
+            reader._razync_ocr_error = erro_ocr
+            textos_paginas = textos_paginas or []
+
+    reader._razync_ocr_executado = modo_ocr
+    for texto in textos_paginas:
+        for linha_bruta in texto.splitlines():
+            linha = re.sub(r'\s+', ' ', linha_bruta).strip()
+            if not linha:
+                continue
+
+            normalizada = normalizar_texto(linha)
+
+            if normalizada.startswith('saldos invest facil'):
+                dentro_saldos_invest = True
+                partes_historico = []
+                continue
+            if normalizada.startswith('ultimos lancamentos'):
+                dentro_saldos_invest = False
+                partes_historico = []
+                ultimo_saldo = None
+                continue
+            if normalizada.startswith(('data lancamento', 'data lançamento')):
+                dentro_saldos_invest = False
+                partes_historico = []
+                continue
+            if dentro_saldos_invest:
+                continue
+            if normalizada.startswith(ignorar_prefixos):
+                continue
+            if normalizada.startswith('nova geracao comercial') and 'cnpj:' in normalizada:
+                continue
+            if normalizada.startswith('total '):
+                partes_historico = []
+                continue
+
+            match_data = regex_data.match(linha)
+            if match_data:
+                data_atual = match_data.group(1)
+                linha = match_data.group(2).strip()
+                normalizada = normalizar_texto(linha)
+                if not linha:
+                    continue
+
+            if 'saldo anterior' in normalizada:
+                moedas_saldo = regex_moeda.findall(linha)
+                if moedas_saldo:
+                    ultimo_saldo = limpar_valor_monetario(moedas_saldo[-1])
+                    saldo_abertura = ultimo_saldo
+                    indice_saldo_abertura = len(lancamentos)
+                partes_historico = []
+                continue
+
+            if not data_atual:
+                continue
+
+            moedas = regex_moeda.findall(linha)
+            if len(moedas) >= 2:
+                valor_txt = moedas[-2]
+                saldo_txt = moedas[-1]
+                valor_impresso = limpar_valor_monetario(valor_txt)
+                saldo_lido = limpar_valor_monetario(saldo_txt)
+                valor = valor_impresso
+
+                if ultimo_saldo is not None:
+                    variacao = round(saldo_lido - ultimo_saldo, 2)
+                    if modo_ocr:
+                        # OCR pode perder o sinal do débito ou errar um dígito do saldo.
+                        # A direção do saldo define o sinal; a magnitude impressa continua
+                        # sendo usada quando a leitura do saldo não fecha exatamente.
+                        sinal = -1 if variacao < 0 else 1
+                        if abs(abs(variacao) - abs(valor_impresso)) <= max(
+                            0.05, abs(valor_impresso) * 0.01
+                        ):
+                            valor = variacao
+                            ultimo_saldo = saldo_lido
+                        else:
+                            valor = sinal * abs(valor_impresso)
+                            ultimo_saldo = round(ultimo_saldo + valor, 2)
+                    else:
+                        if abs(abs(variacao) - abs(valor_impresso)) <= 0.02:
+                            valor = variacao
+                        ultimo_saldo = saldo_lido
+                else:
+                    ultimo_saldo = saldo_lido
+
+                inicio_valor = linha.rfind(valor_txt)
+                trecho_historico = linha[:inicio_valor].strip()
+                historico = re.sub(
+                    r'\s+', ' ',
+                    ' '.join(
+                        partes_historico
+                        + ([trecho_historico] if trecho_historico else [])
+                    )
+                ).strip(' |—-')
+                partes_historico = []
+
+                hist_norm = normalizar_texto(historico)
+                if not historico or hist_norm.startswith(('saldo ', 'total ')):
+                    continue
+                if abs(valor) < 0.005:
+                    continue
+
+                try:
+                    data = datetime.strptime(data_atual, '%d/%m/%Y')
+                except ValueError:
+                    continue
+
+                lancamentos.append({
+                    'DESCRIÇÃO': banco,
+                    'DATA': data,
+                    'VALOR': round(valor, 2),
+                    'DÉBITO': '',
+                    'CRÉDITO': '',
+                    'HISTÓRICO': historico,
+                })
+            else:
+                partes_historico.append(linha)
+                if len(partes_historico) > 8:
+                    partes_historico = partes_historico[-8:]
+
+    if saldo_abertura is not None and ultimo_saldo is not None:
+        movimentos_validacao = [
+            item.get('VALOR', 0.0) for item in lancamentos[indice_saldo_abertura:]
+        ]
+        reader._razync_balance_check = validar_fechamento_saldo(
+            saldo_abertura, ultimo_saldo, movimentos_validacao
+        )
+    reader._razync_ocr_executado = modo_ocr
+    if erro_ocr:
+        reader._razync_ocr_error = erro_ocr
+    return lancamentos
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
+def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
+    """Lê a conferência pelo mesmo motor central usado em todo o Razync."""
+    # Versão do parser para invalidar resultados antigos do cache quando a regra
+    # de leitura do BB Autorizável mudar.
+    _parser_conferencia_version = 'bb-rende-facil-v2'
+    termos_saldo = [
+        'saldo anterior', 'saldo aplic', 'saldo invest', 'saldo total disponivel',
+        'saldo movimentacao conta', 'sdo aplic aut mais ap', 'saldo final',
+        'saldo do dia', 'saldo total', 'saldo disponivel', 'saldo em conta',
+    ]
+    filtrados = []
+    if banco_forcado == 'itau_hw88' and str(filename).lower().endswith('.pdf'):
+        origem_extrato = processar_extrato_hw88(file_bytes).to_dict('records')
+    elif banco_forcado == 'btg' and str(filename).lower().endswith('.pdf'):
+        origem_extrato = processar_extrato_btg_vgv(file_bytes).to_dict('records')
+    # O extrato BB Empresa 'Autorizável' possui linhas quebradas e pode colar
+    # movimento e saldo. Usa leitor dedicado para não perder/duplicar valores.
+    elif str(filename).lower().endswith('.pdf') and parece_extrato_bb_autorizavel(file_bytes):
+        origem_extrato = processar_extrato_bb_autorizavel(file_bytes)
+    else:
+        origem_extrato = processar_extrato_unificado(file_bytes, filename) or []
+    for item in origem_extrato:
+        historico = normalizar_texto(texto_celula_seguro(item.get('HISTÓRICO', '')))
+        if any(termo in historico for termo in termos_saldo):
+            continue
+        valor = limpar_valor_monetario(item.get('VALOR', 0))
+        if abs(valor) < 0.005:
+            continue
+        filtrados.append(item)
+    fechamento = st.session_state.get('ultimo_fechamento_extrato')
+    if fechamento and fechamento.get('disponivel') and fechamento.get('ok') is False:
+        st.warning(
+            'O extrato foi lido, mas o fechamento matemático do saldo apresentou '
+            f"diferença de {formatar_moeda(abs(fechamento.get('diferenca', 0)))}. "
+            'Revise os lançamentos antes de concluir a conciliação.'
+        )
+    if not filtrados:
+        erro_leitura = st.session_state.get('ultimo_erro_extrato', '')
+        if erro_leitura:
+            raise ValueError(erro_leitura)
+    return filtrados
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
+def conciliar_empresa_com_extrato(df_planilha, lancamentos_extrato, df_retirados=None):
+    """Compara movimentos por dia e faz pareamento individual por data e centavos."""
+    colunas_base = ['DESCRIÇÃO', 'DATA', 'VALOR', 'HISTÓRICO']
+
+    def preparar_dataframe(dados):
+        if isinstance(dados, pd.DataFrame):
+            df = dados.copy()
+        else:
+            df = pd.DataFrame(dados or [])
+        for coluna in colunas_base:
+            if coluna not in df.columns:
+                df[coluna] = '' if coluna != 'VALOR' else 0.0
+        df['DESCRIÇÃO'] = df['DESCRIÇÃO'].fillna('').astype(str)
+        df['DATA'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.normalize()
+        df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0.0).round(2)
+        df['HISTÓRICO'] = df['HISTÓRICO'].fillna('').astype(str)
+        df = df.dropna(subset=['DATA'])
+        df = df[df['VALOR'].abs() >= 0.005].copy()
+        df['_CENTAVOS'] = (df['VALOR'] * 100).round().astype(int)
+        df['_BANCO'] = df['DESCRIÇÃO'].apply(
+            lambda valor: re.sub(r'\s+', ' ', normalizar_texto(valor).replace('banco', '')).strip()
+        )
+        return df.reset_index(drop=True)
+
+    df_modelo = preparar_dataframe(df_planilha)
+    df_extrato = preparar_dataframe(lancamentos_extrato)
+    df_retirados_ok = preparar_dataframe(df_retirados if df_retirados is not None else [])
+
+    usar_banco_na_chave = df_modelo.loc[df_modelo['_BANCO'] != '', '_BANCO'].nunique() > 1
+    for dataframe in [df_modelo, df_extrato, df_retirados_ok]:
+        if usar_banco_na_chave:
+            dataframe['_CHAVE'] = list(zip(
+                dataframe['_BANCO'], dataframe['DATA'], dataframe['_CENTAVOS']
+            ))
+        else:
+            dataframe['_CHAVE'] = list(zip(dataframe['DATA'], dataframe['_CENTAVOS']))
+
+    # Estornos de baixa retirados de propósito não devem gerar falso alerta.
+    indices_ignorados = set()
+    if not df_retirados_ok.empty and not df_extrato.empty:
+        quantidades_retiradas = df_retirados_ok['_CHAVE'].value_counts().to_dict()
+        for chave, quantidade in quantidades_retiradas.items():
+            candidatos = df_extrato.index[
+                (df_extrato['_CHAVE'] == chave) &
+                df_extrato['HISTÓRICO'].apply(identificar_estorno_de_baixa)
+            ].tolist()
+            indices_ignorados.update(candidatos[:int(quantidade)])
+
+    df_ignorados = df_extrato.loc[sorted(indices_ignorados)].copy() if indices_ignorados else df_extrato.iloc[0:0].copy()
+    df_extrato_comparavel = df_extrato.drop(index=list(indices_ignorados)).reset_index(drop=True)
+
+    # Pareamento um a um: lançamentos repetidos são tratados individualmente.
+    disponiveis_modelo = {}
+    for indice, chave in enumerate(df_modelo['_CHAVE']):
+        disponiveis_modelo.setdefault(chave, []).append(indice)
+
+    indices_modelo_pareados = set()
+    indices_extrato_sem_par = []
+    for indice_extrato, chave in enumerate(df_extrato_comparavel['_CHAVE']):
+        candidatos = disponiveis_modelo.get(chave, [])
+        if candidatos:
+            indices_modelo_pareados.add(candidatos.pop(0))
+        else:
+            indices_extrato_sem_par.append(indice_extrato)
+
+    indices_modelo_sem_par = [
+        indice for indice in range(len(df_modelo))
+        if indice not in indices_modelo_pareados
+    ]
+
+    faltando_planilha = df_extrato_comparavel.loc[indices_extrato_sem_par, colunas_base].copy()
+    a_mais_planilha = df_modelo.loc[indices_modelo_sem_par, colunas_base].copy()
+    ignorados = df_ignorados[colunas_base].copy()
+
+    def resumo_diario_por_natureza(df, prefixo):
+        temp = df[['DATA', 'VALOR']].copy()
+        temp[f'ENTRADAS {prefixo}'] = temp['VALOR'].where(temp['VALOR'] > 0, 0.0)
+        temp[f'SAÍDAS {prefixo}'] = -temp['VALOR'].where(temp['VALOR'] < 0, 0.0)
+        return temp.groupby('DATA', as_index=False)[[f'ENTRADAS {prefixo}', f'SAÍDAS {prefixo}']].sum()
+
+    ext_dia = resumo_diario_por_natureza(df_extrato_comparavel, 'EXTRATO')
+    plan_dia = resumo_diario_por_natureza(df_modelo, 'PLANILHA')
+    diario = pd.merge(ext_dia, plan_dia, on='DATA', how='outer').fillna(0.0).sort_values('DATA')
+    diario['DIF. ENTRADAS'] = (diario['ENTRADAS PLANILHA'] - diario['ENTRADAS EXTRATO']).round(2)
+    diario['DIF. SAÍDAS'] = (diario['SAÍDAS PLANILHA'] - diario['SAÍDAS EXTRATO']).round(2)
+    diario['STATUS ENTRADAS'] = diario['DIF. ENTRADAS'].apply(lambda v: '✅ Batendo' if abs(v) < 0.01 else '❌ Divergente')
+    diario['STATUS SAÍDAS'] = diario['DIF. SAÍDAS'].apply(lambda v: '✅ Batendo' if abs(v) < 0.01 else '❌ Divergente')
+    diario['STATUS'] = diario.apply(lambda r: '✅ Batendo' if abs(r['DIF. ENTRADAS']) < 0.01 and abs(r['DIF. SAÍDAS']) < 0.01 else '❌ Divergente', axis=1)
+
+    return diario, faltando_planilha, a_mais_planilha, ignorados
+
+def renderizar_conferencia_autokraft(
+    prefixo_chaves='autokraft', bancos_config=None,
+    rotulo_planilha='Planilha final organizada'
+):
+    """Exibe a conferência independente da planilha final do Grupo Autokraft."""
+    st.markdown("---")
+    st.markdown("### Conferência com o extrato bancário")
+    configs = bancos_config or [
+        {'nome': 'Itaú', 'slug': 'itau'},
+        {'nome': 'Daycoval', 'slug': 'daycoval'}
+    ]
+    nomes_bancos = [config['nome'] for config in configs]
+    st.caption(
+        "Envie a planilha final organizada e os extratos correspondentes. "
+        "Cada banco terá seu próprio relatório diário."
+    )
+    if len(configs) == 1:
+        bancos_escolhidos = nomes_bancos
+        st.caption(f"Banco da conferência: {nomes_bancos[0]}.")
+    else:
+        conferir_todos = st.checkbox(
+            "Conferir todos os bancos",
+            value=False,
+            key=f"{prefixo_chaves}_conferir_todos"
+        )
+        if conferir_todos:
+            bancos_escolhidos = nomes_bancos
+            st.caption("Serão apresentados relatórios separados para os bancos selecionados.")
+        else:
+            bancos_escolhidos = st.multiselect(
+                "Bancos que serão conferidos",
+                nomes_bancos,
+                default=[nomes_bancos[0]],
+                key=f"{prefixo_chaves}_bancos_conferencia"
+            )
+
+    if not bancos_escolhidos:
+        st.info("Selecione pelo menos um banco para realizar a conferência.")
+        return
+    configs_escolhidas = [
+        config for config in configs if config['nome'] in bancos_escolhidos
+    ]
+
+    coluna_planilha, coluna_extratos = st.columns(2)
+    with coluna_planilha:
+        planilha_final = st.file_uploader(
+            rotulo_planilha,
+            type=['xlsx', 'xls'],
+            key=f"{prefixo_chaves}_planilha_final_conferencia",
+            help="Pode ser o arquivo baixado pelo organizador com uma ou duas abas bancárias."
+        )
+    with coluna_extratos:
+        extratos = st.file_uploader(
+            "Extrato(s) bancário(s)",
+            type=['pdf', 'ofx', 'csv', 'xlsx', 'xls'],
+            accept_multiple_files=True,
+            key=(
+                f"{prefixo_chaves}_extratos_conferencia_"
+                + "_".join(config['slug'] for config in configs_escolhidas)
+            ),
+            help="Envie os extratos correspondentes ao mesmo período da planilha final."
+        )
+
+    if not planilha_final:
+        st.info(
+            "Envie a planilha final organizada para identificar o período e liberar a comparação."
+        )
+        return
+
+    try:
+        dados_planilha = {}
+        bancos_detectados = set()
+        datas_planilha = []
+        for config in configs_escolhidas:
+            banco_leitura = config.get('banco', config['slug'])
+            df_modelo, df_retirados, bancos_arquivo = ler_planilha_organizada_conferencia(
+                planilha_final.getvalue(), banco_leitura, config.get('conta')
+            )
+            dados_planilha[config['slug']] = {
+                'modelo': df_modelo,
+                'retirados': df_retirados
+            }
+            bancos_detectados.update(bancos_arquivo)
+            if not df_modelo.empty:
+                datas_validas = pd.to_datetime(
+                    df_modelo['DATA'], dayfirst=True, errors='coerce'
+                ).dropna()
+                datas_planilha.extend(datas_validas.dt.date.tolist())
+
+        if not datas_planilha:
+            st.warning("A planilha final não possui datas válidas nos bancos selecionados.")
+            return
+
+        data_minima = min(datas_planilha)
+        data_maxima = max(datas_planilha)
+        periodo = st.date_input(
+            "Período da conferência",
+            value=(data_minima, data_maxima),
+            min_value=data_minima,
+            max_value=data_maxima,
+            format="DD/MM/YYYY",
+            key=f"{prefixo_chaves}_periodo_conferencia"
+        )
+        if not isinstance(periodo, (tuple, list)) or len(periodo) != 2:
+            st.info("Selecione também a data final para concluir o período.")
+            return
+        data_inicial, data_final = periodo
+
+        dados_filtrados = {}
+        for config in configs_escolhidas:
+            chave = config['slug']
+            dados_filtrados[chave] = {
+                'modelo': filtrar_dataframe_periodo(
+                    dados_planilha[chave]['modelo'], data_inicial, data_final
+                ),
+                'retirados': filtrar_dataframe_periodo(
+                    dados_planilha[chave]['retirados'], data_inicial, data_final
+                )
+            }
+
+        bancos_texto = ", ".join(sorted(bancos_detectados)) or "não identificados"
+        st.success(
+            f"Planilha carregada. Bancos identificados: {bancos_texto}. "
+            f"Período: {data_inicial.strftime('%d/%m/%Y')} até "
+            f"{data_final.strftime('%d/%m/%Y')}."
+        )
+        if not extratos:
+            st.info("Agora envie pelo menos um extrato para gerar os relatórios.")
+            return
+
+        extratos_por_banco = {
+            config['slug']: [] for config in configs_escolhidas
+        }
+        arquivos_nao_identificados = []
+        for arquivo_extrato in extratos:
+            lancamentos = executar_com_loading(
+                f"Lendo {arquivo_extrato.name}...",
+                processar_extrato_conferencia_empresa,
+                arquivo_extrato.getvalue(),
+                arquivo_extrato.name,
+                (
+                    configs_escolhidas[0].get(
+                        'banco', configs_escolhidas[0]['slug']
+                    ) if len(configs_escolhidas) == 1 else None
+                ),
+            )
+            df_extrato = filtrar_dataframe_periodo(
+                pd.DataFrame(lancamentos), data_inicial, data_final
+            )
+            if df_extrato.empty:
+                continue
+
+            chave_nome = identificar_chave_banco_empresa(arquivo_extrato.name)
+            digitos_nome = re.sub(r'\D', '', arquivo_extrato.name)
+            destinos_nome = [
+                config['slug'] for config in configs_escolhidas
+                if (
+                    (
+                        config.get('banco', config['slug']) == chave_nome
+                        and not config.get('identificadores')
+                    )
+                    or any(
+                        identificador in digitos_nome
+                        for identificador in config.get('identificadores', [])
+                    )
+                )
+            ]
+            if len(destinos_nome) == 1:
+                extratos_por_banco[destinos_nome[0]].extend(
+                    df_extrato.to_dict('records')
+                )
+                continue
+
+            chaves_linhas = df_extrato['DESCRIÇÃO'].apply(identificar_chave_banco_empresa)
+            chaves_reconhecidas = {
+                config['slug'] for config in configs_escolhidas
+                if config.get('banco', config['slug']) in chaves_linhas.unique().tolist()
+            }
+            if len(chaves_reconhecidas) != 1:
+                if len(configs_escolhidas) == 1:
+                    chave_unica = configs_escolhidas[0]['slug']
+                    extratos_por_banco[chave_unica].extend(df_extrato.to_dict('records'))
+                else:
+                    arquivos_nao_identificados.append(arquivo_extrato.name)
+                continue
+
+            chave_destino = next(iter(chaves_reconhecidas))
+            banco_destino = next(
+                config.get('banco', config['slug'])
+                for config in configs_escolhidas
+                if config['slug'] == chave_destino
+            )
+            df_banco = df_extrato[chaves_linhas.eq(banco_destino)]
+            extratos_por_banco[chave_destino].extend(df_banco.to_dict('records'))
+
+        if arquivos_nao_identificados:
+            st.warning(
+                "Não foi possível identificar o banco destes arquivos: "
+                + ", ".join(arquivos_nao_identificados)
+            )
+        if not any(extratos_por_banco.values()):
+            st.warning(
+                "Nenhum lançamento dos extratos foi identificado dentro do período selecionado."
+            )
+            return
+
+        abas_relatorio = st.tabs([config['nome'] for config in configs_escolhidas])
+        for aba_relatorio, config in zip(abas_relatorio, configs_escolhidas):
+            with aba_relatorio:
+                chave = config['slug']
+                nome_banco = config['nome']
+                df_modelo = dados_filtrados[chave]['modelo']
+                df_extrato = pd.DataFrame(extratos_por_banco[chave])
+                st.markdown(f"#### Relatório — {nome_banco}")
+                if df_modelo.empty:
+                    st.warning(f"Não há lançamentos do {nome_banco} na planilha para o período.")
+                    continue
+                if df_extrato.empty:
+                    st.warning(f"Nenhum extrato do {nome_banco} foi identificado para o período.")
+                    continue
+
+                diario, _, _, _ = executar_com_loading(
+                    f"Conferindo os movimentos do {nome_banco}...",
+                    conciliar_empresa_com_extrato,
+                    df_modelo,
+                    df_extrato,
+                    dados_filtrados[chave]['retirados']
+                )
+                if diario.empty:
+                    st.warning("Não existem datas válidas para realizar a conferência.")
+                    continue
+
+                dias_batendo = int((diario['STATUS'] == '✅ Batendo').sum())
+                dias_divergentes = int((diario['STATUS'] == '❌ Divergente').sum())
+                te = float(diario['ENTRADAS EXTRATO'].sum())
+                tp = float(diario['ENTRADAS PLANILHA'].sum())
+                se = float(diario['SAÍDAS EXTRATO'].sum())
+                sp = float(diario['SAÍDAS PLANILHA'].sum())
+                dif_ent = round(tp - te, 2)
+                dif_sai = round(sp - se, 2)
+
+                st.markdown("##### Conferência diária")
+                resumo1, resumo2 = st.columns(2)
+                resumo1.metric("Dias batendo", dias_batendo)
+                resumo2.metric("Dias divergentes", dias_divergentes)
+
+                exibicao = diario.copy()
+                exibicao['DIFERENÇA ENTRADAS'] = (
+                    pd.to_numeric(exibicao['ENTRADAS PLANILHA'], errors='coerce').fillna(0.0)
+                    - pd.to_numeric(exibicao['ENTRADAS EXTRATO'], errors='coerce').fillna(0.0)
+                ).round(2)
+                exibicao['DIFERENÇA SAÍDAS'] = (
+                    pd.to_numeric(exibicao['SAÍDAS PLANILHA'], errors='coerce').fillna(0.0)
+                    - pd.to_numeric(exibicao['SAÍDAS EXTRATO'], errors='coerce').fillna(0.0)
+                ).round(2)
+                exibicao['DATA'] = exibicao['DATA'].dt.strftime('%d/%m/%Y')
+                exibicao = exibicao[[
+                    'DATA',
+                    'ENTRADAS PLANILHA', 'ENTRADAS EXTRATO', 'DIFERENÇA ENTRADAS',
+                    'SAÍDAS PLANILHA', 'SAÍDAS EXTRATO', 'DIFERENÇA SAÍDAS',
+                    'STATUS'
+                ]]
+                exibicao.columns = [
+                    'Data',
+                    'Entrada Planilha', 'Entrada Extrato', 'Diferença Entradas',
+                    'Saída Planilha', 'Saída Extrato', 'Diferença Saídas',
+                    'Status'
+                ]
+                exibicao = formatar_dataframe_moeda_br(
+                    exibicao,
+                    ['Entrada Planilha', 'Entrada Extrato', 'Diferença Entradas',
+                     'Saída Planilha', 'Saída Extrato', 'Diferença Saídas']
+                )
+                st.dataframe(exibicao, use_container_width=True, height=390, hide_index=True)
+
+                if dias_divergentes == 0:
+                    st.success("✅ Entradas e saídas estão batendo em todos os dias.")
+                else:
+                    st.warning("❌ Existem dias com divergência entre a planilha e o extrato.")
+    except Exception as erro:
+        st.error(f"Não foi possível realizar a conferência: {erro}")
+
+
+st.markdown("""
+<style>
+/* Ajustes estruturais baseados na inspeção visual da Home publicada. */
+section[data-testid="stSidebar"] [data-testid="stRadio"] {
+    position: fixed !important;
+    left: 0.9rem;
+    bottom: 3.3rem;
+    width: 238px;
+    z-index: 5;
+    padding: 0.65rem 0.55rem 0.2rem !important;
+    margin: 0 !important;
+    background: color-mix(in srgb, var(--rz-panel) 96%, transparent);
+}
+section[data-testid="stSidebar"] .stButton > button {
+    margin-bottom: 0.08rem !important;
+}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+    gap: 0.28rem !important;
+}
+
+.rz-dashboard-intro {
+    max-width: 780px;
+    padding: 0.2rem 0 1.1rem;
+}
+.rz-dashboard-intro .rz-home-title {
+    font-size: clamp(2rem, 4vw, 3rem);
+}
+.rz-dashboard-grid-title {
+    color: var(--rz-muted);
+    font-size: 0.67rem;
+    font-weight: 730;
+    letter-spacing: 0.105em;
+    text-transform: uppercase;
+    margin: 0.65rem 0 0.55rem;
+}
+.st-key-home_action_organizador button,
+.st-key-home_action_extratos button,
+.st-key-home_action_razao button {
+    height: auto !important;
+    min-height: 82px !important;
+    max-height: none !important;
+    padding: 0.9rem 1rem !important;
+    margin: 0 0 0.48rem !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    text-align: left !important;
+    white-space: pre-line !important;
+    border: 1px solid var(--rz-line) !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--rz-muted) !important;
+    font-size: 0.76rem !important;
+    line-height: 1.42 !important;
+}
+.st-key-home_action_organizador button {
+    min-height: 104px !important;
+    background: var(--rz-panel) !important;
+    border-color: color-mix(in srgb, var(--rz-accent) 34%, var(--rz-line)) !important;
+}
+.st-key-home_action_organizador button:hover,
+.st-key-home_action_extratos button:hover,
+.st-key-home_action_razao button:hover {
+    background: var(--rz-accent-soft) !important;
+    border-color: var(--rz-accent) !important;
+    transform: translateX(3px) !important;
+}
+.st-key-home_action_organizador button p,
+.st-key-home_action_extratos button p,
+.st-key-home_action_razao button p {
+    margin: 0 !important;
+    white-space: pre-line !important;
+}
+.st-key-home_action_organizador button strong,
+.st-key-home_action_extratos button strong,
+.st-key-home_action_razao button strong {
+    color: var(--rz-text) !important;
+    font-size: 0.98rem !important;
+    font-weight: 650 !important;
+}
+
+.rz-overview-panel {
+    min-height: 286px;
+    padding: 1.15rem 1.2rem;
+    border: 1px solid var(--rz-line);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--rz-panel) 78%, transparent);
+}
+.rz-overview-kicker {
+    color: var(--rz-muted);
+    font-size: 0.66rem;
+    font-weight: 730;
+    letter-spacing: .105em;
+    text-transform: uppercase;
+    margin-bottom: 0.7rem;
+}
+.rz-overview-title {
+    color: var(--rz-text);
+    font-size: 1.08rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.35rem;
+}
+.rz-overview-copy {
+    color: var(--rz-muted);
+    font-size: 0.8rem;
+    line-height: 1.55;
+    margin-bottom: 1rem;
+}
+.rz-overview-row {
+    display: grid;
+    grid-template-columns: 8px 1fr;
+    gap: 0.65rem;
+    align-items: start;
+    padding: 0.68rem 0;
+    border-top: 1px solid var(--rz-line);
+}
+.rz-overview-dot {
+    width: 7px;
+    height: 7px;
+    margin-top: 0.34rem;
+    border-radius: 50%;
+    background: var(--rz-accent);
+}
+.rz-overview-row strong {
+    display: block;
+    color: var(--rz-text);
+    font-size: 0.78rem;
+    font-weight: 610;
+}
+.rz-overview-row span {
+    display: block;
+    color: var(--rz-muted);
+    font-size: 0.71rem;
+    line-height: 1.45;
+    margin-top: 0.12rem;
+}
+@media (max-width: 900px) {
+    section[data-testid="stSidebar"] [data-testid="stRadio"] {
+        position: static !important;
+        width: auto;
+        margin-top: 0.8rem !important;
+    }
+    .rz-overview-panel { min-height: auto; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+st.markdown("""
+<style>
+/* Alinhamento fino da Home após inspeção em 1352x615. */
+.rz-dashboard-intro {
+    max-width: 760px !important;
+    padding-bottom: 1rem !important;
+}
+.rz-dashboard-intro .rz-home-title {
+    font-size: clamp(1.9rem, 3.3vw, 2.65rem) !important;
+    line-height: 1.06 !important;
+}
+.rz-dashboard-grid-title {
+    height: 1.35rem;
+    display: flex;
+    align-items: center;
+    margin: 0.55rem 0 0.45rem !important;
+}
+
+.st-key-home_action_organizador button,
+.st-key-home_action_extratos button,
+.st-key-home_action_razao button {
+    position: relative !important;
+    width: 100% !important;
+    min-height: 92px !important;
+    height: 92px !important;
+    padding: 0.9rem 1rem 0.9rem 3.8rem !important;
+    margin-bottom: 0.48rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
+}
+.st-key-home_action_organizador button p,
+.st-key-home_action_extratos button p,
+.st-key-home_action_razao button p {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+    white-space: pre-line !important;
+}
+.st-key-home_action_organizador button::before,
+.st-key-home_action_extratos button::before,
+.st-key-home_action_razao button::before {
+    position: absolute;
+    left: 1.15rem;
+    top: 50%;
+    width: 1.65rem;
+    height: 1.65rem;
+    display: grid;
+    place-items: center;
+    transform: translateY(-50%);
+    border: 1px solid var(--rz-line);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--rz-panel) 82%, transparent);
+    color: var(--rz-accent);
+    font-size: 0.82rem;
+    line-height: 1;
+}
+.st-key-home_action_organizador button::before { content: "▤"; }
+.st-key-home_action_extratos button::before { content: "⇄"; }
+.st-key-home_action_razao button::before { content: "✓"; }
+
+.rz-overview-panel {
+    min-height: 292px !important;
+    height: 292px !important;
+    padding: 1rem 1.05rem !important;
+    box-sizing: border-box !important;
+}
+.rz-overview-copy {
+    margin-bottom: 0.72rem !important;
+}
+.rz-overview-row {
+    padding: 0.55rem 0 !important;
+}
+
+@media (max-width: 900px) {
+    .st-key-home_action_organizador button,
+    .st-key-home_action_extratos button,
+    .st-key-home_action_razao button {
+        min-height: 86px !important;
+        height: 86px !important;
+        padding-left: 3.45rem !important;
+    }
+    .rz-overview-panel {
+        height: auto !important;
+        min-height: 0 !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+st.markdown("""
+<style>
+/* Grade fixa de ícones e textos da navegação lateral. */
+.rz-nav-label {
+    padding-left: 0.85rem !important;
+    margin-top: 0.65rem !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button {
+    position: relative !important;
+    width: 100% !important;
+    min-height: 2.5rem !important;
+    padding: 0.48rem 0.7rem 0.48rem 2.55rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button p {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+    white-space: nowrap !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button::before {
+    position: absolute;
+    left: 0.86rem;
+    top: 50%;
+    width: 1rem;
+    display: block;
+    transform: translateY(-50%);
+    color: currentColor;
+    font-size: 0.78rem;
+    line-height: 1;
+    text-align: center;
+}
+section[data-testid="stSidebar"] .st-key-sb_home button::before { content: "⌂"; }
+section[data-testid="stSidebar"] .st-key-sb_extratos button::before { content: "⇄"; }
+section[data-testid="stSidebar"] .st-key-sb_razao button::before { content: "✓"; }
+section[data-testid="stSidebar"] .st-key-sb_organizador button::before { content: "▤"; }
+section[data-testid="stSidebar"] .st-key-sb_tarefas button::before { content: "☷"; }
+</style>
+""", unsafe_allow_html=True)
+
+
+st.markdown("""
+<style>
+.rz-nav-label {
+    display: block !important;
+    line-height: 1.35 !important;
+    margin-bottom: 0 !important;
+}
+.rz-nav-title-gap {
+    display: block;
+    width: 100%;
+    height: 0.58rem;
+    pointer-events: none;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# Sidebar spacing refinement v3
+st.markdown("""
+<style>
+/* Desce levemente o bloco de navegação lateral sem alterar a estrutura. */
+section[data-testid="stSidebar"] .rz-nav-label {
+    margin-top: 1.15rem !important;
+}
+section[data-testid="stSidebar"] .rz-nav-title-gap {
+    height: 0.82rem !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"]:first-of-type {
+    margin-top: 0.3rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Sidebar refinement v2
+st.markdown("""
+<style>
+/* Sidebar Razync — navegação profissional e alinhada */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0b1117 0%, #0d141b 100%) !important;
+    border-right: 1px solid rgba(126, 151, 173, 0.18) !important;
+}
+section[data-testid="stSidebar"] > div {
+    padding-top: 0.75rem !important;
+}
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+    padding-left: 0.72rem !important;
+    padding-right: 0.72rem !important;
+}
+
+/* Espaçamento consistente entre os itens de navegação. */
+section[data-testid="stSidebar"] [class*="st-key-sb_"] {
+    margin: 0 0 0.36rem 0 !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] .stButton,
+section[data-testid="stSidebar"] [class*="st-key-sb_"] [data-testid="stButton"] {
+    margin: 0 !important;
+}
+
+/* Um único sistema visual para todos os botões da sidebar. */
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button {
+    position: relative !important;
+    width: 100% !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    max-height: 46px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+    padding: 0 0.82rem 0 3.15rem !important;
+    margin: 0 !important;
+    border-radius: 10px !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    color: #aebdca !important;
+    box-shadow: none !important;
+    text-align: left !important;
+    font-size: 0.84rem !important;
+    font-weight: 560 !important;
+    line-height: 1 !important;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button > div,
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button [data-testid="stMarkdownContainer"] {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button p {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: inherit !important;
+    font-size: 0.84rem !important;
+    font-weight: inherit !important;
+    line-height: 1 !important;
+    text-align: left !important;
+    white-space: nowrap !important;
+}
+
+/* Área fixa dos ícones: todos começam e terminam no mesmo lugar. */
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button::before {
+    position: absolute !important;
+    left: 0.72rem !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 1.72rem !important;
+    height: 1.72rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    border-radius: 7px !important;
+    border: 1px solid rgba(126, 151, 173, 0.13) !important;
+    background: rgba(255,255,255,0.018) !important;
+    color: #8194a5 !important;
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+}
+
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button:hover {
+    background: rgba(19, 185, 232, 0.075) !important;
+    border-color: rgba(19, 185, 232, 0.18) !important;
+    color: #ecf6fb !important;
+    transform: translateX(2px) !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button:hover::before {
+    color: #35c5e9 !important;
+    border-color: rgba(19, 185, 232, 0.28) !important;
+    background: rgba(19, 185, 232, 0.08) !important;
+}
+
+/* Estado ativo — discreto, claro e alinhado. */
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button[kind="primary"],
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button[data-testid="baseButton-primary"] {
+    background: linear-gradient(90deg, rgba(19,185,232,.13), rgba(19,185,232,.055)) !important;
+    border-color: rgba(19,185,232,.30) !important;
+    color: #f4fbff !important;
+    font-weight: 650 !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button[kind="primary"]::after,
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button[data-testid="baseButton-primary"]::after {
+    content: '' !important;
+    position: absolute !important;
+    left: -0.01rem !important;
+    top: 9px !important;
+    bottom: 9px !important;
+    width: 3px !important;
+    border-radius: 0 99px 99px 0 !important;
+    background: #13b9e8 !important;
+}
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button[kind="primary"]::before,
+section[data-testid="stSidebar"] [class*="st-key-sb_"] button[data-testid="baseButton-primary"]::before {
+    color: #42c9eb !important;
+    background: rgba(19,185,232,.11) !important;
+    border-color: rgba(19,185,232,.30) !important;
+}
+
+/* Marca/cabeçalho da sidebar também recebe uma grade mais limpa. */
+section[data-testid="stSidebar"] .hc-brand-title {
+    margin: 0.35rem 0 0.12rem !important;
+    font-size: 1.42rem !important;
+    line-height: 1.2 !important;
+}
+section[data-testid="stSidebar"] .hc-brand-subtitle {
+    margin: 0 0 0.9rem !important;
+    font-size: 0.72rem !important;
+    line-height: 1.45 !important;
+    color: #748797 !important;
+}
+
+@media (max-width: 900px) {
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        padding-left: 0.6rem !important;
+        padding-right: 0.6rem !important;
+    }
+    section[data-testid="stSidebar"] [class*="st-key-sb_"] button {
+        height: 44px !important;
+        min-height: 44px !important;
+        max-height: 44px !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+
+# Home visual refinement v3
+st.markdown("""
+<style>
+/* Home premium: apenas apresentação, sem alterar comportamento. */
+.stApp {
+    background:
+        radial-gradient(circle at 34% 8%, rgba(18, 133, 173, 0.10), transparent 32%),
+        linear-gradient(180deg, #071019 0%, #07111a 42%, #081019 100%) !important;
+}
+.block-container {
+    padding-top: 2.2rem !important;
+    padding-left: clamp(1.5rem, 3vw, 3.2rem) !important;
+    padding-right: clamp(1.5rem, 3vw, 3.2rem) !important;
+}
+.rz-dashboard-intro {
+    position: relative !important;
+    max-width: 920px !important;
+    margin: 0 0 1.65rem 0 !important;
+    padding: 1.15rem 1.25rem 1.3rem 1.35rem !important;
+    border: 1px solid rgba(91, 139, 170, 0.15) !important;
+    border-radius: 16px !important;
+    background:
+        radial-gradient(circle at 0% 0%, rgba(19,185,232,.11), transparent 42%),
+        linear-gradient(145deg, rgba(12,25,36,.88), rgba(8,17,26,.72)) !important;
+    box-shadow: 0 18px 48px rgba(0,0,0,.20) !important;
+    overflow: hidden !important;
+}
+.rz-dashboard-intro::after {
+    content: '' !important;
+    position: absolute !important;
+    left: 1.35rem !important;
+    bottom: 0 !important;
+    width: 84px !important;
+    height: 2px !important;
+    border-radius: 999px !important;
+    background: linear-gradient(90deg, #13b9e8, rgba(19,185,232,0)) !important;
+}
+.rz-home-eyebrow {
+    margin-bottom: .55rem !important;
+    color: #55c9e7 !important;
+    font-size: .70rem !important;
+    font-weight: 720 !important;
+    letter-spacing: .12em !important;
+    text-transform: uppercase !important;
+}
+.rz-dashboard-intro .rz-home-title {
+    margin: 0 !important;
+    font-size: clamp(2rem, 4vw, 3.25rem) !important;
+    line-height: 1.03 !important;
+    font-weight: 760 !important;
+    letter-spacing: -.045em !important;
+    color: #f4f8fb !important;
+}
+.rz-home-copy {
+    max-width: 690px !important;
+    margin-top: .72rem !important;
+    color: #8fa4b5 !important;
+    font-size: .94rem !important;
+    line-height: 1.65 !important;
+}
+.rz-dashboard-grid-title {
+    margin: .15rem 0 .7rem !important;
+    color: #8195a7 !important;
+    font-size: .72rem !important;
+    font-weight: 720 !important;
+    letter-spacing: .09em !important;
+    text-transform: uppercase !important;
+}
+.st-key-home_action_organizador button,
+.st-key-home_action_extratos button,
+.st-key-home_action_razao button {
+    min-height: 98px !important;
+    height: 98px !important;
+    margin-bottom: .68rem !important;
+    padding: 1rem 1.1rem 1rem 4.05rem !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(73, 113, 140, .28) !important;
+    background:
+        linear-gradient(135deg, rgba(15,29,41,.96), rgba(9,19,29,.96)) !important;
+    box-shadow: 0 10px 28px rgba(0,0,0,.14) !important;
+}
+.st-key-home_action_organizador button:hover,
+.st-key-home_action_extratos button:hover,
+.st-key-home_action_razao button:hover {
+    border-color: rgba(19,185,232,.52) !important;
+    background:
+        radial-gradient(circle at 0% 50%, rgba(19,185,232,.10), transparent 38%),
+        linear-gradient(135deg, rgba(17,34,47,.98), rgba(10,22,32,.98)) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 14px 34px rgba(0,0,0,.20) !important;
+}
+.st-key-home_action_organizador button::before,
+.st-key-home_action_extratos button::before,
+.st-key-home_action_razao button::before {
+    left: 1.18rem !important;
+    width: 2rem !important;
+    height: 2rem !important;
+    border-radius: 9px !important;
+    border-color: rgba(19,185,232,.22) !important;
+    background: rgba(19,185,232,.06) !important;
+    color: #36c4e8 !important;
+}
+.st-key-home_action_organizador button p,
+.st-key-home_action_extratos button p,
+.st-key-home_action_razao button p {
+    color: #8fa4b5 !important;
+    line-height: 1.55 !important;
+}
+.st-key-home_action_organizador button strong,
+.st-key-home_action_extratos button strong,
+.st-key-home_action_razao button strong {
+    display: block !important;
+    margin-bottom: .16rem !important;
+    color: #f1f6fa !important;
+    font-size: .98rem !important;
+    font-weight: 690 !important;
+}
+.rz-overview-panel {
+    min-height: 314px !important;
+    height: 314px !important;
+    padding: 1.15rem 1.2rem !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(73,113,140,.28) !important;
+    background:
+        radial-gradient(circle at 100% 0%, rgba(19,185,232,.07), transparent 35%),
+        linear-gradient(150deg, rgba(14,28,40,.96), rgba(8,18,27,.96)) !important;
+    box-shadow: 0 12px 34px rgba(0,0,0,.16) !important;
+}
+.rz-overview-title {
+    color: #f2f7fa !important;
+    font-size: 1.12rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -.02em !important;
+}
+.rz-overview-copy { color: #8ba0b2 !important; }
+.rz-overview-row {
+    border-top: 1px solid rgba(90,121,143,.16) !important;
+}
+.rz-overview-row strong { color: #dfe8ee !important; }
+.rz-overview-row span { color: #7e93a5 !important; }
+
+@media (max-width: 900px) {
+    .block-container { padding-top: 1.35rem !important; }
+    .rz-dashboard-intro { padding: 1rem !important; border-radius: 13px !important; }
+    .st-key-home_action_organizador button,
+    .st-key-home_action_extratos button,
+    .st-key-home_action_razao button {
+        min-height: 90px !important;
+        height: 90px !important;
+    }
+    .rz-overview-panel { height: auto !important; min-height: 0 !important; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+
+# ==============================================================================
+# DESIGN SYSTEM VISUAL V4
+# ==============================================================================
+st.markdown("""
+<style>
+/* Razync Design System v4 */
+:root {
+    --rz-bg: #071019;
+    --rz-bg-soft: #0a131d;
+    --rz-panel: rgba(12, 23, 34, 0.92);
+    --rz-panel-2: rgba(15, 29, 41, 0.88);
+    --rz-panel-hover: rgba(18, 39, 54, 0.96);
+    --rz-line: rgba(117, 151, 176, 0.18);
+    --rz-line-strong: rgba(19, 185, 232, 0.38);
+    --rz-text: #f4f8fb;
+    --rz-muted: #8fa2b2;
+    --rz-muted-2: #6f8495;
+    --rz-accent: #19bde8;
+    --rz-accent-2: #45d0f1;
+    --rz-success: #55c98b;
+    --rz-warning: #e4b15f;
+    --rz-danger: #ef7272;
+    --rz-radius-sm: 10px;
+    --rz-radius: 14px;
+    --rz-radius-lg: 18px;
+    --rz-shadow: 0 18px 44px rgba(0,0,0,.20);
+}
+
+html[data-theme="light"] {
+    --rz-bg: #f4f7f9;
+    --rz-bg-soft: #eef3f6;
+    --rz-panel: rgba(255,255,255,.94);
+    --rz-panel-2: rgba(248,251,253,.96);
+    --rz-panel-hover: rgba(240,247,251,.98);
+    --rz-line: rgba(41,72,92,.14);
+    --rz-line-strong: rgba(0,132,178,.34);
+    --rz-text: #13222d;
+    --rz-muted: #5e7180;
+    --rz-muted-2: #7b8d9a;
+    --rz-shadow: 0 18px 44px rgba(22,49,66,.08);
+}
+
+.stApp {
+    background:
+        radial-gradient(circle at 28% 0%, rgba(25,189,232,.075), transparent 31%),
+        linear-gradient(180deg, var(--rz-bg) 0%, var(--rz-bg-soft) 100%) !important;
+    color: var(--rz-text) !important;
+}
+
+.block-container {
+    max-width: 1500px !important;
+    padding-top: 2rem !important;
+    padding-bottom: 4rem !important;
+    padding-left: clamp(1.25rem, 2.7vw, 3rem) !important;
+    padding-right: clamp(1.25rem, 2.7vw, 3rem) !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--rz-text) !important;
+    letter-spacing: -.025em !important;
+}
+
+p, label, .stCaption, [data-testid="stCaptionContainer"] {
+    color: var(--rz-muted);
+}
+
+/* Cabeçalhos de página */
+.rz-page-header,
+.rz-dashboard-intro {
+    position: relative !important;
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius-lg) !important;
+    background:
+        radial-gradient(circle at 0 0, rgba(25,189,232,.11), transparent 38%),
+        linear-gradient(145deg, var(--rz-panel), rgba(8,18,27,.72)) !important;
+    box-shadow: var(--rz-shadow) !important;
+    padding: 1.35rem 1.5rem 1.45rem !important;
+    overflow: hidden !important;
+    margin-bottom: 1.45rem !important;
+}
+.rz-page-header::after,
+.rz-dashboard-intro::after {
+    content: '';
+    position: absolute;
+    left: 1.5rem;
+    bottom: 0;
+    width: 54px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--rz-accent), transparent);
+}
+.rz-page-kicker,
+.rz-home-eyebrow,
+.rz-dashboard-grid-title,
+.rz-company-section {
+    color: var(--rz-accent) !important;
+    text-transform: uppercase !important;
+    letter-spacing: .13em !important;
+    font-size: .69rem !important;
+    font-weight: 760 !important;
+}
+.rz-page-title,
+.rz-dashboard-intro .rz-home-title {
+    color: var(--rz-text) !important;
+    font-size: clamp(2rem, 3.7vw, 3.15rem) !important;
+    line-height: 1.04 !important;
+    font-weight: 780 !important;
+    letter-spacing: -.045em !important;
+}
+.rz-page-description,
+.rz-home-copy {
+    color: var(--rz-muted) !important;
+    max-width: 760px !important;
+    font-size: .96rem !important;
+    line-height: 1.65 !important;
+}
+
+/* Botões */
+.stButton > button,
+.stDownloadButton > button,
+[data-testid="stFormSubmitButton"] > button {
+    min-height: 42px !important;
+    border-radius: var(--rz-radius-sm) !important;
+    border: 1px solid var(--rz-line) !important;
+    background: linear-gradient(180deg, rgba(255,255,255,.018), rgba(255,255,255,0)), var(--rz-panel-2) !important;
+    color: var(--rz-text) !important;
+    box-shadow: none !important;
+    font-weight: 620 !important;
+    transition: transform .16s ease, border-color .16s ease, background .16s ease !important;
+}
+.stButton > button:hover,
+.stDownloadButton > button:hover,
+[data-testid="stFormSubmitButton"] > button:hover {
+    transform: translateY(-1px) !important;
+    border-color: var(--rz-line-strong) !important;
+    background: var(--rz-panel-hover) !important;
+    color: var(--rz-text) !important;
+}
+.stButton > button[kind="primary"],
+[data-testid="stBaseButton-primary"],
+[data-testid="stFormSubmitButton"] > button[kind="primary"] {
+    background: linear-gradient(135deg, #0d91bd, #13b9e8) !important;
+    border-color: rgba(86,212,245,.72) !important;
+    color: #03131a !important;
+    font-weight: 760 !important;
+}
+
+/* Inputs, selects e datas */
+[data-baseweb="input"] > div,
+[data-baseweb="select"] > div,
+[data-testid="stDateInput"] [data-baseweb="input"] > div,
+.stTextArea textarea {
+    min-height: 44px !important;
+    border-radius: var(--rz-radius-sm) !important;
+    border-color: var(--rz-line) !important;
+    background: var(--rz-panel) !important;
+    color: var(--rz-text) !important;
+    box-shadow: none !important;
+}
+[data-baseweb="input"] > div:focus-within,
+[data-baseweb="select"] > div:focus-within,
+.stTextArea textarea:focus {
+    border-color: var(--rz-accent) !important;
+    box-shadow: 0 0 0 3px rgba(25,189,232,.09) !important;
+}
+
+/* Upload de arquivos */
+[data-testid="stFileUploaderDropzone"] {
+    min-height: 132px !important;
+    border-radius: var(--rz-radius) !important;
+    border: 1px dashed rgba(25,189,232,.38) !important;
+    background:
+        radial-gradient(circle at 14% 0%, rgba(25,189,232,.08), transparent 42%),
+        var(--rz-panel) !important;
+    transition: border-color .16s ease, background .16s ease !important;
+}
+[data-testid="stFileUploaderDropzone"]:hover {
+    border-color: rgba(25,189,232,.72) !important;
+    background: var(--rz-panel-hover) !important;
+}
+[data-testid="stFileUploaderFile"] {
+    border: 1px solid var(--rz-line) !important;
+    border-radius: 10px !important;
+    background: var(--rz-panel-2) !important;
+}
+
+/* Métricas nativas e métricas antigas */
+[data-testid="stMetric"] {
+    min-height: 112px !important;
+    padding: 1rem 1.05rem !important;
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius) !important;
+    background: var(--rz-panel) !important;
+    box-shadow: 0 12px 28px rgba(0,0,0,.10) !important;
+}
+[data-testid="stMetricLabel"] { color: var(--rz-muted) !important; }
+[data-testid="stMetricValue"] { color: var(--rz-text) !important; letter-spacing: -.035em !important; }
+.metric-card {
+    min-height: 108px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    padding: 1rem 1.05rem !important;
+    border-radius: var(--rz-radius) !important;
+    border: 1px solid var(--rz-line) !important;
+    background: var(--rz-panel) !important;
+    box-shadow: 0 12px 28px rgba(0,0,0,.10) !important;
+}
+.metric-title { color: var(--rz-muted) !important; font-size: .68rem !important; letter-spacing: .08em !important; }
+.metric-value { color: var(--rz-text) !important; font-size: 1.22rem !important; letter-spacing: -.025em !important; }
+
+/* Alertas */
+[data-testid="stAlert"] {
+    border-radius: var(--rz-radius) !important;
+    border: 1px solid var(--rz-line) !important;
+    background: var(--rz-panel) !important;
+}
+
+/* Tabs */
+[data-baseweb="tab-list"] {
+    gap: .35rem !important;
+    padding: .34rem !important;
+    border: 1px solid var(--rz-line) !important;
+    border-radius: 12px !important;
+    background: rgba(9,19,28,.54) !important;
+}
+[data-baseweb="tab"] {
+    min-height: 39px !important;
+    border-radius: 9px !important;
+    padding-left: .95rem !important;
+    padding-right: .95rem !important;
+    color: var(--rz-muted) !important;
+}
+[data-baseweb="tab"][aria-selected="true"] {
+    color: var(--rz-text) !important;
+    background: var(--rz-panel-hover) !important;
+}
+[data-baseweb="tab-highlight"] { background-color: var(--rz-accent) !important; }
+
+/* Dataframes */
+[data-testid="stDataFrame"] {
+    overflow: hidden !important;
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius) !important;
+    background: var(--rz-panel) !important;
+}
+
+/* Expanders */
+[data-testid="stExpander"] {
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius) !important;
+    background: var(--rz-panel) !important;
+    overflow: hidden !important;
+}
+[data-testid="stExpander"] summary:hover { background: rgba(25,189,232,.035) !important; }
+
+/* Separadores */
+hr { border-color: var(--rz-line) !important; opacity: 1 !important; }
+
+/* Sidebar premium */
+section[data-testid="stSidebar"] {
+    background:
+        radial-gradient(circle at 15% 0%, rgba(25,189,232,.10), transparent 24%),
+        linear-gradient(180deg, #09121b 0%, #0a1219 100%) !important;
+    border-right: 1px solid var(--rz-line) !important;
+}
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+    padding-top: 1.3rem !important;
+}
+section[data-testid="stSidebar"] .stButton {
+    margin: .24rem 0 !important;
+}
+section[data-testid="stSidebar"] .stButton > button {
+    min-height: 46px !important;
+    border-radius: 11px !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    color: #a9bac7 !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    transform: none !important;
+    background: rgba(25,189,232,.075) !important;
+    border-color: rgba(25,189,232,.20) !important;
+    color: #edf8fb !important;
+}
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: linear-gradient(90deg, rgba(25,189,232,.16), rgba(25,189,232,.055)) !important;
+    border-color: rgba(25,189,232,.30) !important;
+    color: #eafaff !important;
+}
+.hc-brand-title { font-size: 1.78rem !important; letter-spacing: -.05em !important; }
+.hc-brand-subtitle { font-size: .72rem !important; letter-spacing: .08em !important; text-transform: uppercase !important; }
+
+/* Home */
+[class*="st-key-home_action_"] button {
+    min-height: 94px !important;
+    height: 94px !important;
+    border-radius: var(--rz-radius) !important;
+    padding: 1rem 1.15rem 1rem 4rem !important;
+    border: 1px solid var(--rz-line) !important;
+    background: var(--rz-panel) !important;
+    box-shadow: 0 13px 28px rgba(0,0,0,.12) !important;
+}
+[class*="st-key-home_action_"] button:hover {
+    border-color: var(--rz-line-strong) !important;
+    background: var(--rz-panel-hover) !important;
+}
+.rz-overview-panel {
+    border-radius: var(--rz-radius-lg) !important;
+    border: 1px solid var(--rz-line) !important;
+    background: var(--rz-panel) !important;
+    box-shadow: var(--rz-shadow) !important;
+}
+
+/* Pesquisa e área de empresas */
+[class*="st-key-org_resultados_nativos"],
+[class*="st-key-org_acesso_rapido"],
+.rz-company-workspace {
+    border-radius: var(--rz-radius) !important;
+}
+[class*="st-key-org_linha_empresa_"] {
+    border-bottom: 1px solid rgba(117,151,176,.10) !important;
+    transition: background .14s ease !important;
+}
+[class*="st-key-org_linha_empresa_"]:hover {
+    background: rgba(25,189,232,.035) !important;
+}
+.rz-task-status {
+    border-radius: 999px !important;
+    padding: .28rem .56rem !important;
+    font-size: .68rem !important;
+    font-weight: 720 !important;
+}
+
+/* Central de tarefas */
+.rz-task-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.3rem 1.4rem;
+    margin-bottom: 1.15rem;
+    border: 1px solid var(--rz-line);
+    border-radius: var(--rz-radius-lg);
+    background:
+        radial-gradient(circle at 0 0, rgba(25,189,232,.10), transparent 38%),
+        var(--rz-panel);
+    box-shadow: var(--rz-shadow);
+}
+.rz-task-hero__eyebrow {
+    color: var(--rz-accent);
+    text-transform: uppercase;
+    letter-spacing: .13em;
+    font-size: .68rem;
+    font-weight: 760;
+}
+.rz-task-hero__title {
+    color: var(--rz-text);
+    font-size: clamp(1.85rem, 3vw, 2.6rem);
+    font-weight: 780;
+    letter-spacing: -.045em;
+    line-height: 1.06;
+    margin-top: .26rem;
+}
+.rz-task-hero__copy {
+    color: var(--rz-muted);
+    max-width: 720px;
+    font-size: .9rem;
+    line-height: 1.55;
+    margin-top: .45rem;
+}
+.rz-task-hero__badge {
+    flex: 0 0 auto;
+    padding: .44rem .7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(25,189,232,.26);
+    background: rgba(25,189,232,.08);
+    color: #9ce7f7;
+    font-size: .72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Forms */
+[data-testid="stForm"] {
+    padding: 1rem 1.05rem 1.05rem !important;
+    border: 1px solid var(--rz-line) !important;
+    border-radius: var(--rz-radius) !important;
+    background: var(--rz-panel) !important;
+}
+
+/* Progress */
+[data-testid="stProgress"] > div > div > div > div {
+    background: linear-gradient(90deg, #0d91bd, #22c8ef) !important;
+}
+
+@media (max-width: 900px) {
+    .block-container { padding-top: 1.15rem !important; }
+    .rz-page-header, .rz-dashboard-intro, .rz-task-hero { border-radius: 14px !important; padding: 1rem 1.05rem !important; }
+    .rz-task-hero { align-items: flex-start; flex-direction: column; }
+    [class*="st-key-home_action_"] button { height: auto !important; min-height: 88px !important; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# CONTROLE DE ESTADO DE NAVEGAÇÃO
+# ==============================================================================
+if 'pagina_ativa' not in st.session_state:
+    st.session_state['pagina_ativa'] = 'home'
+if 'animar_transicao' not in st.session_state:
+    st.session_state['animar_transicao'] = True
+
+def mudar_pagina(nome_pagina):
+    """Troca a ferramenta e anima somente o primeiro render da nova tela."""
+    pagina_anterior = st.session_state.get('pagina_ativa')
+    if pagina_anterior == nome_pagina:
+        if nome_pagina == 'organizador':
+            st.session_state['empresa_organizador'] = None
+        return
+    # Sempre inicia o Organizador pela escolha da empresa. A seleção permanece
+    # apenas durante o trabalho atual e não reaparece ao entrar novamente.
+    if nome_pagina == 'organizador':
+        st.session_state['empresa_organizador'] = None
+    st.session_state['pagina_ativa'] = nome_pagina
+    st.session_state['animar_transicao'] = True
+
+# ==============================================================================
+# BARRA LATERAL
+# ==============================================================================
+st.sidebar.markdown(
+    (
+        '<div class="rz-nav-label">Navegação</div>'
+        '<div class="rz-nav-title-gap" aria-hidden="true"></div>'
+    ),
+    unsafe_allow_html=True,
+)
+
+pagina_sidebar = st.session_state.get('pagina_ativa', 'home')
+st.sidebar.button(
+    "Início",
+    use_container_width=True,
+    key="sb_home",
+    type="primary" if pagina_sidebar == "home" else "tertiary",
+    on_click=mudar_pagina,
+    args=('home',),
+)
+st.sidebar.button(
+    "Conversor de Extratos",
+    use_container_width=True,
+    key="sb_extratos",
+    type="primary" if pagina_sidebar == "extratos" else "tertiary",
+    on_click=mudar_pagina,
+    args=('extratos',),
+)
+st.sidebar.button(
+    "Conciliação com Razão",
+    use_container_width=True,
+    key="sb_razao",
+    type="primary" if pagina_sidebar == "razao" else "tertiary",
+    on_click=mudar_pagina,
+    args=('razao',),
+)
+st.sidebar.button(
+    "Organizador de Planilhas",
+    use_container_width=True,
+    key="sb_organizador",
+    type="primary" if pagina_sidebar == "organizador" else "tertiary",
+    on_click=mudar_pagina,
+    args=('organizador',),
+)
+st.sidebar.button(
+    "Central de Tarefas",
+    use_container_width=True,
+    key="sb_tarefas",
+    type="primary" if pagina_sidebar == "tarefas" else "tertiary",
+    on_click=mudar_pagina,
+    args=('tarefas',),
+)
+
+if SEGURANCA_POR_SENHA_ATIVA:
+    st.sidebar.markdown(
+        '<div class="rz-nav-label" style="margin-top:0.9rem;">Sessão</div>',
+        unsafe_allow_html=True,
+    )
+    st.sidebar.button(
+        "Sair do sistema",
+        use_container_width=True,
+        key="hc_encerrar_sessao",
+        type="tertiary",
+        on_click=lambda: st.session_state.update({'_hc_acesso_autorizado': False}),
+    )
+
+st.sidebar.markdown(
+    "<p style='font-size:10px;color:var(--hc-muted);text-align:center;"
+    "position:fixed;left:1rem;bottom:1.25rem;width:230px;'>"
+    "Razync · Ambiente protegido</p>",
+    unsafe_allow_html=True,
+)
+
+# O marcador ativa o CSS uma única vez e desaparece nos reruns de filtros/uploads.
+if st.session_state.pop('animar_transicao', False):
+    st.markdown(
+        '<span class="hc-page-transition-marker" aria-hidden="true"></span>',
+        unsafe_allow_html=True
+    )
+
+# ==============================================================================
+
+# ==============================================================================
+# PERFORMANCE VISUAL V1
+# ==============================================================================
+st.markdown("""
+<style>
+/* Menos trabalho de pintura/composição sem alterar a identidade visual. */
+.stApp {
+    background: linear-gradient(180deg, var(--rz-bg) 0%, var(--rz-bg-soft) 100%) !important;
+}
+.rz-page-header,
+.rz-dashboard-intro,
+.rz-overview-panel,
+.metric-card,
+[data-testid="stMetric"],
+[data-testid="stFileUploaderDropzone"] {
+    box-shadow: 0 8px 24px rgba(0,0,0,.11) !important;
+}
+.rz-page-header,
+.rz-dashboard-intro,
+.rz-overview-panel,
+[data-testid="stFileUploaderDropzone"] {
+    background: var(--rz-panel) !important;
+}
+.stButton > button,
+.stDownloadButton > button,
+[data-testid="stFormSubmitButton"] > button,
+[data-testid="stFileUploaderDropzone"] {
+    transition-duration: .10s !important;
+}
+.stButton > button:hover,
+.stDownloadButton > button:hover,
+[data-testid="stFormSubmitButton"] > button:hover {
+    transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+        animation: none !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Transição curta ao abrir uma empresa: mascara o rerun do Streamlit sem atrasar a navegação normal.
+_empresa_loading = st.session_state.get('_rz_empresa_loading')
+if _empresa_loading:
+    _codigo_loading = _empresa_loading.get('codigo', '')
+    _nome_loading = _empresa_loading.get('nome', 'Empresa')
+    st.markdown(
+        f"""
+        <div class="rz-company-loading-overlay" role="status" aria-live="polite">
+            <div class="rz-company-loading-shell">
+                <div class="rz-company-loading-brand">R</div>
+                <div class="rz-company-loading-kicker">Acessando empresa</div>
+                <div class="rz-company-loading-name">{_codigo_loading} · {_nome_loading}</div>
+                <div class="rz-company-loading-status">
+                    <span class="rz-company-loading-spinner" aria-hidden="true"></span>
+                    <span>Preparando ambiente</span>
+                </div>
+            </div>
+        </div>
+        <style>
+        .rz-company-loading-overlay {{
+            position: fixed;
+            inset: 0;
+            z-index: 999999;
+            display: grid;
+            place-items: center;
+            padding: 1.25rem;
+            background: #091017;
+            overflow: hidden;
+        }}
+        .rz-company-loading-overlay::before {{
+            content: "";
+            position: absolute;
+            width: 440px;
+            height: 440px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(25,189,232,.08) 0%, rgba(25,189,232,0) 68%);
+            pointer-events: none;
+        }}
+        .rz-company-loading-shell {{
+            position: relative;
+            z-index: 1;
+            width: min(90vw, 390px);
+            text-align: center;
+            animation: rz-company-enter .18s ease-out both;
+        }}
+        .rz-company-loading-brand {{
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 1rem;
+            display: grid;
+            place-items: center;
+            border: 1px solid rgba(25,189,232,.32);
+            border-radius: 12px;
+            background: rgba(17,31,41,.82);
+            color: #55d4f3;
+            font-size: 1rem;
+            font-weight: 800;
+            letter-spacing: -.03em;
+            box-shadow: 0 10px 30px rgba(0,0,0,.18);
+        }}
+        .rz-company-loading-kicker {{
+            color: #55d4f3;
+            font-size: .66rem;
+            font-weight: 760;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            margin-bottom: .45rem;
+        }}
+        .rz-company-loading-name {{
+            color: #f3f7fa;
+            font-size: 1.08rem;
+            line-height: 1.35;
+            font-weight: 700;
+            letter-spacing: -.018em;
+        }}
+        .rz-company-loading-status {{
+            margin-top: .95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: .48rem;
+            color: #8296a6;
+            font-size: .76rem;
+        }}
+        .rz-company-loading-spinner {{
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid rgba(130,150,166,.24);
+            border-top-color: #2fc6eb;
+            animation: rz-company-spin .62s linear infinite;
+        }}
+        @keyframes rz-company-spin {{
+            to {{ transform: rotate(360deg); }}
+        }}
+        @keyframes rz-company-enter {{
+            from {{ opacity: 0; transform: translateY(5px) scale(.99); }}
+            to {{ opacity: 1; transform: translateY(0) scale(1); }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .rz-company-loading-shell,
+            .rz-company-loading-spinner {{ animation: none !important; }}
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    # Mantém o diretório sob o overlay e só troca a empresa depois da transição.
+    # Isso evita que a nova tela comece a renderizar por baixo do loading.
+    time.sleep(0.30)
+    _chave_destino_loading = _empresa_loading.get('chave_destino')
+    if _chave_destino_loading == 'nova_geracao':
+        st.session_state['org_estabelecimento_nova_geracao_card'] = (
+            _empresa_loading.get('estabelecimento', 'matriz')
+        )
+    if _chave_destino_loading:
+        st.session_state['empresa_organizador'] = _chave_destino_loading
+    st.session_state.pop('_rz_empresa_loading', None)
+    st.rerun()
+
+# TELA 1: MENU PRINCIPAL (HOME)
+# ==============================================================================
+if st.session_state['pagina_ativa'] == 'home':
+    # Resumo operacional real da competência atual para a Home.
+    hoje_home, competencia_home = obter_competencia_operacional()
+    try:
+        status_empresas_home = carregar_tarefas_competencia(competencia_home.isoformat())
+    except Exception:
+        status_empresas_home = {}
+
+    prioridades_home = [
+        calcular_prioridade_empresa(
+            empresa, status_empresas_home, hoje_home, competencia_home
+        )
+        for empresa in EMPRESAS
+    ]
+    total_empresas_home = len(EMPRESAS)
+    vencendo_hoje_home = sum(
+        1 for prioridade in prioridades_home
+        if not prioridade['concluida'] and prioridade.get('dias_restantes') == 0
+    )
+    atrasadas_home = sum(
+        1 for prioridade in prioridades_home
+        if not prioridade['concluida'] and prioridade['status'] == 'Atrasada'
+    )
+    concluidas_home = sum(1 for prioridade in prioridades_home if prioridade['concluida'])
+    progresso_home = round((concluidas_home / total_empresas_home) * 100) if total_empresas_home else 0
+
+    st.markdown(
+        f"""
+        <style>
+        /* Home compacta v4 — ocupa melhor a primeira dobra da tela. */
+        .stMainBlockContainer {{
+            padding-top: 1.65rem !important;
+            padding-bottom: 1.2rem !important;
+            max-width: 1180px !important;
+        }}
+        .rz-home-shell {{ margin-top: 0 !important; }}
+        .rz-dashboard-intro {{
+            padding: .1rem 0 .55rem !important;
+            margin: 0 0 .65rem !important;
+            border: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }}
+        .rz-home-eyebrow {{
+            font-size: .68rem !important;
+            letter-spacing: .14em !important;
+            margin-bottom: .35rem !important;
+        }}
+        .rz-home-title {{
+            font-size: clamp(2rem, 3.6vw, 3.15rem) !important;
+            line-height: 1.02 !important;
+            margin: 0 !important;
+            letter-spacing: -.045em !important;
+        }}
+        .rz-home-copy {{
+            margin-top: .55rem !important;
+            max-width: 780px !important;
+            font-size: .88rem !important;
+            line-height: 1.45 !important;
+        }}
+        .rz-home-metrics {{
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: .65rem;
+            margin: .85rem 0 1.05rem;
+        }}
+        .rz-home-metric {{
+            min-height: 112px;
+            padding: .9rem .95rem;
+            border: 1px solid rgba(110,145,166,.20);
+            border-radius: 14px;
+            background: linear-gradient(145deg, rgba(14,28,40,.96), rgba(10,21,31,.96));
+            box-shadow: 0 7px 20px rgba(0,0,0,.10);
+        }}
+        .rz-home-metric__label {{
+            color: #91a5b6;
+            font-size: .64rem;
+            font-weight: 760;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }}
+        .rz-home-metric__value {{
+            margin-top: .3rem;
+            color: #f4f8fb;
+            font-size: 1.72rem;
+            font-weight: 780;
+            line-height: 1;
+        }}
+        .rz-home-metric__sub {{
+            margin-top: .42rem;
+            color: #7890a3;
+            font-size: .72rem;
+        }}
+        .rz-home-progress-track {{
+            height: 5px;
+            margin-top: .55rem;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(116,143,162,.18);
+        }}
+        .rz-home-progress-track > i {{
+            display: block;
+            width: {progresso_home}%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #13b9e8, #1e8fff);
+        }}
+        .rz-dashboard-grid-title {{
+            margin: .15rem 0 .55rem !important;
+            font-size: .68rem !important;
+            letter-spacing: .12em !important;
+        }}
+        div[class*="st-key-home_action_"] {{ margin-bottom: .55rem !important; }}
+        div[class*="st-key-home_action_"] button {{
+            min-height: 78px !important;
+            padding: .8rem 1rem !important;
+            border-radius: 14px !important;
+            text-align: left !important;
+        }}
+        div[class*="st-key-home_action_"] button p {{
+            font-size: .79rem !important;
+            line-height: 1.35 !important;
+        }}
+        div[class*="st-key-home_action_"] button strong {{
+            display: block;
+            margin-bottom: .16rem;
+            color: #f4f8fb !important;
+            font-size: .92rem !important;
+        }}
+        .rz-overview-panel {{
+            min-height: 246px !important;
+            padding: 1rem 1.05rem !important;
+            border-radius: 14px !important;
+        }}
+        .rz-overview-title {{ font-size: 1rem !important; margin-top: .28rem !important; }}
+        .rz-overview-copy {{ font-size: .74rem !important; margin: .4rem 0 .65rem !important; }}
+        .rz-overview-row {{ padding: .52rem 0 !important; gap: .55rem !important; }}
+        .rz-overview-row strong {{ font-size: .72rem !important; }}
+        .rz-overview-row span {{ font-size: .66rem !important; line-height: 1.35 !important; }}
+        .rz-home-tip {{
+            margin-top: .55rem;
+            padding: .72rem .9rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            border: 1px solid rgba(110,145,166,.18);
+            border-radius: 12px;
+            background: rgba(13,27,39,.76);
+        }}
+        .rz-home-tip strong {{ color: #eaf3f8; font-size: .76rem; }}
+        .rz-home-tip span {{ color: #7890a3; font-size: .7rem; }}
+        @media (max-width: 1050px) {{
+            .rz-home-metrics {{ grid-template-columns: repeat(3, 1fr); }}
+        }}
+        @media (max-width: 760px) {{
+            .stMainBlockContainer {{ padding-top: 1rem !important; }}
+            .rz-home-metrics {{ grid-template-columns: repeat(2, 1fr); }}
+            .rz-home-title {{ font-size: 2rem !important; }}
+        }}
+        </style>
+        <div class="rz-home-shell">
+            <section class="rz-dashboard-intro" aria-labelledby="rz-home-title">
+                <div class="rz-home-eyebrow">Central operacional</div>
+                <div class="rz-home-title" id="rz-home-title">Vamos organizar seu dia.</div>
+                <div class="rz-home-copy">
+                    Centralize suas rotinas contábeis em um só lugar e acesse rapidamente cada ferramenta da operação.
+                </div>
+            </section>
+            <section class="rz-home-metrics" aria-label="Resumo operacional">
+                <div class="rz-home-metric">
+                    <div class="rz-home-metric__label">Empresas</div>
+                    <div class="rz-home-metric__value">{total_empresas_home}</div>
+                    <div class="rz-home-metric__sub">Cadastradas</div>
+                </div>
+                <div class="rz-home-metric">
+                    <div class="rz-home-metric__label">Vencendo hoje</div>
+                    <div class="rz-home-metric__value">{vencendo_hoje_home}</div>
+                    <div class="rz-home-metric__sub">Empresas</div>
+                </div>
+                <div class="rz-home-metric">
+                    <div class="rz-home-metric__label">Atrasadas</div>
+                    <div class="rz-home-metric__value">{atrasadas_home}</div>
+                    <div class="rz-home-metric__sub">Exigem atenção</div>
+                </div>
+                <div class="rz-home-metric">
+                    <div class="rz-home-metric__label">Concluídas</div>
+                    <div class="rz-home-metric__value">{concluidas_home}</div>
+                    <div class="rz-home-metric__sub">Competência atual</div>
+                </div>
+                <div class="rz-home-metric">
+                    <div class="rz-home-metric__label">Progresso</div>
+                    <div class="rz-home-metric__value">{progresso_home}%</div>
+                    <div class="rz-home-progress-track"><i></i></div>
+                    <div class="rz-home-metric__sub">{concluidas_home} de {total_empresas_home}</div>
+                </div>
+            </section>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_acoes, col_visao = st.columns([1.45, 0.75], gap="large")
+    with col_acoes:
+        st.markdown('<div class="rz-dashboard-grid-title">Ações rápidas</div>', unsafe_allow_html=True)
+        st.button(
+            "**Organizador de Planilhas**\nFluxos específicos, empresas e Base Inteligente.",
+            key="home_action_organizador",
+            use_container_width=True,
+            on_click=mudar_pagina,
+            args=('organizador',),
+        )
+        st.button(
+            "**Conversor de Extratos**\nPDF, OFX, CSV e Excel para o padrão Domínio.",
+            key="home_action_extratos",
+            use_container_width=True,
+            on_click=mudar_pagina,
+            args=('extratos',),
+        )
+        st.button(
+            "**Conciliação com Razão**\nConferência diária e identificação de divergências.",
+            key="home_action_razao",
+            use_container_width=True,
+            on_click=mudar_pagina,
+            args=('razao',),
+        )
+
+    with col_visao:
+        st.markdown('<div class="rz-dashboard-grid-title">Visão do ambiente</div>', unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <section class="rz-overview-panel" aria-label="Recursos do Razync">
+                <div class="rz-overview-kicker">Razync</div>
+                <div class="rz-overview-title">Operação centralizada</div>
+                <div class="rz-overview-copy">Ferramentas bancárias e contábeis reunidas em um único fluxo de trabalho.</div>
+                <div class="rz-overview-row">
+                    <i class="rz-overview-dot"></i>
+                    <div><strong>{total_empresas_home} empresas cadastradas</strong>
+                    <span>Áreas individuais preparadas para regras específicas.</span></div>
+                </div>
+                <div class="rz-overview-row">
+                    <i class="rz-overview-dot"></i>
+                    <div><strong>Arquivos bancários</strong>
+                    <span>PDF, OFX, CSV, XLSX e XLS suportados.</span></div>
+                </div>
+                <div class="rz-overview-row">
+                    <i class="rz-overview-dot"></i>
+                    <div><strong>Saída para a Domínio</strong>
+                    <span>Modelo, classificação e conferência preservados.</span></div>
+                </div>
+            </section>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        """
+        <div class="rz-home-tip">
+            <div><strong>Dica rápida</strong><br><span>Use a navegação lateral para acessar ferramentas e a Central de Tarefas.</span></div>
+            <span>Ambiente operacional Razync</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ==============================================================================
+# CENTRAL DE TAREFAS E PRAZOS
+# ==============================================================================
+elif st.session_state['pagina_ativa'] == 'tarefas':
+    if st.button("← Início", key="btn_voltar_home_tarefas", type="tertiary"):
+        mudar_pagina('home')
+        st.rerun()
+
+    st.markdown(
+        """
+        <section class="rz-task-hero">
+            <div>
+                <div class="rz-task-hero__eyebrow">Central operacional</div>
+                <div class="rz-task-hero__title">Tarefas e Prazos</div>
+                <div class="rz-task-hero__copy">
+                    Acompanhe obrigações, prioridades e conclusões das empresas em uma visão única,
+                    com atualização rápida e automações do fluxo operacional.
+                </div>
+            </div>
+            <div class="rz-task-hero__badge">Competência atual</div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    hoje_tarefas, competencia_tarefas = obter_competencia_operacional()
+    try:
+        tarefas_manuais = carregar_tarefas_central()
+        tarefas_empresas_status = carregar_tarefas_competencia(competencia_tarefas.isoformat())
+        erro_central_tarefas = ''
+    except Exception as erro_tarefas_central:
+        tarefas_manuais = []
+        tarefas_empresas_status = {}
+        erro_central_tarefas = str(erro_tarefas_central)
+
+    resumo_manual = resumir_tarefas(tarefas_manuais, hoje_tarefas)
+    prioridades_auto = [
+        (empresa, calcular_prioridade_empresa(
+            empresa, tarefas_empresas_status, hoje_tarefas, competencia_tarefas
+        ))
+        for empresa in EMPRESAS
+    ]
+    auto_abertas = sum(1 for _, p in prioridades_auto if not p['concluida'])
+    auto_atrasadas = sum(1 for _, p in prioridades_auto if p['status'] == 'Atrasada')
+    auto_urgentes = sum(1 for _, p in prioridades_auto if p['status'] == 'Urgente')
+    auto_concluidas = sum(1 for _, p in prioridades_auto if p['concluida'])
+    total_geral = len(prioridades_auto) + resumo_manual['total']
+    concluidas_geral = auto_concluidas + resumo_manual['concluidas']
+    progresso_geral = round((concluidas_geral / total_geral) * 100) if total_geral else 0
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric('Pendentes', auto_abertas + resumo_manual['abertas'])
+    m2.metric('Atrasadas', auto_atrasadas + resumo_manual['atrasadas'])
+    m3.metric('Urgentes / hoje', auto_urgentes + resumo_manual['hoje'])
+    m4.metric('Concluídas', concluidas_geral)
+    m5.metric('Progresso', f'{progresso_geral}%')
+    st.progress(progresso_geral / 100 if progresso_geral else 0)
+
+    if erro_central_tarefas:
+        st.warning('O painel abriu, mas a sincronização online das tarefas não está disponível agora.')
+
+    aba_painel, aba_nova = st.tabs(['Painel operacional', 'Nova tarefa'])
+
+    with aba_nova:
+        st.markdown('### Criar tarefa')
+        opcoes_empresas_tarefa = ['Sem empresa'] + [
+            f"{empresa['codigo']} - {empresa['nome']}" for empresa in EMPRESAS
+        ]
+        with st.form('form_nova_tarefa_central', clear_on_submit=True):
+            titulo_tarefa = st.text_input('Tarefa', placeholder='Ex.: Conferir movimento bancário de agosto')
+            col_empresa_tarefa, col_categoria_tarefa = st.columns(2)
+            empresa_tarefa = col_empresa_tarefa.selectbox('Empresa', opcoes_empresas_tarefa)
+            categoria_tarefa = col_categoria_tarefa.selectbox(
+                'Categoria', ['Contábil', 'Fiscal', 'Financeiro', 'Conferência', 'Cliente', 'Interno', 'Geral']
+            )
+            col_prioridade_tarefa, col_prazo_tarefa = st.columns(2)
+            prioridade_tarefa = col_prioridade_tarefa.selectbox(
+                'Prioridade', ['Normal', 'Alta', 'Urgente', 'Baixa']
+            )
+            sem_prazo_tarefa = col_prazo_tarefa.checkbox('Sem prazo')
+            prazo_tarefa = None if sem_prazo_tarefa else col_prazo_tarefa.date_input(
+                'Prazo', value=hoje_tarefas
+            )
+            descricao_tarefa = st.text_area('Observações', height=90)
+            salvar_tarefa = st.form_submit_button('Adicionar tarefa', use_container_width=True)
+        if salvar_tarefa:
+            if not titulo_tarefa.strip():
+                st.error('Informe o nome da tarefa.')
+            else:
+                codigo_tarefa = None
+                if empresa_tarefa != 'Sem empresa':
+                    codigo_tarefa = empresa_tarefa.split(' - ', 1)[0]
+                try:
+                    criar_tarefa_central(
+                        titulo_tarefa, descricao_tarefa, codigo_tarefa, categoria_tarefa,
+                        prioridade_tarefa, prazo_tarefa
+                    )
+                    st.success('Tarefa adicionada à Central.')
+                    st.rerun()
+                except Exception as erro_criar_tarefa:
+                    st.error(f'Não foi possível salvar a tarefa: {erro_criar_tarefa}')
+
+    with aba_painel:
+        st.markdown('### Obrigações das empresas')
+        st.toggle(
+            'Concluir automaticamente quando uma ferramenta gerar resultado válido',
+            value=st.session_state.get('tarefas_conclusao_automatica', True),
+            key='tarefas_conclusao_automatica',
+            help='A empresa só é marcada após um processamento terminar com resultado final válido. Você pode reabrir quando quiser.',
+        )
+        ultima_auto = st.session_state.get('_rz_ultima_conclusao_automatica')
+        if ultima_auto:
+            st.caption(
+                f"Última conclusão automática: empresa {ultima_auto['codigo']} · "
+                f"{ultima_auto['origem']} · {ultima_auto['quando']}"
+            )
+        f1, f2, f3 = st.columns([1.3, 1.3, 2.4])
+        filtro_status_auto = f1.selectbox(
+            'Status', ['Todos', 'Atrasada', 'Urgente', 'Próxima', 'No prazo', 'Concluída'],
+            key='tarefas_filtro_status_auto'
+        )
+        filtro_regime_auto = f2.selectbox(
+            'Regime', ['Todos', 'LUCRO REAL', 'LUCRO PRESUMIDO', 'SIMPLES NACIONAL'],
+            key='tarefas_filtro_regime_auto'
+        )
+        busca_auto = f3.text_input('Buscar empresa', key='tarefas_busca_empresa_auto')
+
+        linhas_auto = []
+        for empresa, prioridade in prioridades_auto:
+            if filtro_status_auto != 'Todos' and prioridade['status'] != filtro_status_auto:
+                continue
+            if filtro_regime_auto != 'Todos' and empresa['regime'] != filtro_regime_auto:
+                continue
+            alvo_busca = f"{empresa['codigo']} {empresa['nome']}".casefold()
+            if busca_auto.strip() and busca_auto.casefold().strip() not in alvo_busca:
+                continue
+            dias = prioridade['dias_restantes']
+            linhas_auto.append({
+                'Código': str(empresa['codigo']),
+                'Empresa': empresa['nome'],
+                'Regime': empresa['regime'].title(),
+                'Status': prioridade['status'],
+                'Prazo': prioridade['vencimento'].strftime('%d/%m/%Y'),
+                'Dias': dias,
+            })
+        linhas_auto.sort(key=lambda item: (
+            {'Atrasada': 0, 'Urgente': 1, 'Próxima': 2, 'No prazo': 3, 'Concluída': 4}.get(item['Status'], 5),
+            item['Dias'] if item['Dias'] is not None else 9999,
+            int(item['Código']),
+        ))
+        st.dataframe(pd.DataFrame(linhas_auto), use_container_width=True, hide_index=True)
+
+        st.markdown('#### Conclusão rápida em lote')
+        opcoes_lote = {
+            f"{item['Código']} - {item['Empresa']} · {item['Status']}": item['Código']
+            for item in linhas_auto
+        }
+        selecionadas_lote = st.multiselect(
+            'Selecione uma ou mais empresas exibidas acima',
+            options=list(opcoes_lote.keys()),
+            key='tarefas_empresas_lote',
+            placeholder='Escolher empresas para atualizar',
+        )
+        lote_1, lote_2 = st.columns(2)
+        if lote_1.button(
+            '✓ Concluir selecionadas',
+            key='tarefas_concluir_lote',
+            use_container_width=True,
+            disabled=not selecionadas_lote,
+        ):
+            try:
+                quantidade = salvar_status_tarefas_empresas_em_lote(
+                    [opcoes_lote[item] for item in selecionadas_lote],
+                    competencia_tarefas,
+                    True,
+                )
+                st.success(f'{quantidade} empresa(s) concluída(s).')
+                st.rerun()
+            except Exception as erro_lote:
+                st.error(f'Não foi possível concluir as selecionadas: {erro_lote}')
+        if lote_2.button(
+            '↺ Reabrir selecionadas',
+            key='tarefas_reabrir_lote',
+            use_container_width=True,
+            disabled=not selecionadas_lote,
+        ):
+            try:
+                quantidade = salvar_status_tarefas_empresas_em_lote(
+                    [opcoes_lote[item] for item in selecionadas_lote],
+                    competencia_tarefas,
+                    False,
+                )
+                st.success(f'{quantidade} empresa(s) reaberta(s).')
+                st.rerun()
+            except Exception as erro_lote:
+                st.error(f'Não foi possível reabrir as selecionadas: {erro_lote}')
+
+        st.markdown('#### Atualização rápida de uma empresa')
+        opcoes_auto = [f"{e['codigo']} - {e['nome']}" for e in EMPRESAS]
+        col_auto_empresa, col_auto_concluir, col_auto_reabrir = st.columns([5, 1.2, 1.2])
+        empresa_auto_escolhida = col_auto_empresa.selectbox(
+            'Empresa', opcoes_auto, key='tarefas_empresa_atualizar', label_visibility='collapsed'
+        )
+        codigo_auto_escolhido = empresa_auto_escolhida.split(' - ', 1)[0]
+        if col_auto_concluir.button('Concluir', key='tarefas_auto_concluir', use_container_width=True):
+            try:
+                salvar_status_tarefa_empresa(codigo_auto_escolhido, competencia_tarefas, True)
+                st.rerun()
+            except Exception as erro_status_auto:
+                st.error(f'Não foi possível concluir: {erro_status_auto}')
+        if col_auto_reabrir.button('Reabrir', key='tarefas_auto_reabrir', use_container_width=True):
+            try:
+                salvar_status_tarefa_empresa(codigo_auto_escolhido, competencia_tarefas, False)
+                st.rerun()
+            except Exception as erro_status_auto:
+                st.error(f'Não foi possível reabrir: {erro_status_auto}')
+
+        st.divider()
+        st.markdown('### Minhas tarefas')
+        c1, c2, c3 = st.columns([1.3, 1.3, 2.4])
+        filtro_status_manual = c1.selectbox(
+            'Status manual', ['Todos', 'Pendente', 'Em andamento', 'Concluída', 'Cancelada'],
+            key='tarefas_filtro_status_manual'
+        )
+        filtro_prioridade_manual = c2.selectbox(
+            'Prioridade', ['Todas', 'Urgente', 'Alta', 'Normal', 'Baixa'],
+            key='tarefas_filtro_prioridade_manual'
+        )
+        busca_manual = c3.text_input('Buscar tarefa', key='tarefas_busca_manual')
+
+        tarefas_filtradas = []
+        for tarefa in ordenar_tarefas(tarefas_manuais, hoje_tarefas):
+            if filtro_status_manual != 'Todos' and tarefa.get('status') != filtro_status_manual:
+                continue
+            if filtro_prioridade_manual != 'Todas' and tarefa.get('prioridade') != filtro_prioridade_manual:
+                continue
+            alvo = f"{tarefa.get('titulo','')} {tarefa.get('descricao','')} {tarefa.get('codigo_empresa','')}".casefold()
+            if busca_manual.strip() and busca_manual.casefold().strip() not in alvo:
+                continue
+            tarefas_filtradas.append(tarefa)
+
+        if not tarefas_filtradas:
+            st.info('Nenhuma tarefa encontrada com esses filtros.')
+        else:
+            nomes_empresas = {str(e['codigo']): e['nome'] for e in EMPRESAS}
+            for tarefa in tarefas_filtradas:
+                faixa = classificar_tarefa(tarefa, hoje_tarefas)
+                codigo = str(tarefa.get('codigo_empresa') or '')
+                empresa_nome = nomes_empresas.get(codigo, 'Sem empresa') if codigo else 'Sem empresa'
+                prazo_txt = tarefa.get('prazo') or 'Sem prazo'
+                titulo_expander = (
+                    f"{faixa['faixa']} · {tarefa.get('prioridade','Normal')} · "
+                    f"{tarefa.get('titulo','Tarefa')} — {prazo_txt}"
+                )
+                with st.expander(titulo_expander):
+                    st.caption(
+                        f"{empresa_nome} · {tarefa.get('categoria','Geral')} · "
+                        f"Status: {tarefa.get('status','Pendente')}"
+                    )
+                    if tarefa.get('descricao'):
+                        st.write(tarefa['descricao'])
+                    a1, a2, a3, a4 = st.columns(4)
+                    if a1.button('Em andamento', key=f"andamento_{tarefa['id']}", use_container_width=True):
+                        atualizar_status_tarefa_central(tarefa['id'], 'Em andamento')
+                        st.rerun()
+                    if a2.button('Concluir', key=f"concluir_{tarefa['id']}", use_container_width=True):
+                        atualizar_status_tarefa_central(tarefa['id'], 'Concluída')
+                        st.rerun()
+                    if a3.button('Reabrir', key=f"reabrir_{tarefa['id']}", use_container_width=True):
+                        atualizar_status_tarefa_central(tarefa['id'], 'Pendente')
+                        st.rerun()
+                    if a4.button('Excluir', key=f"excluir_{tarefa['id']}", use_container_width=True):
+                        excluir_tarefa_central(tarefa['id'])
+                        st.rerun()
+
+# ==============================================================================
+# TELA 2: FERRAMENTA DE CONVERSÃO DE EXTRATOS
+# ==============================================================================
+elif st.session_state['pagina_ativa'] == 'extratos':
+    if st.button("← Início", key="btn_voltar_home", type="tertiary"):
+        mudar_pagina('home')
+        st.rerun()
+    st.markdown(
+        """
+        <header class="rz-page-header">
+            <div class="rz-page-kicker">Conversão bancária</div>
+            <div class="rz-page-title">Conversor de Extratos</div>
+            <div class="rz-page-description">
+                Envie um ou mais extratos e gere arquivos prontos para importação na Domínio.
+            </div>
+        </header>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    arquivos = st.file_uploader(
+        "Selecione os extratos",
+        type=["pdf", "ofx", "csv", "xlsx", "xls"],
+        accept_multiple_files=True,
+        help="Formatos aceitos: PDF, OFX, CSV, XLSX e XLS.",
+    )
+
+    if arquivos:
+        try:
+            colunas_dominio = ['DESCRIÇÃO', 'DATA', 'VALOR', 'DÉBITO', 'CRÉDITO', 'HISTÓRICO']
+            df_modelo = carregar_modelo_dominio_base()
+            
+            dados_por_arquivo, todos_lancamentos_brutos = {}, []
+            for arquivo in arquivos:
+                file_bytes, extensao = arquivo.getvalue(), os.path.splitext(arquivo.name)[1].lower()
+                lancamentos, data_ini_doc, data_fim_doc = [], None, None
+                
+                if extensao == '.pdf':
+                    caminho_periodo = None
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_periodo:
+                            temp_periodo.write(file_bytes)
+                            caminho_periodo = temp_periodo.name
+                        data_ini_doc, data_fim_doc = extrair_periodo_extrato(caminho_periodo)
+                    finally:
+                        if caminho_periodo and os.path.exists(caminho_periodo):
+                            os.remove(caminho_periodo)
+
+                lancamentos = executar_com_loading(
+                    f"Analisando {arquivo.name}...",
+                    processar_extrato_unificado,
+                    file_bytes,
+                    arquivo.name
+                )
+                    
+                if lancamentos:
+                    df_temp = pd.DataFrame(lancamentos)
+                    df_temp['ARQUIVO_ORIGEM'] = arquivo.name
+                    dados_por_arquivo[arquivo.name] = {'lancamentos': lancamentos, 'data_ini': data_ini_doc, 'data_fim': data_fim_doc}
+                    todos_lancamentos_brutos.extend(lancamentos)
+
+            if todos_lancamentos_brutos:
+                nomes_abas = ["Visão Consolidada"] + [arq.name for arq in arquivos if arq.name in dados_por_arquivo] if len(arquivos) > 1 else [arq.name for arq in arquivos if arq.name in dados_por_arquivo]
+                abas = st.tabs(nomes_abas)
+                
+                if len(arquivos) > 1:
+                    with abas[0]:
+                        st.markdown("### Resumo Consolidado")
+                        df_geral_bruto = pd.DataFrame(todos_lancamentos_brutos)
+                        df_geral_bruto['DATA_DT'] = pd.to_datetime(df_geral_bruto['DATA'], dayfirst=True, errors='coerce')
+                        df_geral_bruto = df_geral_bruto.dropna(subset=['DATA_DT'])
+                        
+                        if df_geral_bruto.empty:
+                            st.warning("Nenhum lançamento válido encontrado.")
+                        else:
+                            dt_min_geral, dt_max_geral = df_geral_bruto['DATA_DT'].min().date(), df_geral_bruto['DATA_DT'].max().date()
+                            col_g1, col_g2, col_g3 = st.columns([1, 1, 1.5])
+                            with col_g1: data_geral_ini = st.date_input("Data Inicial", value=dt_min_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_ini")
+                            with col_g2: data_geral_fim = st.date_input("Data Final", value=dt_max_geral, min_value=dt_min_geral, max_value=dt_max_geral, format="DD/MM/YYYY", key="gen_fim")
+                            with col_g3: 
                                 st.markdown("<label style='font-size:14px; font-weight:400; color:inherit;'>Busca rápida</label>", unsafe_allow_html=True)
                                 termo_busca_geral = st.text_input("Busca rápida", placeholder="Filtrar histórico...", label_visibility="collapsed", key="gen_busca")
                             
