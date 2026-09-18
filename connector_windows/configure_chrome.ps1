@@ -28,18 +28,26 @@ $chromeCandidates = @(
 $chrome = $chromeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $chrome) { throw "Google Chrome nao encontrado." }
 
-$policyPath = 'HKCU:\Software\Policies\Google\Chrome\AutoSelectCertificateForUrls'
-New-Item -Path $policyPath -Force | Out-Null
-$filter = @{ ISSUER = @{ CN = $issuerCn }; SUBJECT = @{ CN = $subjectCn } }
-$hosts = @(
-    'https://cav.receita.fazenda.gov.br',
-    'https://www.gov.br',
-    'https://sso.acesso.gov.br'
-)
-for ($index = 0; $index -lt $hosts.Count; $index++) {
-    $rule = @{ pattern = $hosts[$index]; filter = $filter } | ConvertTo-Json -Compress -Depth 6
-    New-ItemProperty -Path $policyPath -Name ([string]($index + 1)) -Value $rule -PropertyType String -Force | Out-Null
+$policyApplied = $false
+try {
+    $policyPath = 'HKCU:\Software\Policies\Google\Chrome\AutoSelectCertificateForUrls'
+    New-Item -Path $policyPath -Force -ErrorAction Stop | Out-Null
+    $filter = @{ ISSUER = @{ CN = $issuerCn }; SUBJECT = @{ CN = $subjectCn } }
+    $hosts = @(
+        'https://cav.receita.fazenda.gov.br',
+        'https://www.gov.br',
+        'https://sso.acesso.gov.br'
+    )
+    for ($index = 0; $index -lt $hosts.Count; $index++) {
+        $rule = @{ pattern = $hosts[$index]; filter = $filter } | ConvertTo-Json -Compress -Depth 6
+        New-ItemProperty -Path $policyPath -Name ([string]($index + 1)) -Value $rule -PropertyType String -Force -ErrorAction Stop | Out-Null
+    }
+    $policyApplied = $true
+} catch [System.UnauthorizedAccessException] {
+    # Computadores gerenciados podem bloquear Policies. O Chrome ainda deve
+    # abrir; nesse caso o usuário confirma o A1 no seletor nativo uma vez.
+    $policyApplied = $false
 }
 
-@{ chrome = [string]$chrome; subject_cn = $subjectCn; issuer_cn = $issuerCn } |
+@{ chrome = [string]$chrome; subject_cn = $subjectCn; issuer_cn = $issuerCn; policy_applied = $policyApplied } |
     ConvertTo-Json -Compress
