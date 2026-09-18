@@ -171,6 +171,43 @@ def gerar_relatorio_impostos(resultado: pd.DataFrame, empresa: str, competencia:
     return saida.getvalue()
 
 
+def _cnpj_valido(valor: str) -> bool:
+    cnpj = re.sub(r"\D", "", str(valor or ""))
+    if len(cnpj) != 14 or len(set(cnpj)) == 1:
+        return False
+    numeros = [int(digito) for digito in cnpj]
+    for tamanho, pesos in (
+        (12, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]),
+        (13, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]),
+    ):
+        soma = sum(numero * peso for numero, peso in zip(numeros[:tamanho], pesos))
+        digito = 11 - soma % 11
+        esperado = 0 if digito >= 10 else digito
+        if numeros[tamanho] != esperado:
+            return False
+    return True
+
+
+def _formatar_cnpj(valor: str) -> str:
+    cnpj = re.sub(r"\D", "", str(valor or ""))
+    if len(cnpj) != 14:
+        return str(valor or "")
+    return f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
+
+
+def extrair_cnpjs(conteudo: bytes, nome: str) -> list[str]:
+    """Localiza CNPJs válidos no balancete sem confundi-los com o certificado."""
+    encontrados: list[str] = []
+    padrao = re.compile(r"(?<!\d)\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}(?!\d)")
+    for linha in _linhas_documento(conteudo, nome):
+        texto = " ".join(str(valor) for valor in linha)
+        for candidato in padrao.findall(texto):
+            cnpj = re.sub(r"\D", "", candidato)
+            if _cnpj_valido(cnpj) and cnpj not in encontrados:
+                encontrados.append(cnpj)
+    return encontrados
+
+
 def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
     import streamlit as st
     from razync.connector_windows import render_consulta_dctf
@@ -178,16 +215,65 @@ def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
     chave = re.sub(r"[^a-z0-9_]+", "_", str(prefixo).lower()).strip("_")
     st.markdown("### Conferência de Impostos")
     st.caption(
-        "Envie somente o balancete. O relatório da DCTFWeb será recebido pelo "
-        "Conector Razync instalado neste computador."
+        "Envie somente o balancete. O Razync identifica o CNPJ da empresa e usa "
+        "o certificado do escritório instalado no Windows para acessar como procurador."
     )
+
+    arquivo_balancete = st.file_uploader(
+        "Balancete contábil", type=["pdf", "xls", "xlsx", "csv"],
+        key=f"impostos_{chave}_balancete",
+        help="O CNPJ da empresa será identificado neste arquivo.",
+    )
+    if arquivo_balancete is None:
+        st.info("Envie o balancete para identificar a empresa e iniciar a consulta.")
+        return
+
+    balancete_bytes = arquivo_balancete.getvalue()
+    try:
+        cnpjs_encontrados = extrair_cnpjs(balancete_bytes, arquivo_balancete.name)
+    except Exception as erro:
+        st.error(f"Não foi possível ler o CNPJ no balancete: {erro}")
+        return
+
+    if len(cnpjs_encontrados) > 1:
+        cnpj_inicial = st.selectbox(
+            "CNPJ encontrado no balancete",
+            cnpjs_encontrados,
+            format_func=_formatar_cnpj,
+            key=f"impostos_{chave}_cnpj_encontrado",
+        )
+    else:
+        cnpj_inicial = cnpjs_encontrados[0] if cnpjs_encontrados else ""
+
+    cnpj_digitado = st.text_input(
+        "CNPJ da empresa representada",
+        value=_formatar_cnpj(cnpj_inicial),
+        key=f"impostos_{chave}_cnpj",
+        placeholder="00.000.000/0000-00",
+        help=(
+            "Este é o CNPJ do cliente que será representado no e-CAC. "
+            "Ele não precisa ser igual ao CNPJ do certificado do escritório."
+        ),
+    )
+    cnpj = re.sub(r"\D", "", cnpj_digitado)
+    if not _cnpj_valido(cnpj):
+        st.warning(
+            "Não identifiquei um CNPJ válido no balancete. Confira ou informe o CNPJ "
+            "da empresa para continuar."
+        )
+        return
 
     competencia = st.date_input(
         "Competência", value=date.today().replace(day=1),
         key=f"impostos_{chave}_competencia",
     )
     competencia_id = competencia.strftime("%m-%Y")
-    retorno_conector = render_consulta_dctf(empresa, competencia_id)
+    st.info(
+        f"Empresa representada: {_formatar_cnpj(cnpj)}. "
+        "O certificado selecionado será usado como procurador."
+    )
+
+    retorno_conector = render_consulta_dctf(empresa, competencia_id, cnpj)
     if (
         isinstance(retorno_conector, dict)
         and retorno_conector.get("status") == "report"
@@ -207,26 +293,16 @@ def renderizar_conferencia_impostos(prefixo: str, empresa: str) -> None:
     nome_receita = st.session_state.get(f"impostos_{chave}_receita_nome", "")
     if receita:
         st.success(f"Relatório da DCTFWeb recebido: {nome_receita}")
-
-    arquivo_balancete = st.file_uploader(
-        "Balancete contábil", type=["pdf", "xls", "xlsx", "csv"],
-        key=f"impostos_{chave}_balancete",
-        help="Este é o único arquivo que precisa ser enviado manualmente.",
-    )
-    if not receita:
+    else:
         st.info(
-            "Use os botões acima para abrir a DCTFWeb, baixar o relatório da "
-            "competência e trazê-lo automaticamente para o Razync."
+            "Inicie a consulta acima. Depois que o relatório for baixado, "
+            "o conector o trará para o Razync."
         )
-        return
-    if arquivo_balancete is None:
-        st.info("Envie o balancete para iniciar a conferência.")
         return
 
     try:
         resultado = processar_conferencia_impostos(
-            receita, nome_receita,
-            arquivo_balancete.getvalue(), arquivo_balancete.name,
+            receita, nome_receita, balancete_bytes, arquivo_balancete.name,
         )
     except Exception as erro:
         st.error(f"Não foi possível concluir a conferência: {erro}")
