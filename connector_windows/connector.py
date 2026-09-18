@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-APP_VERSION = "0.6.2"
+APP_VERSION = "0.7.0"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RAZYNC_CONNECTOR_PORT", "17891"))
 ROOT = Path(__file__).resolve().parent
@@ -68,7 +68,7 @@ def _powershell(script: str, *args: str) -> object:
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     result = subprocess.run(
         command, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=45, creationflags=creationflags, check=False,
+        errors="replace", timeout=180, creationflags=creationflags, check=False,
     )
     if result.returncode:
         detail = (result.stderr or result.stdout).strip()
@@ -154,6 +154,22 @@ def open_dctfweb(cnpj: str, competencia: str, thumbprint: str) -> dict:
         raise RuntimeError("O Google Chrome não foi encontrado neste computador.")
     profile = DATA_DIR / "chrome_profile"
     profile.mkdir(parents=True, exist_ok=True)
+    # Fecha somente instancias anteriores abertas pelo perfil isolado do
+    # Razync para que o Chrome recarregue a politica de certificado.
+    subprocess.run(
+        [
+            "powershell.exe", "-NoLogo", "-NoProfile", "-Command",
+            "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" "
+            "| Where-Object { $_.CommandLine -like ('*' + $args[0] + '*') } "
+            "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+            str(profile),
+        ],
+        capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        timeout=15,
+        check=False,
+    )
+    time.sleep(1)
     automation_url = ECAC_LOGIN_URL
     subprocess.Popen(
         [
