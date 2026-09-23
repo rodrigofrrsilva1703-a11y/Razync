@@ -204,3 +204,9 @@ def test_base_inteligente_1000_aplica_regras_fixas_antes_do_aprendizado():
     assert "identificar_conta_folha_accede_1000(historico)" in texto
     assert "resumo['regras_fixas_1000'] += 1" in texto
     assert "                        contas_bancarias,\n                        empresa,\n" in texto
+
+
+def test_empresa_1532_nao_renderiza_conferencia_fiscal_duas_vezes():
+    app_principal = (ROOT / "app.py").read_text(encoding="utf-8")
+    assert '"maria_narbutis_1532"' in app_principal
+    assert "_empresa_selecionada_fiscal not in _EMPRESAS_COM_ABA_FISCAL" in app_principal
