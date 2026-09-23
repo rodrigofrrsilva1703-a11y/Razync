@@ -9103,24 +9103,59 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         with aba_operacoes_1532:
             st.markdown('#### Extrato Itaú → Modelo Domínio')
             st.caption(
-                'Conta Itaú 508. O Razync remove saldos, preserva os lançamentos '
-                'do período e organiza os históricos com Pago: e Recebido:.'
+                'Conta Itaú 508. Envie um ou vários extratos em PDF; o Razync '
+                'remove saldos, reúne os períodos e organiza os históricos com '
+                'Pago: e Recebido:.'
             )
-            extrato_1532 = st.file_uploader(
-                'Extrato Itaú em PDF',
+            extratos_1532 = st.file_uploader(
+                'Extratos Itaú em PDF',
                 type=['pdf'],
+                accept_multiple_files=True,
                 key='maria_narbutis_1532_extrato',
             )
-            if extrato_1532 is not None:
+            if extratos_1532:
                 try:
-                    df_1532 = executar_com_loading(
-                        'Lendo o extrato Itaú e montando o Modelo Domínio...',
-                        processar_extrato_itau_modelo,
-                        extrato_1532.getvalue(),
-                        conta_itau_1532,
-                        ('MARIA A D P NARB', '59.124.979/0001-52', '0097731-6'),
-                        'empresa 1532 - Maria Narbutis',
+                    quadros_1532 = []
+                    assinaturas_1532 = set()
+                    arquivos_duplicados_1532 = 0
+                    for extrato_1532 in extratos_1532:
+                        conteudo_1532 = extrato_1532.getvalue()
+                        assinatura_1532 = hashlib.sha256(conteudo_1532).hexdigest()
+                        if assinatura_1532 in assinaturas_1532:
+                            arquivos_duplicados_1532 += 1
+                            continue
+                        assinaturas_1532.add(assinatura_1532)
+                        quadro_1532 = executar_com_loading(
+                            f'Lendo {extrato_1532.name}...',
+                            processar_extrato_itau_modelo,
+                            conteudo_1532,
+                            conta_itau_1532,
+                            ('MARIA A D P NARB', '59.124.979/0001-52', '0097731-6'),
+                            'empresa 1532 - Maria Narbutis',
+                        )
+                        quadros_1532.append(quadro_1532)
+                    if not quadros_1532:
+                        raise ValueError('Nenhum extrato diferente foi informado.')
+                    df_1532 = pd.concat(quadros_1532, ignore_index=True)
+                    df_1532 = (
+                        df_1532.assign(
+                            _DATA_ORDEM=pd.to_datetime(
+                                df_1532['DATA'], errors='coerce'
+                            )
+                        )
+                        .sort_values('_DATA_ORDEM', kind='stable')
+                        .drop(columns=['_DATA_ORDEM'])
+                        .reset_index(drop=True)
                     )
+                    st.success(
+                        f'{len(quadros_1532)} extrato(s) consolidado(s) em '
+                        f'{len(df_1532)} lançamentos.'
+                    )
+                    if arquivos_duplicados_1532:
+                        st.info(
+                            f'{arquivos_duplicados_1532} arquivo(s) idêntico(s) '
+                            'foram ignorados para não duplicar os lançamentos.'
+                        )
                     renderizar_previa_bancos_padrao(
                         {'Itaú · Conta 508': df_1532},
                         titulo='Pré-visualização do Modelo Domínio',
@@ -9147,7 +9182,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         df_1532['DATA'], errors='coerce'
                     ).dropna()
                     periodo_1532 = (
-                        datas_1532.min().strftime('%m_%Y')
+                        (
+                            datas_1532.min().strftime('%m_%Y')
+                            if datas_1532.min().to_period('M') == datas_1532.max().to_period('M')
+                            else (
+                                f'{datas_1532.min().strftime("%m_%Y")}_A_'
+                                f'{datas_1532.max().strftime("%m_%Y")}'
+                            )
+                        )
                         if not datas_1532.empty else 'periodo'
                     )
                     st.download_button(

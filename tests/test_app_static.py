@@ -217,3 +217,11 @@ def test_empresa_1532_tem_conferencia_com_extrato_itau_508():
     assert "'maria_narbutis_1532',\n                bancos_config=[{" in texto
     assert "'nome': 'Itaú · Conta 508'" in texto
     assert "rotulo_planilha='Modelo Domínio da empresa 1532'" in texto
+
+
+def test_empresa_1532_aceita_varios_extratos_no_modelo_dominio():
+    texto = app_source()
+    assert "extratos_1532 = st.file_uploader(" in texto
+    assert "accept_multiple_files=True" in texto
+    assert "df_1532 = pd.concat(quadros_1532, ignore_index=True)" in texto
+    assert "assinatura_1532 = hashlib.sha256(conteudo_1532).hexdigest()" in texto
