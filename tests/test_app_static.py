@@ -210,3 +210,10 @@ def test_empresa_1532_nao_renderiza_conferencia_fiscal_duas_vezes():
     app_principal = (ROOT / "app.py").read_text(encoding="utf-8")
     assert '"maria_narbutis_1532"' in app_principal
     assert "_empresa_selecionada_fiscal not in _EMPRESAS_COM_ABA_FISCAL" in app_principal
+
+
+def test_empresa_1532_tem_conferencia_com_extrato_itau_508():
+    texto = app_source()
+    assert "'maria_narbutis_1532',\n                bancos_config=[{" in texto
+    assert "'nome': 'Itaú · Conta 508'" in texto
+    assert "rotulo_planilha='Modelo Domínio da empresa 1532'" in texto
