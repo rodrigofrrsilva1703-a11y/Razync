@@ -9169,6 +9169,18 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         f'{erro_1532}'
                     )
 
+            st.markdown(f'#### Conferência — {empresa_1532}')
+            renderizar_conferencia_autokraft(
+                'maria_narbutis_1532',
+                bancos_config=[{
+                    'nome': 'Itaú · Conta 508',
+                    'slug': 'itau',
+                    'banco': 'itau',
+                    'conta': conta_itau_1532,
+                }],
+                rotulo_planilha='Modelo Domínio da empresa 1532',
+            )
+
     if st.session_state['empresa_organizador'] == 'gz_1211':
         empresa_gz = '1211 - GZ IMPORTADORA E EXPORTADORA LTDA EPP'
         aba_operacoes_gz, aba_base_gz, aba_fiscal_gz = st.tabs([
