@@ -52,7 +52,8 @@ from razync.gz_1211 import (
     CONTA_ITAU_GZ, gerar_modelo_dominio_gz, processar_gz,
 )
 from razync.engekraft_969 import (
-    CONTA_ITAU_969, gerar_modelo_dominio_engekraft_969, processar_extrato_engekraft_969,
+    CONTA_ITAU_969, gerar_modelo_dominio_engekraft_969,
+    processar_extrato_engekraft_969, processar_extrato_itau_modelo,
 )
 from razync.vgv_1402 import (
     COLUNAS_MODELO as COLUNAS_MODELO_VGV,
@@ -9076,6 +9077,97 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             renderizar_base_inteligente_empresa(
                 'engekraft_969', empresa_969, {'itau'}, {'itau': CONTA_ITAU_969}
             )
+
+    if st.session_state['empresa_organizador'] == 'maria_narbutis_1532':
+        empresa_1532 = (
+            '1532 - MARIA APARECIDA DIAS PEREIRA NARBUTIS '
+            'SOCIEDADE UNIPESSOAL LTDA'
+        )
+        conta_itau_1532 = '508'
+        aba_operacoes_1532, aba_base_1532, aba_fiscal_1532 = st.tabs([
+            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
+        ])
+
+        with aba_fiscal_1532:
+            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+            renderizar_conferencia_fiscal('maria_narbutis_1532', empresa_1532)
+
+        with aba_base_1532:
+            renderizar_base_inteligente_empresa(
+                'maria_narbutis_1532',
+                empresa_1532,
+                {'itau'},
+                {'itau': conta_itau_1532},
+            )
+
+        with aba_operacoes_1532:
+            st.markdown('#### Extrato Itaú → Modelo Domínio')
+            st.caption(
+                'Conta Itaú 508. O Razync remove saldos, preserva os lançamentos '
+                'do período e organiza os históricos com Pago: e Recebido:.'
+            )
+            extrato_1532 = st.file_uploader(
+                'Extrato Itaú em PDF',
+                type=['pdf'],
+                key='maria_narbutis_1532_extrato',
+            )
+            if extrato_1532 is not None:
+                try:
+                    df_1532 = executar_com_loading(
+                        'Lendo o extrato Itaú e montando o Modelo Domínio...',
+                        processar_extrato_itau_modelo,
+                        extrato_1532.getvalue(),
+                        conta_itau_1532,
+                        ('MARIA A D P NARB', '59.124.979/0001-52', '0097731-6'),
+                        'empresa 1532 - Maria Narbutis',
+                    )
+                    renderizar_previa_bancos_padrao(
+                        {'Itaú · Conta 508': df_1532},
+                        titulo='Pré-visualização do Modelo Domínio',
+                    )
+
+                    modelo_bytes_1532 = None
+                    for caminho_modelo_1532 in [
+                        'Modelo dominio.xlsx', 'Modelo dominio(6).xlsx',
+                        'Modelo Dominio.xlsx', 'modelo_dominio.xlsx'
+                    ]:
+                        if os.path.exists(caminho_modelo_1532):
+                            with open(caminho_modelo_1532, 'rb') as modelo_1532:
+                                modelo_bytes_1532 = modelo_1532.read()
+                            break
+                    if not modelo_bytes_1532:
+                        raise FileNotFoundError(
+                            'Modelo Domínio não encontrado no sistema.'
+                        )
+
+                    excel_1532 = gerar_modelo_dominio_engekraft_969(
+                        df_1532, modelo_bytes_1532
+                    )
+                    datas_1532 = pd.to_datetime(
+                        df_1532['DATA'], errors='coerce'
+                    ).dropna()
+                    periodo_1532 = (
+                        datas_1532.min().strftime('%m_%Y')
+                        if not datas_1532.empty else 'periodo'
+                    )
+                    st.download_button(
+                        'Baixar 1532 · Modelo Domínio',
+                        data=excel_1532,
+                        file_name=(
+                            f'MARIA_NARBUTIS_1532_ITAU_{periodo_1532}.xlsx'
+                        ),
+                        mime=(
+                            'application/vnd.openxmlformats-officedocument.'
+                            'spreadsheetml.sheet'
+                        ),
+                        use_container_width=True,
+                        key='maria_narbutis_1532_download_modelo',
+                    )
+                except Exception as erro_1532:
+                    st.error(
+                        'Não foi possível processar a empresa 1532: '
+                        f'{erro_1532}'
+                    )
 
     if st.session_state['empresa_organizador'] == 'gz_1211':
         empresa_gz = '1211 - GZ IMPORTADORA E EXPORTADORA LTDA EPP'
