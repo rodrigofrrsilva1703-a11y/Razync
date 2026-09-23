@@ -1027,7 +1027,7 @@ _EMPRESAS_COM_ABA_FISCAL = {
     "lcarlos", "vgv_1402", "autokraft_industrial", "autokraft_projetos", "isa",
     "accede_automacao", "accede_equipamentos", "radani", "up_pack", "nova_geracao",
     "dias_pereira", "lucrativite_841", "valean_625", "valean_626",
-    "dias_pereira_1530", "kairos_1208",
+    "dias_pereira_1530", "kairos_1208", "maria_narbutis_1532",
 }
 _empresa_selecionada_fiscal = st.session_state.get("empresa_organizador")
 if (
