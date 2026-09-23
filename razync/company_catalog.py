@@ -52,7 +52,7 @@ EMPRESAS = [
     {"codigo": 1522, "nome": "PRISCILA CAMARGO GARCIA DE OLIVEIRA LTDA", "regime": "SIMPLES NACIONAL"},
     {"codigo": 1529, "nome": "DIAS E PEREIRA SOCIEDADE DE ADVOGADOS", "regime": "LUCRO PRESUMIDO", "chave_sistema": "dias_pereira"},
     {"codigo": 1530, "nome": "DIAS PEREIRA SOCIEDADE INDIVIDUAL DE ADVOCACIA", "regime": "LUCRO PRESUMIDO", "chave_sistema": "dias_pereira_1530"},
-    {"codigo": 1532, "nome": "MARIA APARECIDA DIAS PEREIRA NARBUTIS SOCIEDADE UNIPESSOAL LTDA", "regime": "SIMPLES NACIONAL"},
+    {"codigo": 1532, "nome": "MARIA APARECIDA DIAS PEREIRA NARBUTIS SOCIEDADE UNIPESSOAL LTDA", "regime": "SIMPLES NACIONAL", "chave_sistema": "maria_narbutis_1532"},
 ]
 
 REGIMES_ORDEM = ("LUCRO REAL", "LUCRO PRESUMIDO", "SIMPLES NACIONAL")

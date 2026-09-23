@@ -38,8 +38,25 @@ def _limpar_historico(texto: str) -> str:
     texto = _espacos(texto)
     texto = re.sub(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b", " ", texto)
     texto = re.sub(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b", " ", texto)
+    # No PDF Itaú, o texto abreviado do boleto aparece antes da razão social.
+    # Quando o nome se repete, preserva a segunda ocorrência, que é a completa.
+    boleto = re.match(r"^BOLETO\s+PAGO\s+(.+)$", texto, flags=re.I)
+    if boleto:
+        palavras_boleto = boleto.group(1).split()
+        if palavras_boleto:
+            primeira = palavras_boleto[0].upper()
+            repeticao = next(
+                (
+                    indice for indice, palavra in enumerate(palavras_boleto[1:], 1)
+                    if palavra.upper() == primeira
+                ),
+                None,
+            )
+            texto = " ".join(
+                palavras_boleto[repeticao:]
+                if repeticao is not None else palavras_boleto
+            )
     prefixos_operacao = [
-        r"BOLETO\s+PAGO(?:\s+[A-Z0-9./&-]+){0,3}\s+",
         r"PIX\s+ENVIADO\s+",
         r"PIX\s+RECEBIDO(?:\s+[A-Z0-9/.-]+)?\s+",
         r"PAGAMENTOS?\s+TRANSF\s+CC\s+ITAU\s+",
@@ -61,11 +78,19 @@ def _limpar_historico(texto: str) -> str:
     return texto
 
 
-def processar_extrato_engekraft_969(conteudo: bytes) -> pd.DataFrame:
+def processar_extrato_itau_modelo(
+    conteudo: bytes,
+    conta_dominio: str,
+    identificadores: tuple[str, ...],
+    rotulo_empresa: str,
+) -> pd.DataFrame:
+    """Converte o extrato empresarial Itaú em movimentos do Modelo Domínio."""
     texto = _texto_pdf(conteudo)
     topo = texto.upper()
-    if "ENGEKRAFT" not in topo or ("0020269-9" not in texto and "20269" not in texto):
-        raise ValueError("O PDF enviado não parece ser o extrato Itaú da empresa 969 - Engekraft.")
+    if not any(str(item).upper() in topo for item in identificadores):
+        raise ValueError(
+            f"O PDF enviado não parece ser o extrato Itaú da {rotulo_empresa}."
+        )
 
     linhas = [x.strip() for x in texto.splitlines() if x.strip()]
     padrao_data = re.compile(r"^(\d{2}/\d{2}/\d{4})\s+(.*)$")
@@ -112,13 +137,24 @@ def processar_extrato_engekraft_969(conteudo: bytes) -> pd.DataFrame:
             "DESCRIÇÃO": "BANCO ITAÚ",
             "DATA": data,
             "VALOR": round(valor, 2),
-            "DÉBITO": CONTA_ITAU_969 if valor > 0 else "",
-            "CRÉDITO": CONTA_ITAU_969 if valor < 0 else "",
+            "DÉBITO": conta_dominio if valor > 0 else "",
+            "CRÉDITO": conta_dominio if valor < 0 else "",
             "HISTÓRICO": historico_final,
         })
     if not registros:
-        raise ValueError("Nenhum lançamento foi reconhecido no extrato Itaú da Engekraft.")
+        raise ValueError(
+            f"Nenhum lançamento foi reconhecido no extrato Itaú da {rotulo_empresa}."
+        )
     return pd.DataFrame(registros, columns=COLUNAS_MODELO)
+
+
+def processar_extrato_engekraft_969(conteudo: bytes) -> pd.DataFrame:
+    return processar_extrato_itau_modelo(
+        conteudo,
+        CONTA_ITAU_969,
+        ("ENGEKRAFT", "0020269-9", "20269"),
+        "empresa 969 - Engekraft",
+    )
 
 
 def gerar_modelo_dominio_engekraft_969(df: pd.DataFrame, modelo_bytes: bytes) -> bytes:
