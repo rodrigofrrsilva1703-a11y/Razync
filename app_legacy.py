@@ -8933,194 +8933,59 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         with aba_operacoes_hw88:
             st.markdown('#### Extrato Itaú → Modelo Domínio')
             st.caption(
-                'Conta Itaú 508. Digite o período; somente os movimentos entre '
-                'as duas datas serão levados ao Modelo Domínio.'
+                'Conta Itaú 508. Envie um ou vários extratos em PDF; o Razync '
+                'remove saldos, reúne os períodos e organiza os históricos com '
+                'Pago: e Recebido:.'
             )
-            col_inicio_hw88, col_fim_hw88 = st.columns(2)
-            inicio_hw88_texto = col_inicio_hw88.text_input(
-                'Data inicial', placeholder='DD/MM/AAAA', key='hw88_inicio'
-            )
-            fim_hw88_texto = col_fim_hw88.text_input(
-                'Data final', placeholder='DD/MM/AAAA', key='hw88_fim'
-            )
-            extrato_hw88 = st.file_uploader(
-                'Extrato Itaú em PDF', type=['pdf'], key='hw88_extrato_modelo'
-            )
-            if extrato_hw88 is not None:
-                try:
-                    inicio_hw88 = datetime.strptime(
-                        inicio_hw88_texto.strip(), '%d/%m/%Y'
-                    ).date()
-                    fim_hw88 = datetime.strptime(
-                        fim_hw88_texto.strip(), '%d/%m/%Y'
-                    ).date()
-                    if inicio_hw88 > fim_hw88:
-                        raise ValueError('A data inicial não pode ser posterior à data final.')
-                    modelo_hw88 = executar_com_loading(
-                        'Lendo o extrato Itaú e montando o Modelo Domínio...',
-                        _hw88_processar_extrato,
-                        extrato_hw88.getvalue(), inicio_hw88, fim_hw88,
-                    )
-                    h1, h2, h3, h4 = st.columns(4)
-                    h1.metric('Movimentos', len(modelo_hw88))
-                    h2.metric('Entradas', formatar_moeda(
-                        modelo_hw88.loc[modelo_hw88['VALOR'] > 0, 'VALOR'].sum()
-                    ))
-                    h3.metric('Saídas', formatar_moeda(-modelo_hw88.loc[
-                        modelo_hw88['VALOR'] < 0, 'VALOR'
-                    ].sum()))
-                    h4.metric('Conta bancária', '508 · Itaú')
-                    previa_hw88 = modelo_hw88.copy()
-                    previa_hw88['DATA'] = pd.to_datetime(
-                        previa_hw88['DATA']
-                    ).dt.strftime('%d/%m/%Y')
-                    st.dataframe(
-                        previa_hw88, use_container_width=True,
-                        hide_index=True, height=340,
-                    )
-                    excel_hw88 = gerar_excel_modelo_dominio(
-                        modelo_hw88[COLUNAS_MODELO_HW88]
-                    )
-                    col_excel_hw88, col_txt_hw88 = st.columns(2)
-                    col_excel_hw88.download_button(
-                        'Baixar Modelo Domínio (.XLSX)', data=excel_hw88,
-                        file_name=(
-                            'HW_88_MODELO_DOMINIO_'
-                            f'{inicio_hw88.strftime("%d%m%Y")}_A_'
-                            f'{fim_hw88.strftime("%d%m%Y")}.xlsx'
-                        ),
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        use_container_width=True, key='hw88_download_xlsx',
-                    )
-                    col_txt_hw88.download_button(
-                        'Baixar TXT para Domínio',
-                        data=gerar_txt_dominio(modelo_hw88),
-                        file_name=(
-                            'HW_88_MODELO_DOMINIO_'
-                            f'{inicio_hw88.strftime("%d%m%Y")}_A_'
-                            f'{fim_hw88.strftime("%d%m%Y")}.txt'
-                        ),
-                        mime='text/plain', use_container_width=True,
-                        key='hw88_download_txt',
-                    )
-                except ValueError as erro_hw88:
-                    st.warning(str(erro_hw88))
-                except Exception as erro_hw88:
-                    st.error(f'Não foi possível processar a empresa 88: {erro_hw88}')
-
-            st.markdown('#### Conferência — H & W 88')
-            renderizar_conferencia_autokraft(
-                'hw_88',
-                bancos_config=[{
-                    'nome': 'Itaú · Conta 508', 'slug': 'itau',
-                    'banco': 'itau_hw88', 'conta': '508',
-                }],
-            )
-
-    if st.session_state['empresa_organizador'] == 'engekraft_969':
-        empresa_969 = '969 - ENGEKRAFT AUTOMAÇÃO LTDA - EPP'
-        aba_operacoes_969, aba_base_969, aba_fiscal_969 = st.tabs([
-            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
-        ])
-        with aba_fiscal_969:
-            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
-            renderizar_conferencia_fiscal('engekraft_969', empresa_969)
-
-        with aba_operacoes_969:
-            st.markdown('#### Extrato Itaú → Modelo Domínio')
-            st.caption(
-                'Itaú = conta 508. Valores negativos recebem Pago: e valores positivos '
-                'recebem Recebido: no histórico. O processamento é automático.'
-            )
-            extrato_969 = st.file_uploader(
-                'Extrato Itaú', type=['pdf'], key='engekraft969_extrato'
-            )
-            if extrato_969 is not None:
-                try:
-                    df_969 = executar_com_loading(
-                        'Lendo extrato Itaú e montando o Modelo Domínio...',
-                        processar_extrato_engekraft_969, extrato_969.getvalue()
-                    )
-                    renderizar_previa_bancos_padrao(
-                        {'Itaú · Conta 508': df_969},
-                        titulo='Pré-visualização do Modelo Domínio',
-                    )
-                    modelo_bytes_969 = None
-                    for caminho_modelo_969 in [
-                        'Modelo dominio.xlsx', 'Modelo dominio(6).xlsx',
-                        'Modelo Dominio.xlsx', 'modelo_dominio.xlsx'
-                    ]:
-                        if os.path.exists(caminho_modelo_969):
-                            with open(caminho_modelo_969, 'rb') as modelo_969:
-                                modelo_bytes_969 = modelo_969.read()
-                            break
-                    if not modelo_bytes_969:
-                        raise FileNotFoundError('Modelo Domínio não encontrado no sistema.')
-                    excel_969 = gerar_modelo_dominio_engekraft_969(df_969, modelo_bytes_969)
-                    datas_969 = pd.to_datetime(df_969['DATA'], errors='coerce').dropna()
-                    periodo_969 = datas_969.min().strftime('%m_%Y') if not datas_969.empty else 'periodo'
-                    st.download_button(
-                        'Baixar Engekraft · Modelo Domínio', data=excel_969,
-                        file_name=f'ENGEKRAFT_969_ITAU_{periodo_969}.xlsx',
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        use_container_width=True, key='engekraft969_download_modelo'
-                    )
-                except Exception as erro_969:
-                    st.error(f'Não foi possível processar a empresa 969 - Engekraft: {erro_969}')
-
-            st.markdown(f'#### Conferência — {empresa_969}')
-            renderizar_conferencia_autokraft(
-                'engekraft969', bancos_config=[{'nome': 'Itaú', 'slug': 'itau'}]
-            )
-
-        with aba_base_969:
-            renderizar_base_inteligente_empresa(
-                'engekraft_969', empresa_969, {'itau'}, {'itau': CONTA_ITAU_969}
-            )
-
-    if st.session_state['empresa_organizador'] == 'maria_narbutis_1532':
-        empresa_1532 = (
-            '1532 - MARIA APARECIDA DIAS PEREIRA NARBUTIS '
-            'SOCIEDADE UNIPESSOAL LTDA'
-        )
-        conta_itau_1532 = '508'
-        aba_operacoes_1532, aba_base_1532, aba_fiscal_1532 = st.tabs([
-            'Organizar arquivos', 'Base Inteligente', 'Conferência Fiscal'
-        ])
-
-        with aba_fiscal_1532:
-            from razync.conferencia_fiscal import renderizar_conferencia_fiscal
-            renderizar_conferencia_fiscal('maria_narbutis_1532', empresa_1532)
-
-        with aba_base_1532:
-            renderizar_base_inteligente_empresa(
-                'maria_narbutis_1532',
-                empresa_1532,
-                {'itau'},
-                {'itau': conta_itau_1532},
-            )
-
-        with aba_operacoes_1532:
-            st.markdown('#### Extrato Itaú → Modelo Domínio')
-            st.caption(
-                'Conta Itaú 508. O Razync remove saldos, preserva os lançamentos '
-                'do período e organiza os históricos com Pago: e Recebido:.'
-            )
-            extrato_1532 = st.file_uploader(
-                'Extrato Itaú em PDF',
+            extratos_1532 = st.file_uploader(
+                'Extratos Itaú em PDF',
                 type=['pdf'],
+                accept_multiple_files=True,
                 key='maria_narbutis_1532_extrato',
             )
-            if extrato_1532 is not None:
+            if extratos_1532:
                 try:
-                    df_1532 = executar_com_loading(
-                        'Lendo o extrato Itaú e montando o Modelo Domínio...',
-                        processar_extrato_itau_modelo,
-                        extrato_1532.getvalue(),
-                        conta_itau_1532,
-                        ('MARIA A D P NARB', '59.124.979/0001-52', '0097731-6'),
-                        'empresa 1532 - Maria Narbutis',
+                    quadros_1532 = []
+                    assinaturas_1532 = set()
+                    arquivos_duplicados_1532 = 0
+                    for extrato_1532 in extratos_1532:
+                        conteudo_1532 = extrato_1532.getvalue()
+                        assinatura_1532 = hashlib.sha256(conteudo_1532).hexdigest()
+                        if assinatura_1532 in assinaturas_1532:
+                            arquivos_duplicados_1532 += 1
+                            continue
+                        assinaturas_1532.add(assinatura_1532)
+                        quadro_1532 = executar_com_loading(
+                            f'Lendo {extrato_1532.name}...',
+                            processar_extrato_itau_modelo,
+                            conteudo_1532,
+                            conta_itau_1532,
+                            ('MARIA A D P NARB', '59.124.979/0001-52', '0097731-6'),
+                            'empresa 1532 - Maria Narbutis',
+                        )
+                        quadros_1532.append(quadro_1532)
+                    if not quadros_1532:
+                        raise ValueError('Nenhum extrato diferente foi informado.')
+                    df_1532 = pd.concat(quadros_1532, ignore_index=True)
+                    df_1532 = (
+                        df_1532.assign(
+                            _DATA_ORDEM=pd.to_datetime(
+                                df_1532['DATA'], errors='coerce'
+                            )
+                        )
+                        .sort_values('_DATA_ORDEM', kind='stable')
+                        .drop(columns=['_DATA_ORDEM'])
+                        .reset_index(drop=True)
                     )
+                    st.success(
+                        f'{len(quadros_1532)} extrato(s) consolidado(s) em '
+                        f'{len(df_1532)} lançamentos.'
+                    )
+                    if arquivos_duplicados_1532:
+                        st.info(
+                            f'{arquivos_duplicados_1532} arquivo(s) idêntico(s) '
+                            'foram ignorados para não duplicar os lançamentos.'
+                        )
                     renderizar_previa_bancos_padrao(
                         {'Itaú · Conta 508': df_1532},
                         titulo='Pré-visualização do Modelo Domínio',
@@ -9147,7 +9012,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         df_1532['DATA'], errors='coerce'
                     ).dropna()
                     periodo_1532 = (
-                        datas_1532.min().strftime('%m_%Y')
+                        (
+                            datas_1532.min().strftime('%m_%Y')
+                            if datas_1532.min().to_period('M') == datas_1532.max().to_period('M')
+                            else (
+                                f'{datas_1532.min().strftime("%m_%Y")}_A_'
+                                f'{datas_1532.max().strftime("%m_%Y")}'
+                            )
+                        )
                         if not datas_1532.empty else 'periodo'
                     )
                     st.download_button(
