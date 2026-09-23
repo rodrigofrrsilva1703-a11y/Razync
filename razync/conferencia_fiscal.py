@@ -17,7 +17,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 
-VERSAO_LEITOR_FISCAL = "2026.09.17.6-fechamento-pelo-total"
+VERSAO_LEITOR_FISCAL = "2026.09.23.7-filial-relatorio-individual"
 
 
 def _moeda(valor) -> str:
@@ -503,18 +503,28 @@ def processar_conferencia(
         if filial
     )
     filial_normalizada = re.sub(r"\D", "", str(filial_alvo or "")).lstrip("0")
+    filial_aplicada = ""
     if filiais_encontradas and filial_normalizada:
-        if filial_normalizada not in filiais_encontradas:
+        if filial_normalizada in filiais_encontradas:
+            filial_aplicada = filial_normalizada
+            razao = razao[razao["FILIAL"].astype(str).eq(filial_aplicada)].copy()
+        elif len(filiais_encontradas) == 1:
+            # Em relatórios individuais do Domínio, a coluna Filial costuma
+            # trazer o estabelecimento interno (normalmente 1), e não o código
+            # da empresa no escritório. Como não existe outra filial no arquivo,
+            # todo o Razão pertence à empresa selecionada.
+            filial_aplicada = filiais_encontradas[0]
+            razao = razao[razao["FILIAL"].astype(str).eq(filial_aplicada)].copy()
+        else:
             raise ValueError(
                 f"O razão contém as filiais {', '.join(filiais_encontradas)}, mas não possui "
                 f"lançamentos da empresa {filial_normalizada}."
             )
-        razao = razao[razao["FILIAL"].astype(str).eq(filial_normalizada)].copy()
     resumo, detalhes = conferir_fiscal_contabil(acumuladores, razao)
     return {
         "resumo": resumo, "detalhes": detalhes, "acumuladores": acumuladores,
         "periodo_fiscal": periodo_fiscal, "periodo_razao": periodo_razao,
-        "filial_aplicada": filial_normalizada if filiais_encontradas else "",
+        "filial_aplicada": filial_aplicada,
         "filiais_encontradas": filiais_encontradas,
     }
 
