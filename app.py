@@ -67,9 +67,10 @@ def nome_banco_por_chave(chave):
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
-    if banco_forcado == "banco_brasil_47":
-        return _processar_bb_crj_47(file_bytes).to_dict("records")
-    if st.session_state.get("empresa_organizador") == "crj_47":
+    if (
+        st.session_state.get("empresa_organizador") == "crj_47"
+        and banco_forcado in {None, "banco_brasil"}
+    ):
         return _processar_bb_crj_47(file_bytes).to_dict("records")
     if st.session_state.get("empresa_organizador") == "kairos_1208":
         from razync.kairos_1208 import processar_extrato_1208
@@ -1262,8 +1263,8 @@ def _renderizar_crj_47():
             "crj_47",
             bancos_config=[{
                 "nome": "Banco do Brasil · Conta 8",
-                "slug": "banco_brasil_47",
-                "banco": "banco_brasil_47",
+                "slug": "banco_brasil",
+                "banco": "banco_brasil",
                 "conta": "8",
             }],
             rotulo_planilha="Modelo Domínio final da empresa 47",
