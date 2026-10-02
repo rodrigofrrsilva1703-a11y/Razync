@@ -13,7 +13,7 @@ import razync.company_catalog as _catalogo
 # Ativa as empresas acrescentadas ao Organizador antes de carregar a aplicação histórica.
 for _empresa in _catalogo.EMPRESAS:
     _chaves_novas = {
-        "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
+        "47": "crj_47", "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
         "964": "willians_964", "1208": "kairos_1208", "1530": "dias_pereira_1530",
     }
     _codigo_empresa = str(_empresa.get("codigo"))
@@ -67,6 +67,10 @@ def nome_banco_por_chave(chave):
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=None):
+    if banco_forcado == "banco_brasil_47":
+        return _processar_bb_crj_47(file_bytes).to_dict("records")
+    if st.session_state.get("empresa_organizador") == "crj_47":
+        return _processar_bb_crj_47(file_bytes).to_dict("records")
     if st.session_state.get("empresa_organizador") == "kairos_1208":
         from razync.kairos_1208 import processar_extrato_1208
 
@@ -1021,6 +1025,261 @@ def _renderizar_conferencia_fiscal_autokraft():
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
+def _processar_bb_crj_47(file_bytes):
+    """Converte o extrato BB da CRJ, descartando saldos intermediários e finais."""
+    reader = PdfReader(io.BytesIO(file_bytes))
+    linhas = []
+    for pagina in reader.pages:
+        linhas.extend((pagina.extract_text() or "").splitlines())
+
+    regex_movimento = re.compile(
+        r"^(?P<valor>\d{1,3}(?:\.\d{3})*,\d{2})\s*"
+        r"\((?P<natureza>[+-])\)"
+        r"(?P<data>\d{2}/\d{2}/\d{4})\s*(?P<resto>.*)$"
+    )
+    cabecalhos = (
+        "Extrato de Conta Corrente", "Cliente", "Agência:", "Agencia:",
+        "Lançamentos", "Lancamentos", "Dia Lote Documento Histórico Valor",
+        "Dia Lote Documento Historico Valor",
+    )
+
+    registros_brutos = []
+    atual = None
+    for linha_original in linhas:
+        linha = re.sub(r"\s+", " ", str(linha_original or "")).strip()
+        if not linha:
+            continue
+
+        encontrado = regex_movimento.match(linha)
+        if encontrado:
+            if atual is not None:
+                registros_brutos.append(atual)
+
+            valor = limpar_valor_monetario(encontrado.group("valor"))
+            if encontrado.group("natureza") == "-":
+                valor = -abs(valor)
+            else:
+                valor = abs(valor)
+
+            atual = {
+                "DATA_TEXTO": encontrado.group("data"),
+                "VALOR": round(float(valor), 2),
+                "RESTO": encontrado.group("resto").strip(),
+                "COMPLEMENTOS": [],
+            }
+            continue
+
+        if atual is not None and not any(linha.startswith(cab) for cab in cabecalhos):
+            atual["COMPLEMENTOS"].append(linha)
+
+    if atual is not None:
+        registros_brutos.append(atual)
+
+    registros = []
+    saldo_anterior = None
+    saldo_final = None
+    for item in registros_brutos:
+        resto = str(item["RESTO"] or "").strip()
+        resto_compacto = re.sub(r"\s+", "", resto).upper()
+        texto_completo = re.sub(
+            r"\s+", " ", " ".join([resto] + item["COMPLEMENTOS"])
+        ).strip()
+        texto_norm = normalizar_texto(texto_completo)
+
+        if "saldo anterior" in texto_norm:
+            saldo_anterior = abs(float(item["VALOR"]))
+            continue
+        if (
+            item["DATA_TEXTO"] == "00/00/0000"
+            or "saldo do dia" in texto_norm
+            or resto_compacto == "SALDO"
+        ):
+            if resto_compacto == "SALDO":
+                saldo_final = abs(float(item["VALOR"]))
+            continue
+
+        data = pd.to_datetime(item["DATA_TEXTO"], dayfirst=True, errors="coerce")
+        if pd.isna(data):
+            continue
+
+        # Lote e documento aparecem antes do histórico na primeira linha.
+        partes = resto.split()
+        historico_primeira_linha = resto
+        if len(partes) >= 2 and partes[0].isdigit():
+            inicio_hist = 2
+            historico_primeira_linha = " ".join(partes[inicio_hist:]).strip()
+
+        historico = re.sub(
+            r"\s+",
+            " ",
+            " ".join(
+                parte for parte in [historico_primeira_linha] + item["COMPLEMENTOS"]
+                if parte
+            ),
+        ).strip()
+        if not historico:
+            historico = "MOVIMENTO BANCÁRIO"
+
+        valor = float(item["VALOR"])
+        prefixo = "Recebido:" if valor > 0 else "Pago:"
+        registros.append({
+            "DESCRIÇÃO": "BANCO DO BRASIL",
+            "DATA": data.to_pydatetime(),
+            "VALOR": round(valor, 2),
+            "DÉBITO": "8" if valor > 0 else "",
+            "CRÉDITO": "8" if valor < 0 else "",
+            "HISTÓRICO": f"{prefixo} {limpar_caracteres_ilegais(historico)}",
+        })
+
+    if not registros:
+        raise ValueError("Nenhum lançamento válido foi encontrado no extrato do Banco do Brasil.")
+
+    modelo = pd.DataFrame(
+        registros,
+        columns=["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"],
+    ).sort_values("DATA", kind="stable").reset_index(drop=True)
+
+    if saldo_anterior is not None and saldo_final is not None:
+        movimento_liquido = round(float(modelo["VALOR"].sum()), 2)
+        esperado = round(saldo_anterior + movimento_liquido, 2)
+        if abs(esperado - saldo_final) > 0.02:
+            raise ValueError(
+                "Os lançamentos lidos não fecham com o saldo final do extrato. "
+                f"Esperado {formatar_moeda(esperado)} e saldo final {formatar_moeda(saldo_final)}."
+            )
+
+    return modelo
+
+
+def _renderizar_crj_47():
+    empresa = "47 - CRJ CORRETORA DE SEGUROS LTDA"
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("crj_47", empresa)
+
+    with aba_operacoes:
+        st.markdown("#### Extrato Banco do Brasil → Modelo Domínio")
+        st.caption(
+            "Conta contábil 8. Envie um ou vários extratos do Banco do Brasil em PDF. "
+            "O Razync ignora Saldo Anterior, todos os 'Saldo do dia' do meio do extrato "
+            "e o S A L D O final. Entradas recebem débito 8 e saídas recebem crédito 8."
+        )
+        arquivos = st.file_uploader(
+            "Extrato(s) Banco do Brasil em PDF",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="crj_47_extratos_bb",
+        )
+
+        if arquivos:
+            try:
+                quadros = []
+                vistos = set()
+                duplicados = 0
+                for arquivo in arquivos:
+                    conteudo = arquivo.getvalue()
+                    assinatura = hashlib.sha256(conteudo).hexdigest()
+                    if assinatura in vistos:
+                        duplicados += 1
+                        continue
+                    vistos.add(assinatura)
+                    quadros.append(
+                        executar_com_loading(
+                            f"Lendo {arquivo.name}...",
+                            _processar_bb_crj_47,
+                            conteudo,
+                        )
+                    )
+
+                if not quadros:
+                    raise ValueError("Nenhum extrato diferente foi informado.")
+
+                modelo = (
+                    pd.concat(quadros, ignore_index=True)
+                    .sort_values("DATA", kind="stable")
+                    .reset_index(drop=True)
+                )
+                st.session_state["crj_47_modelo"] = modelo
+                st.session_state["crj_47_duplicados"] = duplicados
+                st.session_state.pop("crj_47_erro", None)
+            except Exception as erro:
+                st.session_state["crj_47_erro"] = str(erro)
+                st.session_state.pop("crj_47_modelo", None)
+
+        if st.session_state.get("crj_47_erro"):
+            st.error(
+                "Não foi possível processar o extrato Banco do Brasil da empresa 47: "
+                + st.session_state["crj_47_erro"]
+            )
+
+        modelo = st.session_state.get("crj_47_modelo")
+        if isinstance(modelo, pd.DataFrame) and not modelo.empty:
+            duplicados = int(st.session_state.get("crj_47_duplicados", 0) or 0)
+            if duplicados:
+                st.info(
+                    f"{duplicados} arquivo(s) idêntico(s) foram ignorados para não duplicar lançamentos."
+                )
+
+            entradas = float(modelo.loc[modelo["VALOR"] > 0, "VALOR"].sum())
+            saidas = float(-modelo.loc[modelo["VALOR"] < 0, "VALOR"].sum())
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Lançamentos", len(modelo))
+            m2.metric("Entradas", formatar_moeda(entradas))
+            m3.metric("Saídas", formatar_moeda(saidas))
+            m4.metric("Conta bancária", "8 · Banco do Brasil")
+
+            previa = modelo.copy()
+            previa["DATA"] = pd.to_datetime(previa["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(
+                previa,
+                use_container_width=True,
+                hide_index=True,
+                height=430,
+                column_config={
+                    "VALOR": st.column_config.NumberColumn("Valor", format="R$ %.2f")
+                },
+            )
+
+            datas = pd.to_datetime(modelo["DATA"], errors="coerce").dropna()
+            periodo = (
+                f"{datas.min().strftime('%d%m%Y')}_A_{datas.max().strftime('%d%m%Y')}"
+                if not datas.empty else "PERIODO"
+            )
+            st.download_button(
+                "Baixar Modelo Domínio · Banco do Brasil 8",
+                data=gerar_excel_modelo_dominio(modelo, formato_data="dd/mm/yyyy"),
+                file_name=f"CRJ_47_BANCO_DO_BRASIL_8_MODELO_DOMINIO_{periodo}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="crj_47_download_modelo",
+            )
+
+        renderizar_conferencia_autokraft(
+            "crj_47",
+            bancos_config=[{
+                "nome": "Banco do Brasil · Conta 8",
+                "slug": "banco_brasil_47",
+                "banco": "banco_brasil_47",
+                "conta": "8",
+            }],
+            rotulo_planilha="Modelo Domínio final da empresa 47",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "crj_47", empresa, {"banco_brasil"}, {"banco_brasil": "8"}
+        )
+
+
+if st.session_state.get("empresa_organizador") == "crj_47":
+    _renderizar_crj_47()
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def _processar_bradesco_964(file_bytes):
     """Converte o extrato mensal Bradesco da empresa 964 para o Modelo Domínio."""
     reader = PdfReader(io.BytesIO(file_bytes))
@@ -1183,7 +1442,7 @@ if st.session_state.get("empresa_organizador") == "willians_964":
 # empresa cadastrada que ainda não tenha ferramentas bancárias próprias, a aba
 # fiscal continua disponível, garantindo cobertura obrigatória em todo o cadastro.
 _EMPRESAS_COM_ABA_FISCAL = {
-    "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
+    "crj_47", "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
     "lcarlos", "vgv_1402", "autokraft_industrial", "autokraft_projetos", "isa",
     "accede_automacao", "accede_equipamentos", "radani", "up_pack", "nova_geracao",
     "dias_pereira", "lucrativite_841", "valean_625", "valean_626",
