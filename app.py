@@ -14,7 +14,7 @@ import razync.company_catalog as _catalogo
 for _empresa in _catalogo.EMPRESAS:
     _chaves_novas = {
         "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
-        "1208": "kairos_1208", "1530": "dias_pereira_1530",
+        "964": "willians_964", "1208": "kairos_1208", "1530": "dias_pereira_1530",
     }
     _codigo_empresa = str(_empresa.get("codigo"))
     if _codigo_empresa in _chaves_novas:
@@ -1019,6 +1019,166 @@ def _renderizar_conferencia_fiscal_autokraft():
 # demais empresas. A função legada acima permanece apenas para compatibilidade.
 
 
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
+def _processar_bradesco_964(file_bytes):
+    """Converte o extrato mensal Bradesco da empresa 964 para o Modelo Domínio."""
+    reader = PdfReader(io.BytesIO(file_bytes))
+    registros = processar_pdf_bradesco_mensal(reader, banco="BANCO BRADESCO")
+    if not registros:
+        raise ValueError("Nenhum lançamento bancário foi encontrado no PDF do Bradesco.")
+
+    modelo = pd.DataFrame(registros)
+    colunas = ["DESCRIÇÃO", "DATA", "VALOR", "DÉBITO", "CRÉDITO", "HISTÓRICO"]
+    for coluna in colunas:
+        if coluna not in modelo.columns:
+            modelo[coluna] = ""
+
+    modelo["DATA"] = pd.to_datetime(modelo["DATA"], dayfirst=True, errors="coerce")
+    modelo["VALOR"] = pd.to_numeric(modelo["VALOR"], errors="coerce")
+    modelo = modelo.dropna(subset=["DATA", "VALOR"]).copy()
+    modelo = modelo[modelo["VALOR"].abs() > 0.004].copy()
+
+    def _historico_964(row):
+        texto = limpar_caracteres_ilegais(str(row.get("HISTÓRICO") or "")).strip()
+        texto = re.sub(r"^(?:Pago|Recebido)\s*:\s*", "", texto, flags=re.I).strip()
+        prefixo = "Recebido:" if float(row["VALOR"]) > 0 else "Pago:"
+        return f"{prefixo} {texto or 'MOVIMENTO BANCÁRIO'}"
+
+    modelo["HISTÓRICO"] = modelo.apply(_historico_964, axis=1)
+    modelo["DÉBITO"] = modelo["VALOR"].apply(lambda valor: "9" if float(valor) > 0 else "")
+    modelo["CRÉDITO"] = modelo["VALOR"].apply(lambda valor: "9" if float(valor) < 0 else "")
+    modelo = modelo[colunas].sort_values("DATA", kind="stable").reset_index(drop=True)
+    return modelo
+
+
+def _renderizar_willians_964():
+    empresa = "964 - WILLIANS VENANCIO ALMEIDA - ME"
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("willians_964", empresa)
+
+    with aba_operacoes:
+        st.markdown("#### Extrato Bradesco → Modelo Domínio")
+        st.caption(
+            "Conta contábil 9. Envie um ou vários extratos mensais do Bradesco em PDF. "
+            "Entradas recebem débito 9, saídas recebem crédito 9 e linhas de saldo não são importadas."
+        )
+        arquivos = st.file_uploader(
+            "Extrato(s) Bradesco em PDF",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="willians_964_extratos_bradesco",
+        )
+
+        if arquivos:
+            try:
+                quadros = []
+                vistos = set()
+                duplicados = 0
+                for arquivo in arquivos:
+                    conteudo = arquivo.getvalue()
+                    assinatura = hashlib.sha256(conteudo).hexdigest()
+                    if assinatura in vistos:
+                        duplicados += 1
+                        continue
+                    vistos.add(assinatura)
+                    quadros.append(
+                        executar_com_loading(
+                            f"Lendo {arquivo.name}...",
+                            _processar_bradesco_964,
+                            conteudo,
+                        )
+                    )
+
+                if not quadros:
+                    raise ValueError("Nenhum extrato diferente foi informado.")
+
+                modelo = (
+                    pd.concat(quadros, ignore_index=True)
+                    .sort_values("DATA", kind="stable")
+                    .reset_index(drop=True)
+                )
+                st.session_state["willians_964_modelo"] = modelo
+                st.session_state["willians_964_duplicados"] = duplicados
+                st.session_state.pop("willians_964_erro", None)
+            except Exception as erro:
+                st.session_state["willians_964_erro"] = str(erro)
+                st.session_state.pop("willians_964_modelo", None)
+
+        if st.session_state.get("willians_964_erro"):
+            st.error(
+                "Não foi possível processar o extrato Bradesco da empresa 964: "
+                + st.session_state["willians_964_erro"]
+            )
+
+        modelo = st.session_state.get("willians_964_modelo")
+        if isinstance(modelo, pd.DataFrame) and not modelo.empty:
+            duplicados = int(st.session_state.get("willians_964_duplicados", 0) or 0)
+            if duplicados:
+                st.info(
+                    f"{duplicados} arquivo(s) idêntico(s) foram ignorados para não duplicar lançamentos."
+                )
+
+            entradas = float(modelo.loc[modelo["VALOR"] > 0, "VALOR"].sum())
+            saidas = float(-modelo.loc[modelo["VALOR"] < 0, "VALOR"].sum())
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Lançamentos", len(modelo))
+            m2.metric("Entradas", formatar_moeda(entradas))
+            m3.metric("Saídas", formatar_moeda(saidas))
+            m4.metric("Conta bancária", "9 · Bradesco")
+
+            previa = modelo.copy()
+            previa["DATA"] = pd.to_datetime(previa["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(
+                previa,
+                use_container_width=True,
+                hide_index=True,
+                height=430,
+                column_config={
+                    "VALOR": st.column_config.NumberColumn("Valor", format="R$ %.2f")
+                },
+            )
+
+            datas = pd.to_datetime(modelo["DATA"], errors="coerce").dropna()
+            periodo = (
+                f"{datas.min().strftime('%d%m%Y')}_A_{datas.max().strftime('%d%m%Y')}"
+                if not datas.empty else "PERIODO"
+            )
+            st.download_button(
+                "Baixar Modelo Domínio · Bradesco 9",
+                data=gerar_excel_modelo_dominio(modelo, formato_data="dd/mm/yyyy"),
+                file_name=f"WILLIANS_964_BRADESCO_9_MODELO_DOMINIO_{periodo}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="willians_964_download_modelo",
+            )
+
+        renderizar_conferencia_autokraft(
+            "willians_964",
+            bancos_config=[{
+                "nome": "Bradesco · Conta 9",
+                "slug": "bradesco",
+                "banco": "bradesco",
+                "conta": "9",
+            }],
+            rotulo_planilha="Modelo Domínio final da empresa 964",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "willians_964", empresa, {"bradesco"}, {"bradesco": "9"}
+        )
+
+
+if st.session_state.get("empresa_organizador") == "willians_964":
+    _renderizar_willians_964()
+
+
 # Empresas que já exibem a conferência ao lado da Base Inteligente. Para qualquer
 # empresa cadastrada que ainda não tenha ferramentas bancárias próprias, a aba
 # fiscal continua disponível, garantindo cobertura obrigatória em todo o cadastro.
@@ -1027,7 +1187,7 @@ _EMPRESAS_COM_ABA_FISCAL = {
     "lcarlos", "vgv_1402", "autokraft_industrial", "autokraft_projetos", "isa",
     "accede_automacao", "accede_equipamentos", "radani", "up_pack", "nova_geracao",
     "dias_pereira", "lucrativite_841", "valean_625", "valean_626",
-    "dias_pereira_1530", "kairos_1208", "maria_narbutis_1532",
+    "willians_964", "dias_pereira_1530", "kairos_1208", "maria_narbutis_1532",
 }
 _empresa_selecionada_fiscal = st.session_state.get("empresa_organizador")
 if (
