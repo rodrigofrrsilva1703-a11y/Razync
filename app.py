@@ -1061,8 +1061,15 @@ def _processar_bradesco_154(file_bytes):
         inicio = pd.to_datetime(periodo.group(1), dayfirst=True, errors="coerce")
         fim = pd.to_datetime(periodo.group(2), dayfirst=True, errors="coerce")
     else:
-        inicio = pd.Timestamp("1900-01-01")
-        fim = pd.Timestamp("2100-12-31")
+        # Alguns PDFs Bradesco posicionam visualmente "Entre ... e ...", mas a
+        # camada de texto joga as duas datas antes da palavra "Entre".
+        cabecalho = texto[:1200]
+        datas_cabecalho = re.findall(r"\d{2}/\d{2}/\d{4}", cabecalho)
+        if len(datas_cabecalho) >= 2:
+            inicio = pd.to_datetime(datas_cabecalho[0], dayfirst=True, errors="coerce")
+            fim = pd.to_datetime(datas_cabecalho[1], dayfirst=True, errors="coerce")
+        else:
+            raise ValueError("Não foi possível identificar o período principal do extrato Bradesco.")
 
     modelo["DATA"] = pd.to_datetime(modelo["DATA"], dayfirst=True, errors="coerce")
     modelo["VALOR"] = pd.to_numeric(modelo["VALOR"], errors="coerce")
