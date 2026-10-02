@@ -13,7 +13,7 @@ import razync.company_catalog as _catalogo
 # Ativa as empresas acrescentadas ao Organizador antes de carregar a aplicação histórica.
 for _empresa in _catalogo.EMPRESAS:
     _chaves_novas = {
-        "47": "crj_47", "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
+        "47": "crj_47", "154": "rm_postais_154", "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
         "912": "vital_safety_912", "964": "willians_964", "1208": "kairos_1208", "1530": "dias_pereira_1530",
     }
     _codigo_empresa = str(_empresa.get("codigo"))
@@ -77,6 +77,11 @@ def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=No
         and banco_forcado in {None, "sicredi"}
     ):
         return _processar_sicredi_912(file_bytes).to_dict("records")
+    if st.session_state.get("empresa_organizador") == "rm_postais_154":
+        if banco_forcado == "bradesco":
+            return _processar_bradesco_154(file_bytes).to_dict("records")
+        if banco_forcado == "itau":
+            return _processar_itau_154(file_bytes).to_dict("records")
     if st.session_state.get("empresa_organizador") == "kairos_1208":
         from razync.kairos_1208 import processar_extrato_1208
 
@@ -1031,6 +1036,255 @@ def _renderizar_conferencia_fiscal_autokraft():
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
+def _processar_bradesco_154(file_bytes):
+    """Converte o Bradesco da empresa 154, limitado ao período principal do extrato."""
+    reader = PdfReader(io.BytesIO(file_bytes))
+    texto = "\n".join((pagina.extract_text() or "") for pagina in reader.pages)
+    if not (
+        "0004700-7" in texto
+        or "R M SERVICOS POSTAIS" in texto.upper()
+        or "68.370.568/0001-38" in texto
+    ):
+        raise ValueError("O PDF enviado não parece ser o Bradesco da empresa 154.")
+
+    registros = processar_pdf_bradesco_mensal(reader, banco="BANCO BRADESCO")
+    modelo = pd.DataFrame(registros)
+    if modelo.empty:
+        raise ValueError("Nenhum lançamento válido foi encontrado no extrato Bradesco.")
+
+    periodo = re.search(
+        r"Entre\s+(\d{2}/\d{2}/\d{4})\s+e\s+(\d{2}/\d{2}/\d{4})",
+        texto,
+        flags=re.I,
+    )
+    if periodo:
+        inicio = pd.to_datetime(periodo.group(1), dayfirst=True, errors="coerce")
+        fim = pd.to_datetime(periodo.group(2), dayfirst=True, errors="coerce")
+    else:
+        inicio = pd.Timestamp("1900-01-01")
+        fim = pd.Timestamp("2100-12-31")
+
+    modelo["DATA"] = pd.to_datetime(modelo["DATA"], dayfirst=True, errors="coerce")
+    modelo["VALOR"] = pd.to_numeric(modelo["VALOR"], errors="coerce")
+    modelo = modelo.dropna(subset=["DATA", "VALOR"]).copy()
+    modelo = modelo[(modelo["DATA"] >= inicio) & (modelo["DATA"] <= fim)].copy()
+
+    # Segurança adicional contra as seções auxiliares exibidas após o extrato mensal.
+    historicos_norm = modelo["HISTÓRICO"].fillna("").astype(str).apply(normalizar_texto)
+    modelo = modelo[
+        ~historicos_norm.str.contains("saldo invest facil", regex=False)
+        & ~historicos_norm.str.startswith("saldo ")
+    ].copy()
+
+    def _ajustar_154_bradesco(row):
+        valor = float(row["VALOR"])
+        historico = limpar_caracteres_ilegais(str(row.get("HISTÓRICO") or "")).strip()
+        historico = re.sub(r"^(?:Pago|Recebido)\s*:\s*", "", historico, flags=re.I).strip()
+        return pd.Series({
+            "DESCRIÇÃO": "BANCO BRADESCO",
+            "DATA": row["DATA"],
+            "VALOR": round(valor, 2),
+            "DÉBITO": "9" if valor > 0 else "",
+            "CRÉDITO": "9" if valor < 0 else "",
+            "HISTÓRICO": ("Recebido: " if valor > 0 else "Pago: ") + (historico or "MOVIMENTO BANCÁRIO"),
+        })
+
+    modelo = modelo.apply(_ajustar_154_bradesco, axis=1)
+    modelo = modelo.sort_values("DATA", kind="stable").reset_index(drop=True)
+    return modelo
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
+def _processar_itau_154(file_bytes):
+    """Converte o Itaú da empresa 154 para o Modelo Domínio, conta 508."""
+    modelo = processar_extrato_itau_modelo(
+        file_bytes,
+        "508",
+        ("R M SERVICOS POSTAIS", "68.370.568/0001-38", "0015961-9"),
+        "empresa 154 - R.M. Serviços Postais",
+    ).copy()
+
+    # O leitor dedicado já ignora saldos. Mantém somente o período informado no PDF.
+    reader = PdfReader(io.BytesIO(file_bytes))
+    texto = "\n".join((pagina.extract_text() or "") for pagina in reader.pages)
+    periodo = re.search(
+        r"per[ií]odo:\s*(\d{2}/\d{2}/\d{4})\s+at[eé]\s+(\d{2}/\d{2}/\d{4})",
+        texto,
+        flags=re.I,
+    )
+    if periodo:
+        inicio = pd.to_datetime(periodo.group(1), dayfirst=True, errors="coerce")
+        fim = pd.to_datetime(periodo.group(2), dayfirst=True, errors="coerce")
+        datas = pd.to_datetime(modelo["DATA"], dayfirst=True, errors="coerce")
+        modelo = modelo[(datas >= inicio) & (datas <= fim)].copy()
+
+    modelo = modelo.sort_values("DATA", kind="stable").reset_index(drop=True)
+    return modelo
+
+
+def _renderizar_rm_postais_154():
+    empresa = "154 - R.M. SERVICOS POSTAIS LTDA. - EPP"
+    abas = st.tabs(["Organizar arquivos", "Base Inteligente", "Conferência Fiscal"])
+    aba_operacoes, aba_base, aba_fiscal = abas
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("rm_postais_154", empresa)
+
+    with aba_operacoes:
+        st.markdown("#### Extratos bancários → Modelo Domínio")
+        st.caption(
+            "Bradesco · conta contábil 9 e Itaú · conta contábil 508. "
+            "Envie um ou vários PDFs de cada banco. O arquivo final terá uma aba por banco. "
+            "Saldos, Saldos Invest Fácil e lançamentos fora do período principal são ignorados."
+        )
+
+        col_bra, col_itau = st.columns(2)
+        with col_bra:
+            bradesco = st.file_uploader(
+                "Bradesco · conta 9",
+                type=["pdf"],
+                accept_multiple_files=True,
+                key="rm_postais_154_bradesco",
+            )
+        with col_itau:
+            itau = st.file_uploader(
+                "Itaú · conta 508",
+                type=["pdf"],
+                accept_multiple_files=True,
+                key="rm_postais_154_itau",
+            )
+
+        enviados = {"bradesco": bradesco or [], "itau": itau or []}
+        if any(enviados.values()):
+            try:
+                modelos = {}
+                duplicados = 0
+                for banco, arquivos in enviados.items():
+                    quadros = []
+                    vistos = set()
+                    for arquivo in arquivos:
+                        conteudo = arquivo.getvalue()
+                        assinatura = hashlib.sha256(conteudo).hexdigest()
+                        if assinatura in vistos:
+                            duplicados += 1
+                            continue
+                        vistos.add(assinatura)
+                        processador = (
+                            _processar_bradesco_154
+                            if banco == "bradesco"
+                            else _processar_itau_154
+                        )
+                        quadros.append(
+                            executar_com_loading(
+                                f"Lendo {arquivo.name}...",
+                                processador,
+                                conteudo,
+                            )
+                        )
+                    if quadros:
+                        modelos[banco] = (
+                            pd.concat(quadros, ignore_index=True)
+                            .sort_values("DATA", kind="stable")
+                            .reset_index(drop=True)
+                        )
+
+                if not modelos:
+                    raise ValueError("Nenhum extrato válido foi processado.")
+
+                st.session_state["rm_postais_154_modelos"] = modelos
+                st.session_state["rm_postais_154_duplicados"] = duplicados
+                st.session_state.pop("rm_postais_154_erro", None)
+            except Exception as erro:
+                st.session_state["rm_postais_154_erro"] = str(erro)
+                st.session_state.pop("rm_postais_154_modelos", None)
+
+        if st.session_state.get("rm_postais_154_erro"):
+            st.error(
+                "Não foi possível processar os extratos da empresa 154: "
+                + st.session_state["rm_postais_154_erro"]
+            )
+
+        modelos = st.session_state.get("rm_postais_154_modelos")
+        if isinstance(modelos, dict) and modelos:
+            duplicados = int(st.session_state.get("rm_postais_154_duplicados", 0) or 0)
+            if duplicados:
+                st.info(
+                    f"{duplicados} arquivo(s) idêntico(s) foram ignorados para não duplicar lançamentos."
+                )
+
+            quadros_previa = {}
+            if "bradesco" in modelos:
+                quadros_previa["Bradesco · Conta 9"] = modelos["bradesco"]
+            if "itau" in modelos:
+                quadros_previa["Itaú · Conta 508"] = modelos["itau"]
+            renderizar_previa_bancos_padrao(
+                quadros_previa,
+                titulo="Pré-visualização do Modelo Domínio",
+                ordem=["Bradesco · Conta 9", "Itaú · Conta 508"],
+            )
+
+            dados_excel = {}
+            if "bradesco" in modelos:
+                dados_excel["Bradesco 9"] = {
+                    "principal": modelos["bradesco"],
+                    "retirados": pd.DataFrame(),
+                }
+            if "itau" in modelos:
+                dados_excel["Itaú 508"] = {
+                    "principal": modelos["itau"],
+                    "retirados": pd.DataFrame(),
+                }
+
+            todas_datas = pd.concat(
+                [pd.to_datetime(df["DATA"], errors="coerce") for df in modelos.values()]
+            ).dropna()
+            periodo_nome = (
+                f"{todas_datas.min().strftime('%d%m%Y')}_A_{todas_datas.max().strftime('%d%m%Y')}"
+                if not todas_datas.empty else "PERIODO"
+            )
+            st.download_button(
+                "Baixar Modelo Domínio · empresa 154",
+                data=gerar_excel_nova_geracao(dados_excel, prefixar_historicos=False),
+                file_name=f"RM_POSTAIS_154_MODELO_DOMINIO_{periodo_nome}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="rm_postais_154_download",
+            )
+
+        renderizar_conferencia_autokraft(
+            "rm_postais_154",
+            bancos_config=[
+                {
+                    "nome": "Bradesco · Conta 9",
+                    "slug": "bradesco",
+                    "banco": "bradesco",
+                    "conta": "9",
+                },
+                {
+                    "nome": "Itaú · Conta 508",
+                    "slug": "itau",
+                    "banco": "itau",
+                    "conta": "508",
+                },
+            ],
+            rotulo_planilha="Modelo Domínio final da empresa 154",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "rm_postais_154",
+            empresa,
+            {"bradesco", "itau"},
+            {"bradesco": "9", "itau": "508"},
+        )
+
+
+if st.session_state.get("empresa_organizador") == "rm_postais_154":
+    _renderizar_rm_postais_154()
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def _processar_sicredi_912(file_bytes):
     """Converte o extrato Sicredi da empresa 912 para o Modelo Domínio."""
     from razync.valean_625 import processar_sicredi_625
@@ -1616,7 +1870,7 @@ if st.session_state.get("empresa_organizador") == "willians_964":
 # empresa cadastrada que ainda não tenha ferramentas bancárias próprias, a aba
 # fiscal continua disponível, garantindo cobertura obrigatória em todo o cadastro.
 _EMPRESAS_COM_ABA_FISCAL = {
-    "crj_47", "vital_safety_912", "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
+    "crj_47", "rm_postais_154", "vital_safety_912", "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
     "lcarlos", "vgv_1402", "autokraft_industrial", "autokraft_projetos", "isa",
     "accede_automacao", "accede_equipamentos", "radani", "up_pack", "nova_geracao",
     "dias_pereira", "lucrativite_841", "valean_625", "valean_626",
