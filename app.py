@@ -14,7 +14,7 @@ import razync.company_catalog as _catalogo
 for _empresa in _catalogo.EMPRESAS:
     _chaves_novas = {
         "47": "crj_47", "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
-        "964": "willians_964", "1208": "kairos_1208", "1530": "dias_pereira_1530",
+        "912": "vital_safety_912", "964": "willians_964", "1208": "kairos_1208", "1530": "dias_pereira_1530",
     }
     _codigo_empresa = str(_empresa.get("codigo"))
     if _codigo_empresa in _chaves_novas:
@@ -72,6 +72,11 @@ def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=No
         and banco_forcado in {None, "banco_brasil"}
     ):
         return _processar_bb_crj_47(file_bytes).to_dict("records")
+    if (
+        st.session_state.get("empresa_organizador") == "vital_safety_912"
+        and banco_forcado in {None, "sicredi"}
+    ):
+        return _processar_sicredi_912(file_bytes).to_dict("records")
     if st.session_state.get("empresa_organizador") == "kairos_1208":
         from razync.kairos_1208 import processar_extrato_1208
 
@@ -1026,6 +1031,174 @@ def _renderizar_conferencia_fiscal_autokraft():
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
+def _processar_sicredi_912(file_bytes):
+    """Converte o extrato Sicredi da empresa 912 para o Modelo Domínio."""
+    from razync.valean_625 import processar_sicredi_625
+
+    modelo = processar_sicredi_625(file_bytes).copy()
+    if modelo.empty:
+        raise ValueError("Nenhum lançamento válido foi encontrado no extrato Sicredi.")
+
+    # A empresa 912 usa a conta contábil 515.
+    modelo["DÉBITO"] = modelo["VALOR"].apply(
+        lambda valor: "515" if float(valor) > 0 else ""
+    )
+    modelo["CRÉDITO"] = modelo["VALOR"].apply(
+        lambda valor: "515" if float(valor) < 0 else ""
+    )
+
+    # Segurança adicional: o extrato pode trazer uma seção de lançamentos futuros.
+    # O parser Sicredi já exige movimento + saldo, mas filtramos qualquer data além
+    # do período principal identificado no cabeçalho quando houver essa informação.
+    reader = PdfReader(io.BytesIO(file_bytes))
+    texto = "\n".join((pagina.extract_text() or "") for pagina in reader.pages)
+    periodo = re.search(
+        r"Per[ií]odo\s+de\s+(\d{2}/\d{2}/\d{4})\s+a\s+(\d{2}/\d{2}/\d{4})",
+        texto,
+        flags=re.I,
+    )
+    if periodo:
+        inicio = pd.to_datetime(periodo.group(1), dayfirst=True, errors="coerce")
+        fim = pd.to_datetime(periodo.group(2), dayfirst=True, errors="coerce")
+        datas = pd.to_datetime(modelo["DATA"], dayfirst=True, errors="coerce")
+        modelo = modelo[(datas >= inicio) & (datas <= fim)].copy()
+
+    modelo = modelo.sort_values("DATA", kind="stable").reset_index(drop=True)
+    return modelo
+
+
+def _renderizar_vital_safety_912():
+    empresa = "912 - VITAL SAFETY CONSULTORIA E TREINAMENTO LTDA - ME"
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("vital_safety_912", empresa)
+
+    with aba_operacoes:
+        st.markdown("#### Extrato Sicredi → Modelo Domínio")
+        st.caption(
+            "Conta contábil 515. Envie um ou vários extratos Sicredi em PDF. "
+            "O Razync importa somente lançamentos realizados dentro do período do extrato, "
+            "ignora saldo anterior e lançamentos futuros, coloca débito 515 nas entradas "
+            "e crédito 515 nas saídas."
+        )
+        arquivos = st.file_uploader(
+            "Extrato(s) Sicredi em PDF",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="vital_safety_912_extratos_sicredi",
+        )
+
+        if arquivos:
+            try:
+                quadros = []
+                vistos = set()
+                duplicados = 0
+                for arquivo in arquivos:
+                    conteudo = arquivo.getvalue()
+                    assinatura = hashlib.sha256(conteudo).hexdigest()
+                    if assinatura in vistos:
+                        duplicados += 1
+                        continue
+                    vistos.add(assinatura)
+                    quadros.append(
+                        executar_com_loading(
+                            f"Lendo {arquivo.name}...",
+                            _processar_sicredi_912,
+                            conteudo,
+                        )
+                    )
+
+                if not quadros:
+                    raise ValueError("Nenhum extrato diferente foi informado.")
+
+                modelo = (
+                    pd.concat(quadros, ignore_index=True)
+                    .sort_values("DATA", kind="stable")
+                    .reset_index(drop=True)
+                )
+                st.session_state["vital_safety_912_modelo"] = modelo
+                st.session_state["vital_safety_912_duplicados"] = duplicados
+                st.session_state.pop("vital_safety_912_erro", None)
+            except Exception as erro:
+                st.session_state["vital_safety_912_erro"] = str(erro)
+                st.session_state.pop("vital_safety_912_modelo", None)
+
+        if st.session_state.get("vital_safety_912_erro"):
+            st.error(
+                "Não foi possível processar o extrato Sicredi da empresa 912: "
+                + st.session_state["vital_safety_912_erro"]
+            )
+
+        modelo = st.session_state.get("vital_safety_912_modelo")
+        if isinstance(modelo, pd.DataFrame) and not modelo.empty:
+            duplicados = int(
+                st.session_state.get("vital_safety_912_duplicados", 0) or 0
+            )
+            if duplicados:
+                st.info(
+                    f"{duplicados} arquivo(s) idêntico(s) foram ignorados para não duplicar lançamentos."
+                )
+
+            entradas = float(modelo.loc[modelo["VALOR"] > 0, "VALOR"].sum())
+            saidas = float(-modelo.loc[modelo["VALOR"] < 0, "VALOR"].sum())
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Lançamentos", len(modelo))
+            m2.metric("Entradas", formatar_moeda(entradas))
+            m3.metric("Saídas", formatar_moeda(saidas))
+            m4.metric("Conta bancária", "515 · Sicredi")
+
+            previa = modelo.copy()
+            previa["DATA"] = pd.to_datetime(previa["DATA"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(
+                previa,
+                use_container_width=True,
+                hide_index=True,
+                height=430,
+                column_config={
+                    "VALOR": st.column_config.NumberColumn("Valor", format="R$ %.2f")
+                },
+            )
+
+            datas = pd.to_datetime(modelo["DATA"], errors="coerce").dropna()
+            periodo = (
+                f"{datas.min().strftime('%d%m%Y')}_A_{datas.max().strftime('%d%m%Y')}"
+                if not datas.empty else "PERIODO"
+            )
+            st.download_button(
+                "Baixar Modelo Domínio · Sicredi 515",
+                data=gerar_excel_modelo_dominio(modelo, formato_data="dd/mm/yyyy"),
+                file_name=f"VITAL_SAFETY_912_SICREDI_515_MODELO_DOMINIO_{periodo}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="vital_safety_912_download_modelo",
+            )
+
+        renderizar_conferencia_autokraft(
+            "vital_safety_912",
+            bancos_config=[{
+                "nome": "Sicredi · Conta 515",
+                "slug": "sicredi",
+                "banco": "sicredi",
+                "conta": "515",
+            }],
+            rotulo_planilha="Modelo Domínio final da empresa 912",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "vital_safety_912", empresa, {"sicredi"}, {"sicredi": "515"}
+        )
+
+
+if st.session_state.get("empresa_organizador") == "vital_safety_912":
+    _renderizar_vital_safety_912()
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=24)
 def _processar_bb_crj_47(file_bytes):
     """Converte o extrato BB da CRJ, descartando saldos intermediários e finais."""
     reader = PdfReader(io.BytesIO(file_bytes))
@@ -1443,7 +1616,7 @@ if st.session_state.get("empresa_organizador") == "willians_964":
 # empresa cadastrada que ainda não tenha ferramentas bancárias próprias, a aba
 # fiscal continua disponível, garantindo cobertura obrigatória em todo o cadastro.
 _EMPRESAS_COM_ABA_FISCAL = {
-    "crj_47", "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
+    "crj_47", "vital_safety_912", "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
     "lcarlos", "vgv_1402", "autokraft_industrial", "autokraft_projetos", "isa",
     "accede_automacao", "accede_equipamentos", "radani", "up_pack", "nova_geracao",
     "dias_pereira", "lucrativite_841", "valean_625", "valean_626",
