@@ -14,7 +14,7 @@ import razync.company_catalog as _catalogo
 for _empresa in _catalogo.EMPRESAS:
     _chaves_novas = {
         "47": "crj_47", "154": "rm_postais_154", "625": "valean_625", "626": "valean_626", "841": "lucrativite_841",
-        "912": "vital_safety_912", "964": "willians_964", "1208": "kairos_1208", "1530": "dias_pereira_1530",
+        "912": "vital_safety_912", "964": "willians_964", "1208": "kairos_1208", "1248": "rgr_1248", "1530": "dias_pereira_1530",
     }
     _codigo_empresa = str(_empresa.get("codigo"))
     if _codigo_empresa in _chaves_novas:
@@ -96,6 +96,13 @@ def processar_extrato_conferencia_empresa(file_bytes, filename, banco_forcado=No
         return processar_extrato_1208(
             file_bytes, banco_forcado.removesuffix("_1208")
         ).to_dict("records")
+    if (
+        st.session_state.get("empresa_organizador") == "rgr_1248"
+        and banco_forcado in {None, "itau"}
+    ):
+        from razync.rgr_1248 import ler_extrato_itau_rgr
+
+        return ler_extrato_itau_rgr(file_bytes).to_dict("records")
     if banco_forcado == "itau_1530":
         from razync.dias_pereira_1530 import (
             normalizar_modelo_itau_1530,
@@ -1873,11 +1880,235 @@ if st.session_state.get("empresa_organizador") == "willians_964":
     _renderizar_willians_964()
 
 
+
+def _renderizar_rgr_1248():
+    from razync.rgr_1248 import (
+        CONTA_ITAU_RGR,
+        ler_extrato_itau_rgr,
+        processar_rgr,
+    )
+
+    empresa = "1248 - RGR IMPORTADORA E EXPORTADORA LTDA - EPP"
+    aba_operacoes, aba_base, aba_fiscal = st.tabs([
+        "Organizar arquivos", "Base Inteligente", "Conferência Fiscal"
+    ])
+
+    with aba_fiscal:
+        from razync.conferencia_fiscal import renderizar_conferencia_fiscal
+        renderizar_conferencia_fiscal("rgr_1248", empresa)
+
+    with aba_operacoes:
+        st.markdown("#### Extrato Itaú + Entradas e Saídas → Modelo Domínio")
+        st.caption(
+            "Conta Domínio 508. Envie o extrato mensal do Itaú e a planilha de "
+            "Entradas e Saídas da RGR. Os totais BOLETOS RECEBIDOS são "
+            "desmembrados pelos pagadores da aba de entradas. Nas saídas, o "
+            "Razync confere data e valor e completa o nome do favorecido quando "
+            "o extrato não o identifica."
+        )
+
+        col_extrato, col_planilha = st.columns(2)
+        with col_extrato:
+            extrato = st.file_uploader(
+                "1º · Extrato Itaú em PDF",
+                type=["pdf"],
+                key="rgr_1248_extrato_itau",
+                help="Extrato da conta Itaú 0021550-8 / conta Domínio 508.",
+            )
+        with col_planilha:
+            planilha = st.file_uploader(
+                "2º · Planilha Entradas e Saídas",
+                type=["xlsx", "xls"],
+                key="rgr_1248_planilha_movimentos",
+                help=(
+                    "A aba de entradas detalha os BOLETOS RECEBIDOS e a aba SAIDAS "
+                    "é usada para completar favorecidos não identificados no extrato."
+                ),
+            )
+
+        if extrato is not None and planilha is not None:
+            chave = hashlib.sha256(
+                extrato.getvalue() + b"|" + planilha.getvalue()
+            ).hexdigest()
+
+            resultado_salvo = st.session_state.get("_rgr_1248_resultado")
+            if not isinstance(resultado_salvo, dict) or resultado_salvo.get("chave") != chave:
+                try:
+                    resultado = executar_com_loading(
+                        "Lendo extrato, desmembrando boletos e identificando saídas...",
+                        processar_rgr,
+                        extrato.getvalue(),
+                        planilha.getvalue(),
+                    )
+                    modelo, diag, boletos_nao_usados, saidas_nao_usadas, resumo = resultado
+                    st.session_state["_rgr_1248_resultado"] = {
+                        "chave": chave,
+                        "modelo": modelo,
+                        "diag": diag,
+                        "boletos_nao_usados": boletos_nao_usados,
+                        "saidas_nao_usadas": saidas_nao_usadas,
+                        "resumo": resumo,
+                    }
+                    st.session_state.pop("_rgr_1248_erro", None)
+                except Exception as erro:
+                    st.session_state["_rgr_1248_erro"] = str(erro)
+                    st.session_state.pop("_rgr_1248_resultado", None)
+
+            if st.session_state.get("_rgr_1248_erro"):
+                st.error(
+                    "Não foi possível processar a empresa 1248 - RGR: "
+                    + st.session_state["_rgr_1248_erro"]
+                )
+
+            resultado_salvo = st.session_state.get("_rgr_1248_resultado")
+            if isinstance(resultado_salvo, dict) and resultado_salvo.get("chave") == chave:
+                modelo = resultado_salvo["modelo"]
+                diag = resultado_salvo["diag"]
+                boletos_nao_usados = resultado_salvo["boletos_nao_usados"]
+                saidas_nao_usadas = resultado_salvo["saidas_nao_usadas"]
+                resumo = resultado_salvo["resumo"]
+
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Lançamentos finais", len(modelo))
+                m2.metric(
+                    "Boletos desmembrados",
+                    f"{int(resumo.get('agregados_batendo', 0))}/{int(resumo.get('agregados', 0))}",
+                )
+                m3.metric(
+                    "Boletos individuais",
+                    int(resumo.get("boletos_individuais", 0)),
+                )
+                m4.metric(
+                    "Saídas completadas",
+                    int(resumo.get("saidas_completadas", 0)),
+                )
+
+                if int(resumo.get("agregados_divergentes", 0)):
+                    st.warning(
+                        "Há BOLETOS RECEBIDOS cujo total não fecha com os lançamentos "
+                        "individuais da planilha. Nesses dias o total do extrato foi preservado."
+                    )
+
+                if int(resumo.get("boletos_nao_usados", 0)):
+                    st.warning(
+                        f"{int(resumo.get('boletos_nao_usados', 0))} boleto(s) da planilha "
+                        "não foram vinculados a um BOLETOS RECEBIDOS do extrato."
+                    )
+
+                if int(resumo.get("saidas_planilha_nao_usadas", 0)):
+                    st.warning(
+                        f"{int(resumo.get('saidas_planilha_nao_usadas', 0))} saída(s) da planilha "
+                        "não foram encontradas no extrato pela combinação data + valor."
+                    )
+
+                if int(resumo.get("saidas_extrato_sem_planilha", 0)):
+                    st.warning(
+                        f"{int(resumo.get('saidas_extrato_sem_planilha', 0))} saída(s) do extrato "
+                        "não foram localizadas na aba SAIDAS da planilha."
+                    )
+
+                diferenca_modelo = round(
+                    float(resumo.get("total_modelo", 0.0))
+                    - float(resumo.get("total_extrato", 0.0)),
+                    2,
+                )
+                if abs(diferenca_modelo) > 0.02:
+                    st.error(
+                        "A soma do Modelo Domínio não fecha com o extrato. "
+                        f"Diferença: {formatar_moeda(diferenca_modelo)}."
+                    )
+
+                renderizar_previa_bancos_padrao(
+                    {"Itaú · Conta 508": modelo},
+                    titulo="Pré-visualização do Modelo Domínio",
+                )
+
+                with st.expander("Conferência dos BOLETOS RECEBIDOS", expanded=False):
+                    if isinstance(diag, pd.DataFrame) and not diag.empty:
+                        diag_exibir = diag.copy()
+                        diag_exibir["DATA"] = pd.to_datetime(
+                            diag_exibir["DATA"], errors="coerce"
+                        ).dt.strftime("%d/%m/%Y")
+                        st.dataframe(
+                            diag_exibir,
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    else:
+                        st.caption("Nenhum BOLETOS RECEBIDOS foi encontrado no período.")
+
+                if (
+                    isinstance(boletos_nao_usados, pd.DataFrame)
+                    and not boletos_nao_usados.empty
+                ):
+                    with st.expander("Boletos da planilha não vinculados", expanded=False):
+                        st.dataframe(
+                            boletos_nao_usados,
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
+                if (
+                    isinstance(saidas_nao_usadas, pd.DataFrame)
+                    and not saidas_nao_usadas.empty
+                ):
+                    with st.expander("Saídas da planilha não vinculadas", expanded=False):
+                        st.dataframe(
+                            saidas_nao_usadas,
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
+                datas = pd.to_datetime(modelo["DATA"], errors="coerce").dropna()
+                periodo = (
+                    f"{datas.min().strftime('%d%m%Y')}_A_{datas.max().strftime('%d%m%Y')}"
+                    if not datas.empty
+                    else "PERIODO"
+                )
+                st.download_button(
+                    "Baixar Modelo Domínio · Itaú 508",
+                    data=gerar_excel_modelo_dominio(
+                        modelo,
+                        formato_data="dd/mm/yyyy",
+                    ),
+                    file_name=f"RGR_1248_ITAU_508_MODELO_DOMINIO_{periodo}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="rgr_1248_download_modelo",
+                )
+
+        elif extrato is not None or planilha is not None:
+            st.info("Envie os dois arquivos para montar e conferir o Modelo Domínio.")
+
+        renderizar_conferencia_autokraft(
+            "rgr_1248",
+            bancos_config=[{
+                "nome": "Itaú · Conta 508",
+                "slug": "itau",
+                "banco": "itau",
+                "conta": CONTA_ITAU_RGR,
+            }],
+            rotulo_planilha="Modelo Domínio final da empresa 1248",
+        )
+
+    with aba_base:
+        renderizar_base_inteligente_empresa(
+            "rgr_1248",
+            empresa,
+            {"itau"},
+            {"itau": CONTA_ITAU_RGR},
+        )
+
+
+if st.session_state.get("empresa_organizador") == "rgr_1248":
+    _renderizar_rgr_1248()
+
+
 # Empresas que já exibem a conferência ao lado da Base Inteligente. Para qualquer
 # empresa cadastrada que ainda não tenha ferramentas bancárias próprias, a aba
 # fiscal continua disponível, garantindo cobertura obrigatória em todo o cadastro.
 _EMPRESAS_COM_ABA_FISCAL = {
-    "crj_47", "rm_postais_154", "vital_safety_912", "hw_88", "engekraft_969", "gz_1211", "eletro_forte_filial", "eletro_forte",
+    "crj_47", "rm_postais_154", "vital_safety_912", "hw_88", "engekraft_969", "gz_1211", "rgr_1248", "eletro_forte_filial", "eletro_forte",
     "lcarlos", "vgv_1402", "autokraft_industrial", "autokraft_projetos", "isa",
     "accede_automacao", "accede_equipamentos", "radani", "up_pack", "nova_geracao",
     "dias_pereira", "lucrativite_841", "valean_625", "valean_626",
