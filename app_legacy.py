@@ -9235,9 +9235,10 @@ elif st.session_state['pagina_ativa'] == 'organizador':
         with aba_operacoes_gz:
             st.markdown('#### Extrato Itaú + Boletos liquidados → Modelo Domínio')
             st.caption(
-                'Itaú = conta 508. Os lançamentos BOLETOS RECEBIDOS são substituídos '
-                'pelos boletos individuais liquidados. O histórico fica como '
-                'Recebido: NOME DO PAGADOR.'
+                'Itaú = conta 508. O extrato gera o Modelo Domínio normalmente. '
+                'Se o relatório auxiliar de boletos for enviado, os totais BOLETOS '
+                'RECEBIDOS são desmembrados pelos boletos individuais liquidados. '
+                'Se o relatório não puder ser lido, o total do extrato é preservado.'
             )
             col_extrato_gz, col_boletos_gz = st.columns(2)
             with col_extrato_gz:
@@ -9247,19 +9248,24 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                 )
             with col_boletos_gz:
                 boletos_gz = st.file_uploader(
-                    '2º · Boletos baixados e liquidados', type=['pdf'], key='gz1211_boletos',
-                    help='Relatório auxiliar usado para identificar os BOLETOS RECEBIDOS.'
+                    '2º · Boletos baixados e liquidados (opcional)', type=['pdf'], key='gz1211_boletos',
+                    help=(
+                        'Relatório auxiliar usado para detalhar os BOLETOS RECEBIDOS. '
+                        'Se não for enviado ou não puder ser lido, o Modelo Domínio '
+                        'ainda será gerado com os totais do extrato.'
+                    )
                 )
 
-            if extrato_gz is not None and boletos_gz is not None:
+            if extrato_gz is not None:
+                boletos_bytes_gz = boletos_gz.getvalue() if boletos_gz is not None else None
                 chave_gz = hashlib.sha256(
-                    extrato_gz.getvalue() + b'|' + boletos_gz.getvalue()
+                    extrato_gz.getvalue() + b'|' + (boletos_bytes_gz or b'')
                 ).hexdigest()
                 try:
                     resultado_gz = executar_com_loading(
                         'Lendo extrato, identificando boletos e conferindo os totais...',
                         processar_gz,
-                        extrato_gz.getvalue(), boletos_gz.getvalue()
+                        extrato_gz.getvalue(), boletos_bytes_gz
                     )
                     df_gz, diag_gz, nao_usados_gz, resumo_gz = resultado_gz
                     st.session_state['_gz1211_resultado'] = {
@@ -9275,10 +9281,14 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                         titulo='Pré-visualização do Modelo Domínio',
                     )
 
-                    m1_gz, m2_gz, m3_gz = st.columns(3)
+                    m1_gz, m2_gz, m3_gz, m4_gz = st.columns(4)
                     m1_gz.metric('Totais de boletos', int(resumo_gz.get('agregados', 0)))
                     m2_gz.metric('Batendo', int(resumo_gz.get('agregados_batendo', 0)))
                     m3_gz.metric('Divergentes', int(resumo_gz.get('agregados_divergentes', 0)))
+                    m4_gz.metric('Boletos lidos', int(resumo_gz.get('boletos_lidos', 0)))
+
+                    if resumo_gz.get('aviso_boletos'):
+                        st.warning(str(resumo_gz.get('aviso_boletos')))
 
                     if int(resumo_gz.get('agregados_divergentes', 0)):
                         st.warning(
@@ -9315,8 +9325,8 @@ elif st.session_state['pagina_ativa'] == 'organizador':
                     )
                 except Exception as erro_gz:
                     st.error(f'Não foi possível processar a empresa 1211 - GZ: {erro_gz}')
-            elif extrato_gz is not None or boletos_gz is not None:
-                st.info('Envie os dois PDFs para montar e conferir o arquivo da GZ.')
+            elif boletos_gz is not None:
+                st.info('Envie o extrato Itaú para montar o arquivo da GZ.')
 
         with aba_base_gz:
             renderizar_base_inteligente_empresa(
