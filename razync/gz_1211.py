@@ -263,6 +263,128 @@ def _extrair_boletos_texto_gz(texto: str) -> List[BoletoGZ]:
     return boletos
 
 
+
+def _extrair_boletos_ocr_colunas_gz(texto: str) -> List[BoletoGZ]:
+    """Lê o OCR quando o Itaú devolve a tabela por colunas, e não por linhas.
+
+    Esse é o formato do relatório atual da GZ: o OCR lista primeiro todos os
+    pagadores, depois todos os vencimentos, datas de liquidação, valores e
+    históricos. O parser antigo esperava cada boleto inteiro na mesma linha e,
+    por isso, não encontrava nenhum boleto nesses PDFs digitalizados.
+    """
+    linhas = [_normalizar_espacos(linha) for linha in (texto or "").splitlines()]
+    linhas = [linha for linha in linhas if linha]
+    if not linhas:
+        return []
+
+    def _achar(inicio: int, teste):
+        for indice in range(max(0, inicio), len(linhas)):
+            if teste(linhas[indice]):
+                return indice
+        return None
+
+    idx_pagador = _achar(0, lambda x: x.casefold() == "pagador")
+    idx_venc = _achar(
+        (idx_pagador or 0) + 1,
+        lambda x: x.casefold().startswith("vencimento"),
+    )
+    idx_data = _achar(
+        (idx_venc or 0) + 1,
+        lambda x: x.casefold() == "data de",
+    )
+    idx_baixa = _achar(
+        (idx_data or 0) + 1,
+        lambda x: "baixa/liquida" in x.casefold(),
+    )
+    idx_valor = _achar(
+        (idx_baixa or 0) + 1,
+        lambda x: x.casefold().startswith("valor (r$)"),
+    )
+
+    if None in {idx_pagador, idx_venc, idx_data, idx_baixa, idx_valor}:
+        return []
+
+    pagadores = [
+        linha for linha in linhas[idx_pagador + 1:idx_venc]
+        if linha and not linha.casefold().startswith(("nome do", "beneficiário"))
+    ]
+
+    regex_data = re.compile(r"^\d{2}/\d{2}/(?:\d{2}|\d{4})$")
+    vencimentos = [
+        linha for linha in linhas[idx_venc + 1:idx_data]
+        if regex_data.fullmatch(linha)
+    ]
+    liquidacoes = [
+        linha for linha in linhas[idx_baixa + 1:idx_valor]
+        if regex_data.fullmatch(linha)
+    ]
+
+    regex_moeda = re.compile(r"^\d{1,3}(?:\.\d{3})*,\d{2}$")
+    valores = []
+    for linha in linhas[idx_valor + 1:]:
+        if regex_moeda.fullmatch(linha):
+            valores.append(linha)
+        elif valores:
+            break
+
+    idx_historico = _achar(
+        idx_valor + 1,
+        lambda x: x.casefold().startswith("seu número histórico"),
+    )
+    idx_tipo = (
+        _achar(
+            idx_historico + 1,
+            lambda x: x.casefold().startswith("tipo de cobrança"),
+        )
+        if idx_historico is not None else None
+    )
+    status_lidos = []
+    if idx_historico is not None and idx_tipo is not None:
+        for linha in linhas[idx_historico + 1:idx_tipo]:
+            achado = re.search(r"\b(Liquidado|Baixado|Lc)\b", linha, flags=re.I)
+            if achado:
+                status_lidos.append(achado.group(1))
+
+    quantidade = min(
+        len(pagadores), len(vencimentos), len(liquidacoes), len(valores)
+    )
+    if quantidade <= 0:
+        return []
+
+    # Evita aceitar um OCR desalinhado: as quatro colunas essenciais precisam
+    # ter a mesma quantidade de linhas, salvo pequena diferença causada pelo
+    # cabeçalho/rodapé.
+    contagens = [len(pagadores), len(vencimentos), len(liquidacoes), len(valores)]
+    if max(contagens) - min(contagens) > 2:
+        return []
+
+    boletos: List[BoletoGZ] = []
+    for indice in range(quantidade):
+        vencimento = pd.to_datetime(
+            vencimentos[indice], dayfirst=True, errors="coerce"
+        )
+        liquidacao = pd.to_datetime(
+            liquidacoes[indice], dayfirst=True, errors="coerce"
+        )
+        valor = _moeda_br(valores[indice])
+        pagador = _normalizar_espacos(pagadores[indice]).strip(" -")
+        if pd.isna(vencimento) or pd.isna(liquidacao) or valor <= 0 or not pagador:
+            continue
+
+        status = status_lidos[indice] if indice < len(status_lidos) else "Liquidado"
+        if status.casefold() in {"lc", "liquidacao", "liquidação"}:
+            status = "Liquidado"
+
+        boletos.append(BoletoGZ(
+            pagador=pagador,
+            vencimento=vencimento,
+            liquidacao=liquidacao,
+            valor=round(float(valor), 2),
+            status=status,
+        ))
+    return boletos
+
+
 def ler_boletos_liquidados_gz(conteudo: bytes) -> List[BoletoGZ]:
     """Lê o relatório de boletos em layouts Itaú diferentes, com OCR de fallback."""
     texto = _texto_pdf(conteudo)
@@ -276,7 +398,13 @@ def ler_boletos_liquidados_gz(conteudo: bytes) -> List[BoletoGZ]:
         except Exception:
             texto_ocr = ""
         if texto_ocr.strip():
-            boletos = _extrair_boletos_texto_gz(texto_ocr)
+            # O relatório atual da GZ é uma página digitalizada. O Tesseract
+            # costuma devolver essa tabela em blocos de colunas (todos os
+            # pagadores, depois datas, valores etc.), portanto tentamos esse
+            # formato antes do parser linha a linha.
+            boletos = _extrair_boletos_ocr_colunas_gz(texto_ocr)
+            if not boletos:
+                boletos = _extrair_boletos_texto_gz(texto_ocr)
 
     if not boletos:
         raise ValueError(
@@ -345,18 +473,36 @@ def processar_gz(extrato_bytes: bytes, boletos_bytes: bytes | None = None):
             saida.append(linha.to_dict())
             continue
 
-        elegiveis = [
+        # Primeiro casa estritamente pela data de liquidação. No extrato Itaú
+        # da GZ, cada "BOLETOS RECEBIDOS DD/MMS" corresponde aos boletos
+        # liquidados naquela mesma data. Só usamos o acumulado como fallback
+        # para layouts antigos que eventualmente tragam a data de crédito
+        # diferente da data de liquidação.
+        elegiveis_data = [
             i for i, boleto in enumerate(boletos)
             if not boleto.usado
             and boleto.status.lower() == "liquidado"
-            and data_ini <= boleto.liquidacao.normalize() <= data_extrato
+            and boleto.liquidacao.normalize() == data_extrato
         ]
-        soma_elegivel = round(sum(boletos[i].valor for i in elegiveis), 2)
-        escolhidos = (
-            elegiveis
-            if abs(soma_elegivel - alvo) <= 0.02
-            else _subset_exato(elegiveis, boletos, alvo)
-        )
+        soma_data = round(sum(boletos[i].valor for i in elegiveis_data), 2)
+
+        if elegiveis_data and abs(soma_data - alvo) <= 0.02:
+            elegiveis = elegiveis_data
+            soma_elegivel = soma_data
+            escolhidos = elegiveis_data
+        else:
+            elegiveis = [
+                i for i, boleto in enumerate(boletos)
+                if not boleto.usado
+                and boleto.status.lower() == "liquidado"
+                and data_ini <= boleto.liquidacao.normalize() <= data_extrato
+            ]
+            soma_elegivel = round(sum(boletos[i].valor for i in elegiveis), 2)
+            escolhidos = (
+                elegiveis
+                if abs(soma_elegivel - alvo) <= 0.02
+                else _subset_exato(elegiveis, boletos, alvo)
+            )
         soma_escolhida = round(sum(boletos[i].valor for i in escolhidos), 2)
         bate = bool(escolhidos) and abs(soma_escolhida - alvo) <= 0.02
 
