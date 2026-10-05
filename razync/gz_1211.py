@@ -236,7 +236,7 @@ def _extrair_boletos_texto_gz(texto: str) -> List[BoletoGZ]:
             r"^(?:\d+\s+){1,5}", "", pagador
         ).strip()
         pagador = re.sub(
-            r"\b(?:Nosso n[ºo]|Seu n[ºo]|Pagador|Sacado|Cliente)\b.*?$",
+            r"^(?:Pagador|Sacado|Cliente)\s*[:\-]\s*",
             "", pagador, flags=re.I,
         ).strip(" -")
         if not pagador:
