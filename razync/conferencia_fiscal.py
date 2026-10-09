@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import csv
 import os
 import re
 import shutil
@@ -49,7 +50,7 @@ def _renderizar_conferencia_fiscal_contabil(prefixo: str, empresa: str) -> None:
         )
     with col_razao:
         arquivo_razao = st.file_uploader(
-            "Razão com todas as contas", type=["xls", "xlsx"], key=f"{base}_razao",
+            "Razão com todas as contas", type=["xls", "xlsx", "csv"], key=f"{base}_razao",
         )
     if arquivo_acumuladores is None or arquivo_razao is None:
         st.info("Envie os dois relatórios. A conferência começará automaticamente.")
@@ -151,6 +152,7 @@ def _renderizar_conferencia_fiscal_contabil(prefixo: str, empresa: str) -> None:
     else:
         tabela = exibido.rename(columns={
             "CONTA": "Conta",
+            "DESCRIÇÃO": "Descrição",
             "TIPO": "Tipo",
             "VALOR FISCAL": "Fiscal",
             "CONTÁBIL COMPATÍVEL": "Contábil analisado",
@@ -160,13 +162,14 @@ def _renderizar_conferencia_fiscal_contabil(prefixo: str, empresa: str) -> None:
         tabela["Situação"] = exibido["SITUAÇÃO"].map(legenda).fillna("Revisar")
         st.dataframe(
             tabela[[
-                "Conta", "Tipo", "Fiscal", "Contábil analisado",
+                "Conta", "Descrição", "Tipo", "Fiscal", "Contábil analisado",
                 "Diferença", "Situação",
             ]],
             use_container_width=True, hide_index=True,
             height=min(580, 38 * (len(tabela) + 1) + 12),
             column_config={
                 "Conta": st.column_config.TextColumn(width="small"),
+                "Descrição": st.column_config.TextColumn(width="medium"),
                 "Tipo": st.column_config.TextColumn(width="small"),
                 "Fiscal": st.column_config.NumberColumn(format="R$ %.2f"),
                 "Contábil analisado": st.column_config.NumberColumn(format="R$ %.2f"),
@@ -408,13 +411,26 @@ def ler_acumuladores(conteudo: bytes, nome: str) -> tuple[pd.DataFrame, dict]:
 
 
 def ler_razao(conteudo: bytes, nome: str) -> tuple[pd.DataFrame, dict]:
-    xls = _excel(conteudo, nome)
     conta = ""
     descricao_conta = ""
     registros = []
     periodo = {"inicio": None, "fim": None}
-    for aba in xls.sheet_names:
-        bruto = pd.read_excel(xls, sheet_name=aba, header=None, dtype=object)
+    if Path(nome).suffix.lower() == ".csv":
+        try:
+            texto = conteudo.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            texto = conteudo.decode("cp1252")
+        # O CSV exportado pelo Domínio utiliza ; como delimitador e pode
+        # manter blocos "Conta:" e cabeçalhos repetidos no mesmo arquivo.
+        linhas = list(csv.reader(io.StringIO(texto), delimiter=";"))
+        planilhas = [pd.DataFrame(linhas)]
+    else:
+        xls = _excel(conteudo, nome)
+        planilhas = [
+            pd.read_excel(xls, sheet_name=aba, header=None, dtype=object)
+            for aba in xls.sheet_names
+        ]
+    for bruto in planilhas:
         colunas = {
             "DATA": 0, "LOTE": 1, "HISTÓRICO": 2, "CONTRAPARTIDA": 7,
             "DÉBITO": 8, "CRÉDITO": 9, "FILIAL": None,
@@ -548,8 +564,16 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
             situacao = "AUSENTE NO CONTÁBIL"
         else:
             situacao = "REVISAR"
+        descricao_conta = ""
+        if not movimentos.empty and "DESCRIÇÃO_CONTA" in movimentos:
+            descricoes = movimentos["DESCRIÇÃO_CONTA"].dropna().astype(str).str.strip()
+            descricoes = descricoes[descricoes.ne("")]
+            descricao_conta = descricoes.iloc[0] if not descricoes.empty else ""
+        if not descricao_conta:
+            descricao_conta = str(fiscal["DESCRIÇÕES"]).split(" | ")[0]
         resumos.append({
-            "CONTA": conta, "TIPO": fiscal["TIPO"], "ACUMULADORES": fiscal["ACUMULADORES"],
+            "CONTA": conta, "DESCRIÇÃO": descricao_conta,
+            "TIPO": fiscal["TIPO"], "ACUMULADORES": fiscal["ACUMULADORES"],
             "VALOR FISCAL": valor_fiscal, "CONTÁBIL COMPATÍVEL": valor_compativel,
             "TOTAL DA CONTA": valor_total, "DIFERENÇA FISCAL": diferenca,
             "TOTAL DÉBITOS": total_debitos, "TOTAL CRÉDITOS": total_creditos,
