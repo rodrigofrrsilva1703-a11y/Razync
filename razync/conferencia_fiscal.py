@@ -89,93 +89,168 @@ def _renderizar_conferencia_fiscal_contabil(prefixo: str, empresa: str) -> None:
     filial_aplicada = resultado.get("filial_aplicada", "")
     filiais_encontradas = resultado.get("filiais_encontradas", [])
     if filial_aplicada:
-        st.success(
-            f"Razão consolidado identificado. Conferência filtrada pela filial "
-            f"{filial_aplicada}. Filiais presentes no arquivo: "
-            f"{', '.join(filiais_encontradas)}."
+        st.caption(
+            f"Filial considerada no Razão: {filial_aplicada}"
+            + (f" · Filiais presentes: {', '.join(filiais_encontradas)}"
+               if len(filiais_encontradas) > 1 else "")
         )
 
-    conferidas = int(resumo["SITUAÇÃO"].astype(str).str.startswith("CONFERE").sum())
-    alertas = int(resumo["LANÇAMENTOS EXTRAS"].sum())
-    revisar = int((resumo["SITUAÇÃO"] == "REVISAR").sum())
+    # Mostrar o resultado no site, sem exigir download ou abrir dezenas
+    # de caixas expansíveis. O usuário só acessa lançamentos se desejar.
+    situacoes = resumo["SITUAÇÃO"].astype(str)
+    total = len(resumo)
+    batem = int(situacoes.eq("CONFERE").sum())
+    alertas = int(situacoes.eq("CONFERE COM ALERTAS").sum())
+    pendencias = int(situacoes.isin(["REVISAR", "AUSENTE NO CONTÁBIL"]).sum())
+    st.markdown("#### Resultado da conferência")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Contas analisadas", len(resumo))
-    m2.metric("Fiscal conferido", conferidas)
-    m3.metric("Lançamentos em alerta", alertas)
-    m4.metric("Contas para revisar", revisar)
+    m1.metric("Contas analisadas", total)
+    m2.metric("Batendo", batem)
+    m3.metric("Com alerta", alertas)
+    m4.metric("Para revisar", pendencias)
+
+    if pendencias:
+        st.warning(f"{pendencias} conta(s) precisam de conferência.")
+    elif alertas:
+        st.info("Valores compatíveis encontrados, mas há movimentos adicionais para revisar.")
+    else:
+        st.success("As contas analisadas estão batendo.")
+
+    legenda = {
+        "REVISAR": "Divergência",
+        "AUSENTE NO CONTÁBIL": "Sem razão",
+        "CONFERE COM ALERTAS": "Revisar extras",
+        "CONFERE": "Bate",
+    }
+    ordem = {
+        "REVISAR": 0,
+        "AUSENTE NO CONTÁBIL": 1,
+        "CONFERE COM ALERTAS": 2,
+        "CONFERE": 3,
+    }
+    ordenado = resumo.copy()
+    ordenado["_ORDEM"] = ordenado["SITUAÇÃO"].map(ordem).fillna(9)
+    ordenado = ordenado.sort_values(["_ORDEM", "CONTA", "TIPO"]).reset_index(drop=True)
+
+    opcoes = ["Todas", "Divergências", "Com alertas", "Batendo"]
+    filtro = st.segmented_control(
+        "Mostrar contas", options=opcoes, default="Todas",
+        key=f"{base}_filtro_contas",
+    )
+    if filtro == "Divergências":
+        exibido = ordenado[ordenado["SITUAÇÃO"].isin(["REVISAR", "AUSENTE NO CONTÁBIL"])].copy()
+    elif filtro == "Com alertas":
+        exibido = ordenado[ordenado["SITUAÇÃO"].eq("CONFERE COM ALERTAS")].copy()
+    elif filtro == "Batendo":
+        exibido = ordenado[ordenado["SITUAÇÃO"].eq("CONFERE")].copy()
+    else:
+        exibido = ordenado.copy()
+
+    if exibido.empty:
+        st.info("Nenhuma conta encontrada neste filtro.")
+    else:
+        tabela = exibido.rename(columns={
+            "CONTA": "Conta",
+            "TIPO": "Tipo",
+            "VALOR FISCAL": "Fiscal",
+            "CONTÁBIL COMPATÍVEL": "Contábil analisado",
+            "DIFERENÇA FISCAL": "Diferença",
+            "ACUMULADORES": "Acumuladores",
+        }).copy()
+        tabela["Situação"] = exibido["SITUAÇÃO"].map(legenda).fillna("Revisar")
+        st.dataframe(
+            tabela[[
+                "Conta", "Tipo", "Fiscal", "Contábil analisado",
+                "Diferença", "Situação",
+            ]],
+            use_container_width=True, hide_index=True,
+            height=min(580, 38 * (len(tabela) + 1) + 12),
+            column_config={
+                "Conta": st.column_config.TextColumn(width="small"),
+                "Tipo": st.column_config.TextColumn(width="small"),
+                "Fiscal": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Contábil analisado": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Diferença": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Situação": st.column_config.TextColumn(width="medium"),
+            },
+        )
+    st.caption(
+        "Entradas e serviços: débitos; saídas: créditos. "
+        "O valor contábil analisado considera a classificação preliminar dos históricos. "
+        "Movimentos extras e correspondências por valor exigem validação contábil."
+    )
+
+    st.markdown("#### Detalhes de uma conta")
+    if not ordenado.empty:
+        itens = {
+            f"Conta {linha['CONTA']} · {linha['TIPO'].title()} · "
+            f"{legenda.get(str(linha['SITUAÇÃO']), 'Revisar')}": indice
+            for indice, linha in ordenado.iterrows()
+        }
+        selecionada = st.selectbox(
+            "Selecione uma conta para ver o motivo e os lançamentos",
+            options=list(itens),
+            key=f"{base}_conta_detalhes",
+        )
+        if selecionada:
+            registro = ordenado.iloc[itens[selecionada]]
+            conta = str(registro["CONTA"])
+            tipo = str(registro["TIPO"])
+            st.caption(f"Acumuladores vinculados: {registro['ACUMULADORES']}")
+            d1, d2, d3 = st.columns(3)
+            d1.metric("Valor fiscal", _moeda(registro["VALOR FISCAL"]))
+            d2.metric("Contábil analisado", _moeda(registro["CONTÁBIL COMPATÍVEL"]))
+            d3.metric("Total no lado analisado", _moeda(registro["TOTAL DA CONTA"]))
+            if int(registro["LANÇAMENTOS EXTRAS"]) > 0:
+                st.info(
+                    f"{int(registro['LANÇAMENTOS EXTRAS'])} lançamento(s) adicional(is) "
+                    "sinalizado(s). Revise abaixo antes de concluir a conciliação."
+                )
+            movimentos = detalhes[detalhes["CONTA"].astype(str).eq(conta)].copy()
+            if "TIPO" in movimentos.columns:
+                movimentos = movimentos[movimentos["TIPO"].astype(str).eq(tipo)]
+            if movimentos.empty:
+                st.caption("Nenhum lançamento do Razão localizado para esta conta.")
+            else:
+                movimentos["DATA"] = pd.to_datetime(
+                    movimentos["DATA"], errors="coerce"
+                ).dt.strftime("%d/%m/%Y")
+                colunas = [
+                    "DATA", "HISTÓRICO", "CONTRAPARTIDA", "DÉBITO",
+                    "CRÉDITO", "CLASSIFICAÇÃO",
+                ]
+                st.dataframe(
+                    movimentos[[col for col in colunas if col in movimentos]],
+                    use_container_width=True, hide_index=True,
+                    column_config={
+                        "HISTÓRICO": st.column_config.TextColumn(width="large"),
+                        "DÉBITO": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "CRÉDITO": st.column_config.NumberColumn(format="R$ %.2f"),
+                    },
+                )
+
+    with st.expander("Ver todos os movimentos sinalizados"):
+        sinalizados = detalhes[detalhes["CLASSIFICAÇÃO"].eq("ALERTA - NÃO FISCAL")].copy()
+        if sinalizados.empty:
+            st.caption("Nenhum movimento adicional sinalizado.")
+        else:
+            sinalizados["DATA"] = pd.to_datetime(
+                sinalizados["DATA"], errors="coerce"
+            ).dt.strftime("%d/%m/%Y")
+            st.dataframe(sinalizados, use_container_width=True, hide_index=True)
 
     periodo = resultado.get("periodo_fiscal", {})
     inicio = pd.to_datetime(periodo.get("inicio"), errors="coerce")
     periodo_nome = inicio.strftime("%m%Y") if pd.notna(inicio) else "PERIODO_ANALISADO"
     nome_empresa = re.sub(r"[^A-Za-z0-9]+", "_", str(empresa)).strip("_")[:45]
     st.download_button(
-        "Baixar relatório completo da conferência",
+        "Baixar análise em Excel (opcional)",
         data=gerar_relatorio_excel(resultado),
         file_name=f"{nome_empresa}_CONFERENCIA_FISCAL_{periodo_nome}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True, key=f"{base}_download",
+        use_container_width=True,
+        key=f"{base}_download",
     )
-    if revisar:
-        st.error(f"{revisar} conta(s) possuem diferença fiscal e precisam de revisão.")
-    elif alertas:
-        st.warning("Os valores fiscais conferem, mas existem lançamentos contábeis adicionais para revisar.")
-    else:
-        st.success("Todas as contas conferem e não foram encontrados lançamentos adicionais.")
-
-    aba_visao, aba_alertas, aba_todos = st.tabs([
-        "Visão geral", f"Alertas ({alertas})", "Todos os lançamentos"
-    ])
-    with aba_visao:
-        ordem = {"REVISAR": 0, "AUSENTE NO CONTÁBIL": 1, "CONFERE COM ALERTAS": 2, "CONFERE": 3}
-        resumo_ordenado = resumo.assign(
-            _ORDEM=resumo["SITUAÇÃO"].map(ordem).fillna(9)
-        ).sort_values(["_ORDEM", "CONTA"])
-        for _, item in resumo_ordenado.iterrows():
-            conta, situacao = str(item["CONTA"]), str(item["SITUAÇÃO"])
-            extras = int(item["LANÇAMENTOS EXTRAS"])
-            titulo = f"Conta {conta} · {situacao}" + (f" · {extras} alerta(s)" if extras else "")
-            with st.expander(titulo, expanded=situacao != "CONFERE"):
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Valor fiscal", _moeda(item["VALOR FISCAL"]))
-                c2.metric("Contábil compatível", _moeda(item["CONTÁBIL COMPATÍVEL"]))
-                c3.metric("Diferença fiscal", _moeda(item["DIFERENÇA FISCAL"]))
-                c4.metric("Total movimentado", _moeda(item["TOTAL DA CONTA"]))
-                coluna_analisada = "Crédito" if item["TIPO"] == "SAÍDAS" else "Débito"
-                total_coluna = (
-                    item["TOTAL CRÉDITOS"] if coluna_analisada == "Crédito"
-                    else item["TOTAL DÉBITOS"]
-                )
-                st.caption(
-                    f"Coluna analisada: {coluna_analisada} · "
-                    f"Total líquido: {_moeda(total_coluna)} · "
-                    f"Estornos/redutores: {_moeda(item['ESTORNOS/REDUTORES'])}"
-                )
-                movimentos = detalhes[detalhes["CONTA"].astype(str).eq(conta)].copy()
-                if not movimentos.empty:
-                    movimentos["DATA"] = pd.to_datetime(movimentos["DATA"]).dt.strftime("%d/%m/%Y")
-                    st.dataframe(
-                        movimentos[[
-                            "DATA", "HISTÓRICO", "CONTRAPARTIDA", "DÉBITO",
-                            "CRÉDITO", "NATUREZA", "VALOR", "CLASSIFICAÇÃO"
-                        ]], use_container_width=True, hide_index=True
-                    )
-    with aba_alertas:
-        quadro = detalhes[detalhes["CLASSIFICAÇÃO"].eq("ALERTA - NÃO FISCAL")].copy()
-        if quadro.empty:
-            st.success("Nenhum lançamento adicional foi encontrado nas contas conferidas.")
-        else:
-            quadro["DATA"] = pd.to_datetime(quadro["DATA"]).dt.strftime("%d/%m/%Y")
-            st.dataframe(
-                quadro[[
-                    "CONTA", "DATA", "HISTÓRICO", "CONTRAPARTIDA", "DÉBITO",
-                    "CRÉDITO", "NATUREZA", "VALOR"
-                ]], use_container_width=True, hide_index=True
-            )
-    with aba_todos:
-        quadro = detalhes.copy()
-        if not quadro.empty:
-            quadro["DATA"] = pd.to_datetime(quadro["DATA"]).dt.strftime("%d/%m/%Y")
-            st.dataframe(quadro, use_container_width=True, hide_index=True)
 
 
 def renderizar_conferencia_fiscal(prefixo: str, empresa: str) -> None:
@@ -483,7 +558,7 @@ def conferir_fiscal_contabil(acumuladores: pd.DataFrame, razao: pd.DataFrame):
         })
         for _, mov in movimentos.iterrows():
             detalhes.append({
-                "CONTA": conta, "DATA": mov["DATA"], "LOTE": mov["LOTE"],
+                "CONTA": conta, "TIPO": fiscal["TIPO"], "DATA": mov["DATA"], "LOTE": mov["LOTE"],
                 "HISTÓRICO": mov["HISTÓRICO"], "CONTRAPARTIDA": mov["CONTRAPARTIDA"],
                 "DÉBITO": mov["DÉBITO"], "CRÉDITO": mov["CRÉDITO"],
                 "NATUREZA": mov["NATUREZA"], "VALOR": mov["VALOR_ANALISADO"],
