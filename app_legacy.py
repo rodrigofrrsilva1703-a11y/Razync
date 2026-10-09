@@ -9450,9 +9450,11 @@ elif st.session_state['pagina_ativa'] == 'organizador':
             else {'bb': '8', 'itau_508': '508', 'itau_509': '509'}
         )
         aba_operacoes_ef, aba_francesinhas_ef, aba_base_ef, aba_fiscal_ef = st.tabs([
-            'Organizar arquivos', 'Francesinhas', 'Base Inteligente', 'Conferência Fiscal'
+            'Organizar arquivos', 'Francesinhas', 'Base Inteligente', 'Fiscal × Contábil'
         ])
         with aba_fiscal_ef:
+            # A empresa 242 tem acesso direto ao comparativo de acumuladores
+            # e razão; os resultados aparecem no site, sem exigir download.
             from razync.conferencia_fiscal import renderizar_conferencia_fiscal
             renderizar_conferencia_fiscal(chave_base_ef, empresa_ef)
 
